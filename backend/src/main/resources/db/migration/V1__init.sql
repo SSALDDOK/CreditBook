@@ -87,3 +87,23 @@ CREATE TABLE phone_access_logs (
     accessed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ix_phone_access_logs_customer ON phone_access_logs (customer_id, accessed_at DESC);
+
+-- append-only: ledger_entries 는 INSERT 만 허용한다. 정정은 반제 행(CHARGE_CANCEL/USE_CANCEL)으로만 한다.
+-- 코드 리뷰를 통과한 UPDATE/DELETE 가 배포돼도 DB 가 마지막 방어선이 된다 (절대 금지 1번)
+CREATE FUNCTION fn_ledger_entries_append_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ledger_entries is append-only: % is not allowed', TG_OP
+        USING ERRCODE = 'restrict_violation',
+              HINT = '정정은 CHARGE_CANCEL/USE_CANCEL 반제 행을 INSERT 한다';
+END;
+$$;
+
+CREATE TRIGGER trg_ledger_entries_no_update_delete
+    BEFORE UPDATE OR DELETE ON ledger_entries
+    FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only();
+
+-- TRUNCATE 는 행 트리거를 거치지 않으므로 문장 트리거로 따로 막는다
+CREATE TRIGGER trg_ledger_entries_no_truncate
+    BEFORE TRUNCATE ON ledger_entries
+    FOR EACH STATEMENT EXECUTE FUNCTION fn_ledger_entries_append_only();
