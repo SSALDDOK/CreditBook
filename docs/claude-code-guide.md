@@ -90,4 +90,20 @@ archify 요청 예 (포트폴리오 문서용):
 - **직접 하는 게 나은 것**: 작은 수정, 대화 맥락이 필요한 작업
 - **이유**: 에이전트는 빈 상태에서 시작해 지금 대화의 결정 사항을 모른다. 필요한 맥락은 요청에 직접 적어 준다
 
-새 에이전트 추가 절차는 CLAUDE.md "서브에이전트 추가 절차"를 따른다.
+### 새 에이전트 추가 절차
+
+해당 스프린트가 시작되면 Claude Code에 이렇게 요청한다:
+
+> "ECC 리포(https://github.com/affaan-m/ECC.git)를 다시 확인해서 [에이전트 이름]을 backend-dev 만들 때처럼 만들어줘."
+
+그러면 이 순서로 진행한다:
+
+1. ECC 리포에서 관련 `agents/`·`commands/`·`skills/`만 얕게 가져온다 (전체 설치 아님)
+2. CLAUDE.md의 절대 금지·계층 규칙·네이밍·테스트 규칙에 맞게 다듬는다 — 원본을 그대로 복사하지 않는다
+3. Codex/Cursor/Gemini 등 다른 도구용 설정은 가져오지 않는다 (Claude Code 전용)
+4. 함께 쓸 skill을 8~12개 골라 `.claude/skills/`에 추가하고, 무관한 프레임워크(Quarkus, Django 등) 예시는 이 프로젝트 스택(Spring Boot/Postgres) 예시로 바꾼다. 설명은 한국어로 쓰되 `description`의 영어 키워드는 남긴다(skill 자동 선택용)
+5. 기존 커맨드(`cb-review-gate`, `db-migration`, `feature-dev`)에 새 에이전트 이름을 반영해 참조를 갱신한다
+6. 에이전트 파일의 `model`을 정한다 (backend-dev는 opus)
+7. 이 문서의 에이전트 표와 skill 표를 갱신한다
+
+**요청 전에**: CLAUDE.md 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.

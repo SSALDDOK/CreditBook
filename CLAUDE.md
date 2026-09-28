@@ -19,9 +19,17 @@
 ## 코워크와의 인수인계 (인수인계 요청 DB)
 Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Code가 담당한다. 서로에게 넘길 일은 파일이 아니라 **인수인계 요청 DB**로 주고받는다 (Notion 메인의 "인수인계 요청" 섹션)
 - **요청 작성 시**: 결정이 필요하거나 Notion·Jira 반영이 필요한 게 생기면 이 DB에 행을 추가한다 (`요청자 = Claude Code`, `담당 = 코워크`). 사용자 결정이 먼저 필요하면 `상태 = 사용자 확인 필요`, 아니면 `대기`
-- **긴급 항목**: `긴급도 = 긴급`이면 DB에 쓰는 것과 별개로 **그 자리에서 사용자에게 바로 말한다** — 코워크 쪽 점검은 수·일 스케줄이라 며칠 늦을 수 있다
+- **긴급 항목**: `긴급도 = 긴급`이면 DB에 쓰는 것과 별개로 **그 자리에서 사용자에게 바로 말한다** — 코워크는 인수인계 DB를 매일 1회 점검하므로 최대 하루 늦을 수 있다
 - **완료 처리 시**: `처리 결과`에 바뀐 파일·페이지 또는 Jira 키를 남긴다
 - Notion·Jira를 Claude Code가 직접 고치지 않는다. 반대로 코워크는 리포를 건드리지 않는다
+
+### 기술 설계는 리포가 먼저 (2026-09-28 사용자 결정 — "Notion이 먼저" 원칙의 예외)
+스키마·기술 설계(인덱스, 트리거, 권한, 제약조건, JPA 매핑 등)는 Claude Code가 설계하고, 코워크는 문서로 정리한다.
+1. Claude Code가 설계안을 만들고 **Neon에서 롤백 전용 트랜잭션으로 검증**한다 (commit 금지, 끝나면 잔여 객체 없음 확인)
+2. 설계안을 채팅으로 제시하고 **사용자가 채팅에서 승인**한다
+3. 승인 즉시 Claude Code가 리포(마이그레이션·코드·이 파일)에 구현한다. 그리고 인수인계 요청 DB에 **Notion 문서의 절 구조(§ 번호·표·콜아웃)에 맞춘 문구 그대로**(SQL, 근거, 검증 결과, 변경 이력 행)를 적어 요청한다
+4. 코워크가 스키마 정의서·개발 컨벤션 등에 옮겨 적는다. 그때까지 리포가 Notion보다 앞서 있는 것은 허용되며, 불일치는 이 요청 행으로 추적한다
+- 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
 ## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월된 백엔드 셋업 최우선)
 1인 6주 포트폴리오, 1주 스프린트 6개. S1은 문서·설계만 끝내고 종료됐고, 백엔드 셋업은 S2로 이월됐다. **S2 첫 작업은 이월분(CB-5·CB-6·CB-7)이다** — 셋업이 끝나기 전에는 S2 본 목표(도메인 API)나 문서 개편을 새로 시작하지 않는다 (S1 회고 Try #1).
@@ -29,7 +37,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 S2 이월분:
 - Spring Boot 프로젝트 생성 + DDD 패키지 구조
 - Neon 연결 + Flyway `V1__init.sql` 적용
-- GitHub 저장소 생성 (브랜치 전략·커밋 규칙은 아래 Git 규칙대로)
+- GitHub 저장소 생성 (브랜치 전략·커밋 규칙은 아래 Git 규칙대로) — **CB-5·CB-7이 끝나면 Claude Code가 사용자에게 저장소를 만들라고 알린다** (그 전까지는 로컬 커밋만, 원격 백업 없음 — 2026-09-28 사용자 요청)
 - 최소 CI (GitHub Actions: push·PR 시 빌드 + 테스트)
 - 이월 DoD: `./gradlew bootRun`으로 앱이 뜨고 DB 연결 확인 / main push 시 CI 통과
 
@@ -54,15 +62,7 @@ S2 이월분:
 | test-writer | JUnit5 + Playwright 작성·실행 | S2부터 |
 | code-reviewer | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3부터 — PR이 실제로 쌓이기 시작하면 |
 
-### 서브에이전트 추가 절차
-해당 스프린트가 시작되면 Claude Code에 다음처럼 요청한다: *"ECC 리포(https://github.com/affaan-m/ECC.git)를 다시 확인해서 [에이전트 이름]을 backend-dev 만들 때처럼 만들어줘."* 그러면 이 순서로 진행한다:
-1. ECC 리포에서 관련 `agents/`·`commands/`·`skills/`만 얕게 가져온다 (전체 설치 아님)
-2. 이 문서의 절대 금지·계층 규칙·네이밍·테스트 규칙에 맞게 다듬는다 — 원본 그대로 복사하지 않는다
-3. Codex/Cursor/Gemini 등 다른 도구용 설정은 가져오지 않는다 (Claude Code 전용)
-4. 함께 쓸 skill을 8~12개 선별해 `.claude/skills/`에 추가하고, 무관한 프레임워크(Quarkus, Django 등) 예시는 이 프로젝트 스택(Spring Boot/Postgres) 예시로 바꾼다
-5. 기존 커맨드(`cb-review-gate`, `db-migration`, `feature-dev`)에 새 에이전트 이름을 반영해 참조를 갱신한다
-
-**요청 전에**: 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
+에이전트를 새로 만들 때는 [docs/claude-code-guide.md](docs/claude-code-guide.md)의 "새 에이전트 추가 절차"를 따른다. **요청 전에** 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
 
 ## 프로젝트 개요
 카페/식당 선결제 잔액 관리 웹앱. 결제 처리(PG)는 범위 밖 — 이미 받은 선결제를 기록·차감만 하는 장부 도구.
@@ -70,7 +70,7 @@ S2 이월분:
 **핵심 가치는 기능이 아니라 잔액 정합성과 추적 가능성.**
 
 ## 기술 스택
-- 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + Spring Boot 3, DDD 구조
+- 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + **Spring Boot 4.0.8**, DDD 구조. 리포의 `backend/` 하위 (2026-09-28 결정: 3.5 라인은 OSS 지원 종료, 4.1보다 검증 기간이 긴 4.0 라인. Boot 4에서는 `@MockBean` 대신 `@MockitoBean`)
 - DB: PostgreSQL (Neon, 서버리스)
 - 테스트: JUnit5(단위) + Playwright(E2E)
 - 마이그레이션: Flyway
@@ -127,6 +127,7 @@ com.creditbook
 | DTO | 용도 + Request/Response | `ChargeRequest`, `CustomerListResponse` |
 | 테이블·컬럼 | 복수형 snake_case | `prepaid_accounts`, `balance_after` |
 | 제약조건 | `ck_`/`ux_`/`ix_` + 테이블 + 의미 | `ck_ledger_entries_amount` |
+| 트리거·함수 | `trg_`/`fn_` + 테이블 + 의미 | `trg_ledger_entries_no_truncate`, `fn_ledger_entries_append_only` |
 | 테스트 메서드 | 영문 snake + `@DisplayName` 한글 | `use_fails_when_amount_exceeds_balance` |
 | 도메인 용어 | 문서와 코드가 같은 단어 | 사용=`use`(차감 아님), 충전 취소=`cancelCharge()`, 사용 취소=`cancelUse()` |
 
@@ -144,105 +145,25 @@ com.creditbook
 ## DB 스키마 — Flyway `V1__init.sql`
 테이블명은 `transactions`가 아니라 **`ledger_entries`**다 (PostgreSQL 예약어 `transaction`과의 혼동을 피하려고 2026-09-23에 확정 리네임).
 
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
+**확정본은 `backend/src/main/resources/db/migration/V1__init.sql`이다.** 스키마를 볼 때는 이 파일을 읽는다. SQL을 이 문서에 복사해 두지 않는다 — 두 곳을 함께 고쳐야 하고, 결국 어긋난다. 설계 근거와 정합성 쿼리(§6)는 Notion 스키마 정의서가 출처다.
 
-CREATE TABLE store_profile (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(30) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ck_store_profile_name CHECK (btrim(name) <> '')
-);
--- 단일 매장이므로 행은 하나뿐. 두 번째 INSERT 를 DB가 막는다
-CREATE UNIQUE INDEX ux_store_profile_singleton ON store_profile ((TRUE));
-
-CREATE TABLE employees (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    login_id             VARCHAR(50)  NOT NULL UNIQUE,
-    password_hash        VARCHAR(100) NOT NULL,
-    name                 VARCHAR(50)  NOT NULL,
-    role                 VARCHAR(10)  NOT NULL,
-    active               BOOLEAN      NOT NULL DEFAULT TRUE,
-    must_change_password BOOLEAN      NOT NULL DEFAULT TRUE,
-    last_login_at        TIMESTAMPTZ,
-    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT ck_employees_role CHECK (role IN ('ADMIN', 'STAFF'))
-);
--- 활성 ADMIN 이 0명이 되는 것은 애플리케이션에서 막는다 (DB 제약으로는 표현 불가)
-CREATE INDEX ix_employees_active_role ON employees (active, role);
-
-CREATE TABLE customers (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(20)  NOT NULL,
-    phone      VARCHAR(20),
-    memo       VARCHAR(200),
-    active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT ck_customers_name_not_blank CHECK (btrim(name) <> ''),
-    CONSTRAINT ck_customers_phone_digits   CHECK (phone IS NULL OR phone ~ '^[0-9]{9,11}$')
-);
-CREATE INDEX ix_customers_name           ON customers (name);
-CREATE INDEX ix_customers_phone          ON customers (phone);
-CREATE INDEX ix_customers_active_created ON customers (active, created_at DESC);
-
-CREATE TABLE prepaid_accounts (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID          NOT NULL UNIQUE REFERENCES customers (id),
-    balance     NUMERIC(12,0) NOT NULL DEFAULT 0,
-    version     BIGINT        NOT NULL DEFAULT 0,
-    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    CONSTRAINT ck_prepaid_accounts_balance_non_negative CHECK (balance >= 0)
-);
-
-CREATE TABLE ledger_entries (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    seq             BIGSERIAL     NOT NULL UNIQUE,
-    account_id      UUID          NOT NULL REFERENCES prepaid_accounts (id),
-    type            VARCHAR(20)   NOT NULL,
-    amount          NUMERIC(12,0) NOT NULL,
-    signed_amount   NUMERIC(12,0) GENERATED ALWAYS AS (
-                        CASE WHEN type IN ('USE', 'CHARGE_CANCEL') THEN -amount ELSE amount END
-                    ) STORED,
-    balance_after   NUMERIC(12,0) NOT NULL,
-    memo            VARCHAR(200),
-    reverses_id     UUID          REFERENCES ledger_entries (id),
-    performed_by    UUID          NOT NULL REFERENCES employees (id),
-    performed_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    idempotency_key VARCHAR(64),
-    CONSTRAINT ck_ledger_entries_type     CHECK (type IN ('CHARGE', 'USE', 'CHARGE_CANCEL', 'USE_CANCEL')),
-    CONSTRAINT ck_ledger_entries_amount   CHECK (amount > 0),
-    CONSTRAINT ck_ledger_entries_balance  CHECK (balance_after >= 0),
-    CONSTRAINT ck_ledger_entries_reverses CHECK (
-        (type IN ('CHARGE_CANCEL', 'USE_CANCEL') AND reverses_id IS NOT NULL)
-        OR (type IN ('CHARGE', 'USE') AND reverses_id IS NULL)
-    )
-);
-CREATE INDEX ix_ledger_entries_account_seq       ON ledger_entries (account_id, seq DESC);
-CREATE INDEX ix_ledger_entries_account_performed ON ledger_entries (account_id, performed_at DESC);
-CREATE UNIQUE INDEX ux_ledger_entries_idem       ON ledger_entries (idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
-CREATE UNIQUE INDEX ux_ledger_entries_reverses   ON ledger_entries (reverses_id)
-    WHERE reverses_id IS NOT NULL;   -- 같은 건을 두 번 반제 못 함
-
-CREATE TABLE phone_access_logs (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID        NOT NULL REFERENCES customers (id),
-    accessed_by UUID        NOT NULL REFERENCES employees (id),
-    accessed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX ix_phone_access_logs_customer ON phone_access_logs (customer_id, accessed_at DESC);
-```
+| 테이블 | 핵심 제약·인덱스·트리거 (이름으로 대화할 때 참고) |
+|---|---|
+| `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` |
+| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role` |
+| `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
+| `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version`(낙관적 락) |
+| `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
+| `phone_access_logs` | `ix_phone_access_logs_customer` |
 
 - `V1__init.sql`은 아직 어느 DB에도 적용되지 않았다. 적용 전까지는 V2를 만들지 말고 V1을 직접 고친다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
-- **append-only는 DB에서도 막는다**: 애플리케이션 DB 계정에서 `ledger_entries`의 UPDATE·DELETE 권한을 REVOKE(또는 예외를 내는 트리거). 구체 방식은 구현 시 스키마 정의서에 먼저 확정한다.
+- **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
+- **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
 - 정합성 점검 쿼리(잔액 대사, `balance_after` 누적합, 반제 무결성·유형 불일치)는 스키마 정의서 §6이 확정본이다. 모두 0행이어야 정상이며, 정합성 테스트와 배포 후 스모크에 그대로 쓴다.
 
 ## 절대 금지 (예외 없음, 하나라도 보이면 머지하지 않는다)
-1. `ledger_entries` 테이블에 UPDATE / DELETE — 정정은 반제 거래로만. 코드 리뷰뿐 아니라 DB 권한(REVOKE)·트리거로도 차단
+1. `ledger_entries` 테이블에 UPDATE / DELETE — 정정은 반제 거래로만. 코드 리뷰뿐 아니라 DB 트리거(`trg_ledger_entries_no_update_delete`, `trg_ledger_entries_no_truncate`)로도 차단. 트리거를 끄거나 지우는 코드·마이그레이션도 금지
 2. 금액에 `double` / `float`
 3. 잔액 컬럼을 애플리케이션 밖에서 직접 UPDATE
 4. 엔티티를 컨트롤러 응답으로 반환 (DTO 경유)
@@ -282,9 +203,10 @@ CREATE INDEX ix_phone_access_logs_customer ON phone_access_logs (customer_id, ac
 - CI에 JaCoCo 커버리지 리포트, `domain` 패키지에는 PIT 뮤테이션 테스트
 
 ## Neon 연결
-1. Neon 프로젝트의 connection string을 발급받는다 (Pooled connection 권장)
-2. `application-local.yml` 또는 `.env`에 `SPRING_DATASOURCE_URL` / `USERNAME` / `PASSWORD`로 저장 — **절대 커밋하지 않는다** (`.gitignore` 확인)
-3. Flyway가 `V1__init.sql`을 첫 실행 시 자동 적용
+1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
+2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
+3. Flyway가 `V1__init.sql`을 첫 `bootRun` 시 자동 적용한다 — V1은 아직 미적용이므로 **적용 전에는 `bootRun`을 실행하지 않는다**(적용 시점은 사용자와 정한다)
+4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
 - `creditbook.charge.max-amount: 300000` — **1회** 충전 한도(잔액 상한 아님). 경계값 테스트가 상한을 바꿔가며 돌아야 하므로 설정값으로 둔다
