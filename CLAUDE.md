@@ -9,6 +9,7 @@
 - 워크스페이스 인덱스(결정 로그 등): 리포와 별개로 Claude 계정의 Project 문서에 있다 — 필요하면 사용자에게 요청
 
 마지막 동기화: 2026-09-27 (S1 종료·이월 반영, 세션 시작 점검에 스프린트 보드 추가)
+2026-09-28 기준 **리포가 Notion보다 앞서 있다** (Boot 4.0.8, append-only 트리거, UNIQUE 명명, FK 인덱스 결정, `main` 보호·병합 절차). Notion 반영은 인수인계 요청 DB에 대기 중 — 세션 시작 점검 때 해당 요청들이 `완료`가 됐는지도 확인한다
 
 ## 세션 시작 점검 (Notion 읽기 전용)
 1. **인수인계 요청 DB**: `담당 = Claude Code`, `상태 = 대기`인 행을 확인해 사용자에게 알린다. 처리는 사용자가 승인한 뒤에 한다 (알림만, 자동 처리 없음)
@@ -34,12 +35,16 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 ## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월된 백엔드 셋업 최우선)
 1인 6주 포트폴리오, 1주 스프린트 6개. S1은 문서·설계만 끝내고 종료됐고, 백엔드 셋업은 S2로 이월됐다. **S2 첫 작업은 이월분(CB-5·CB-6·CB-7)이다** — 셋업이 끝나기 전에는 S2 본 목표(도메인 API)나 문서 개편을 새로 시작하지 않는다 (S1 회고 Try #1).
 
-S2 이월분:
-- Spring Boot 프로젝트 생성 + DDD 패키지 구조
-- Neon 연결 + Flyway `V1__init.sql` 적용
-- GitHub 저장소 생성 (브랜치 전략·커밋 규칙은 아래 Git 규칙대로) — **CB-5·CB-7이 끝나면 Claude Code가 사용자에게 저장소를 만들라고 알린다** (그 전까지는 로컬 커밋만, 원격 백업 없음 — 2026-09-28 사용자 요청)
-- 최소 CI (GitHub Actions: push·PR 시 빌드 + 테스트)
-- 이월 DoD: `./gradlew bootRun`으로 앱이 뜨고 DB 연결 확인 / main push 시 CI 통과
+S2 이월분 (2026-09-28 기준 진행 상황):
+- [x] Spring Boot 프로젝트 생성 + DDD 패키지 구조 — CB-6, PR #2
+- [x] Neon 연결 — `bootRun`으로 DB `UP` 확인 (이월 DoD 1 충족)
+- [x] `V1__init.sql` 작성·검증 — CB-5·CB-7, PR #3·#4. CI에서 테스트 21건 통과
+- [ ] **`V1__init.sql`을 Neon에 실제 적용** — 다음 세션 첫 작업. 되돌릴 수 없으므로 **시작 전에 사용자에게 한 번 더 확인**하고, 적용 후 `flyway_schema_history`와 테이블 6개·트리거를 확인한 뒤 이 문서의 "V1 미적용" 표시를 고친다
+- [x] GitHub 저장소 — https://github.com/SSALDDOK/CreditBook (공개)
+- [x] 최소 CI + `main` 브랜치 보호 (이월 DoD 2 "main push 시 CI 통과" 충족)
+- [ ] (권장) 사용자 PC에 Docker Desktop 설치 — WSL 미설치 상태. 설치되면 로컬에서도 Testcontainers 테스트가 실행된다. 그 전까지 로컬 `./gradlew build`의 통합 테스트는 스킵된다
+
+이월분이 모두 끝나면 S2 본 목표(충전·사용·취소 도메인 + 정합성 증명 테스트)로 넘어간다. 그때 CB-5·CB-6·CB-7 완료 처리와 스프린트 보드 갱신을 인수인계 요청으로 확인한다.
 
 | 스프린트 | 기간 | 목표 |
 |---|---|---|
@@ -186,6 +191,11 @@ com.creditbook
 - 브랜치: `feature/CB-42-charge-api`, `fix/CB-57-balance-boundary` — Jira 키 포함
 - 커밋: `<type>(<Jira 키>): <한 줄 요약>` — type은 feat/fix/test/refactor/docs/chore
 - 혼자 작업해도 PR을 거친다 (CI 통과 확인 + 변경 이력 보존 목적)
+- Jira 이슈가 없는 설정·문서 작업은 `chore/<설명>` 브랜치 (개발 컨벤션 §1.1)
+- **`main` 브랜치 보호** (2026-09-28): 필수 검사 `backend build & test` 통과, 최신 `main` 기준 검사 필수, 관리자 포함, PR로만 반영(승인자 0명), 강제 push·삭제 금지. **CLAUDE.md 한 줄도 이 절차를 거친다**
+- 흐름: 로컬 커밋 → 브랜치 push → PR → CI 🟢 → Merge(= `main` 반영) → `main` CI 자동 실행
+- 병합 방식은 **merge commit** (squash·rebase 금지 — 쌓인 PR의 커밋이 어긋난다)
+- **쌓인 PR(stacked)을 병합할 때**: 앞 PR 병합 → **다음 PR의 base를 먼저 `main`으로 바꾼 뒤** 앞 브랜치를 삭제한다. 브랜치를 먼저 지우면 GitHub가 다음 PR을 자동으로 옮기지 않고 **닫아 버린다** (2026-09-28 #2에서 발생, 복구함)
 
 ## 테스트 규칙
 - Given-When-Then 세 블록, `@DisplayName`은 한글로 요구사항 인수조건 문장 그대로
