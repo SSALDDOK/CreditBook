@@ -1,5 +1,5 @@
 ---
-description: DDD 계층 순서(domain→application→controller→infrastructure)로 기능을 구현하는 TDD 워크플로우, GitHub Flow 브랜치/커밋/PR 규칙 포함
+description: DDD 계층 순서(domain→application→controller→infrastructure)로 기능을 구현하는 TDD 워크플로, GitHub Flow 브랜치/커밋/PR 규칙 포함
 argument-hint: <Jira 키> <기능 설명>
 ---
 
@@ -37,11 +37,11 @@ git checkout -b feature/CB-42-charge-api   # $ARGUMENTS에서 Jira 키를 추출
 ## 4단계 — 빌드/테스트 확인
 
 ```bash
-./gradlew check   # 또는 ./mvnw verify -q
+cd backend && ./gradlew build   # 실행·스킵·실패 수를 확인한다 (Docker 없으면 통합 테스트는 스킵 — 통과로 보지 않는다)
 ```
 실패하면 `backend-dev`에게 위임한다.
 
-## 5단계 — 셀프 리뷰
+## 5단계 — 자가 리뷰
 
 `/cb-review-gate`로 절대 금지 8항목을 먼저 게이트하고, `backend-dev`로 심층 리뷰한다. S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크)가 생기면 PR 단계 리뷰를 그쪽으로 넘긴다.
 

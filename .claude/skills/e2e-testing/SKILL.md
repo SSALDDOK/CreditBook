@@ -1,15 +1,15 @@
 ---
 name: e2e-testing
-description: Playwright E2E testing patterns, Page Object Model, configuration, CI/CD integration, artifact management, and flaky test strategies. Use when writing Playwright tests, structuring page objects, or fixing flaky E2E runs in CI.
+description: Playwright E2E 테스트 패턴 — Page Object Model, 설정, CI/CD 연동, 산출물 관리, 불안정(flaky) 테스트 대응. Playwright 테스트를 작성하거나, 페이지 객체를 구성하거나, CI에서 불안정한 E2E를 고칠 때 사용.
 metadata:
   origin: ECC
 ---
 
-# E2E Testing Patterns
+# E2E 테스트 패턴
 
-Comprehensive Playwright patterns for building stable, fast, and maintainable E2E test suites.
+안정적이고 빠르며 유지보수하기 쉬운 E2E 테스트를 만들기 위한 Playwright 패턴 모음.
 
-## Test File Organization
+## 테스트 파일 구성
 
 ```
 tests/
@@ -65,7 +65,7 @@ export class ItemsPage {
 }
 ```
 
-## Test Structure
+## 테스트 구조
 
 ```typescript
 import { test, expect } from '@playwright/test'
@@ -98,7 +98,7 @@ test.describe('Item Search', () => {
 })
 ```
 
-## Playwright Configuration
+## Playwright 설정
 
 ```typescript
 import { defineConfig, devices } from '@playwright/test'
@@ -137,9 +137,9 @@ export default defineConfig({
 })
 ```
 
-## Flaky Test Patterns
+## 불안정(flaky) 테스트 대응
 
-### Quarantine
+### 격리(Quarantine)
 
 ```typescript
 test('flaky: complex search', async ({ page }) => {
@@ -153,47 +153,47 @@ test('conditional skip', async ({ page }) => {
 })
 ```
 
-### Identify Flakiness
+### 불안정한 테스트 찾기
 
 ```bash
 npx playwright test tests/search.spec.ts --repeat-each=10
 npx playwright test tests/search.spec.ts --retries=3
 ```
 
-### Common Causes & Fixes
+### 흔한 원인과 해결
 
-**Race conditions:**
+**경쟁 상태(race condition):**
 ```typescript
-// Bad: assumes element is ready
+// 나쁨: 요소가 준비됐다고 가정
 await page.click('[data-testid="button"]')
 
-// Good: auto-wait locator
+// 좋음: 자동 대기하는 locator
 await page.locator('[data-testid="button"]').click()
 ```
 
-**Network timing:**
+**네트워크 타이밍:**
 ```typescript
-// Bad: arbitrary timeout
+// 나쁨: 임의의 대기 시간
 await page.waitForTimeout(5000)
 
-// Good: wait for specific condition
+// 좋음: 특정 조건을 기다림
 await page.waitForResponse(resp => resp.url().includes('/api/data'))
 ```
 
-**Animation timing:**
+**애니메이션 타이밍:**
 ```typescript
-// Bad: click during animation
+// 나쁨: 애니메이션 중 클릭
 await page.click('[data-testid="menu-item"]')
 
-// Good: wait for stability
+// 좋음: 안정될 때까지 대기
 await page.locator('[data-testid="menu-item"]').waitFor({ state: 'visible' })
 await page.waitForLoadState('networkidle')
 await page.locator('[data-testid="menu-item"]').click()
 ```
 
-## Artifact Management
+## 산출물(artifact) 관리
 
-### Screenshots
+### 스크린샷
 
 ```typescript
 await page.screenshot({ path: 'artifacts/after-login.png' })
@@ -201,7 +201,7 @@ await page.screenshot({ path: 'artifacts/full-page.png', fullPage: true })
 await page.locator('[data-testid="chart"]').screenshot({ path: 'artifacts/chart.png' })
 ```
 
-### Traces
+### 트레이스
 
 ```typescript
 await browser.startTracing(page, {
@@ -213,17 +213,17 @@ await browser.startTracing(page, {
 await browser.stopTracing()
 ```
 
-### Video
+### 동영상
 
 ```typescript
-// In playwright.config.ts
+// playwright.config.ts에서
 use: {
   video: 'retain-on-failure',
   videosPath: 'artifacts/videos/'
 }
 ```
 
-## CI/CD Integration
+## CI/CD 연동
 
 ```yaml
 # .github/workflows/e2e.yml
@@ -251,38 +251,38 @@ jobs:
           retention-days: 30
 ```
 
-## Test Report Template
+## 테스트 보고서 양식
 
 ```markdown
-# E2E Test Report
+# E2E 테스트 보고서
 
-**Date:** YYYY-MM-DD HH:MM
-**Duration:** Xm Ys
-**Status:** PASSING / FAILING
+**일시:** YYYY-MM-DD HH:MM
+**소요 시간:** X분 Y초
+**상태:** 통과 / 실패
 
-## Summary
-- Total: X | Passed: Y (Z%) | Failed: A | Flaky: B | Skipped: C
+## 요약
+- 전체: X | 통과: Y (Z%) | 실패: A | 불안정: B | 건너뜀: C
 
-## Failed Tests
+## 실패한 테스트
 
-### test-name
-**File:** `tests/e2e/feature.spec.ts:45`
-**Error:** Expected element to be visible
-**Screenshot:** artifacts/failed.png
-**Recommended Fix:** [description]
+### 테스트 이름
+**파일:** `tests/e2e/feature.spec.ts:45`
+**오류:** 요소가 보여야 하는데 보이지 않음
+**스크린샷:** artifacts/failed.png
+**권장 수정:** [설명]
 
-## Artifacts
-- HTML Report: playwright-report/index.html
-- Screenshots: artifacts/*.png
-- Videos: artifacts/videos/*.webm
-- Traces: artifacts/*.zip
+## 산출물
+- HTML 보고서: playwright-report/index.html
+- 스크린샷: artifacts/*.png
+- 동영상: artifacts/videos/*.webm
+- 트레이스: artifacts/*.zip
 ```
 
-## Wallet / Web3 Testing
+## 지갑 / Web3 테스트 (CreditBook 해당 없음 — 참고용)
 
 ```typescript
 test('wallet connection', async ({ page, context }) => {
-  // Mock wallet provider
+  // 지갑 공급자 목
   await context.addInitScript(() => {
     window.ethereum = {
       isMetaMask: true,
@@ -300,22 +300,22 @@ test('wallet connection', async ({ page, context }) => {
 })
 ```
 
-## Financial / Critical Flow Testing
+## 금액 / 핵심 흐름 테스트 (CreditBook: 충전·사용·취소 흐름에 적용)
 
 ```typescript
 test('trade execution', async ({ page }) => {
-  // Skip on production — real money
+  // 운영에서는 건너뜀 — 실제 돈
   test.skip(process.env.NODE_ENV === 'production', 'Skip on production')
 
   await page.goto('/markets/test-market')
   await page.locator('[data-testid="position-yes"]').click()
   await page.locator('[data-testid="trade-amount"]').fill('1.0')
 
-  // Verify preview
+  // 미리보기 확인
   const preview = page.locator('[data-testid="trade-preview"]')
   await expect(preview).toContainText('1.0')
 
-  // Confirm and wait for blockchain
+  // 확정 후 응답 대기
   await page.locator('[data-testid="confirm-trade"]').click()
   await page.waitForResponse(
     resp => resp.url().includes('/api/trade') && resp.status() === 200,

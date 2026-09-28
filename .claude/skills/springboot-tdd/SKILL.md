@@ -1,28 +1,28 @@
 ---
 name: springboot-tdd
-description: Test-driven development for Spring Boot using JUnit 5, Mockito, MockMvc, Testcontainers, and JaCoCo. Use when adding features, fixing bugs, or refactoring.
+description: JUnit 5, Mockito, MockMvc, Testcontainers, JaCoCo를 사용하는 Spring Boot 테스트 주도 개발(TDD). 기능 추가, 버그 수정, 리팩터링 시 사용.
 metadata:
   origin: ECC
 ---
 
-# Spring Boot TDD Workflow
+# Spring Boot TDD 워크플로
 
-TDD guidance for Spring Boot services with 80%+ coverage (unit + integration).
+커버리지 80% 이상(단위 + 통합)을 목표로 하는 Spring Boot 서비스용 TDD 가이드.
 
-## When to Use
+## 언제 쓰는가
 
-- New features or endpoints
-- Bug fixes or refactors
-- Adding data access logic or security rules
+- 새 기능이나 엔드포인트
+- 버그 수정이나 리팩터링
+- 데이터 접근 로직이나 보안 규칙 추가
 
-## Workflow
+## 절차
 
-1) Write tests first (they should fail)
-2) Implement minimal code to pass
-3) Refactor with tests green
-4) Enforce coverage (JaCoCo)
+1) 테스트를 먼저 작성한다 (실패해야 정상)
+2) 통과할 만큼만 최소한으로 구현한다
+3) 테스트가 초록인 상태에서 리팩터링한다
+4) 커버리지를 강제한다 (JaCoCo)
 
-## Unit Tests (JUnit 5 + Mockito)
+## 단위 테스트 (JUnit 5 + Mockito)
 
 ```java
 @ExtendWith(MockitoExtension.class)
@@ -43,18 +43,18 @@ class MarketServiceTest {
 }
 ```
 
-Patterns:
-- Arrange-Act-Assert
-- Avoid partial mocks; prefer explicit stubbing
-- Use `@ParameterizedTest` for variants
+패턴:
+- Arrange-Act-Assert (이 프로젝트에서는 Given-When-Then 주석 세 블록으로 쓴다)
+- 부분 목(partial mock)을 피하고 명시적 스텁을 쓴다
+- 변형 케이스는 `@ParameterizedTest`로 모은다
 
-## Web Layer Tests (MockMvc)
+## 웹 계층 테스트 (MockMvc)
 
 ```java
 @WebMvcTest(MarketController.class)
 class MarketControllerTest {
   @Autowired MockMvc mockMvc;
-  @MockBean MarketService marketService;
+  @MockitoBean MarketService marketService;   // Boot 4: @MockBean 삭제됨
 
   @Test
   void returnsMarkets() throws Exception {
@@ -67,7 +67,7 @@ class MarketControllerTest {
 }
 ```
 
-## Integration Tests (SpringBootTest)
+## 통합 테스트 (SpringBootTest)
 
 ```java
 @SpringBootTest
@@ -88,7 +88,7 @@ class MarketIntegrationTest {
 }
 ```
 
-## Persistence Tests (DataJpaTest)
+## 영속성 테스트 (DataJpaTest)
 
 ```java
 @DataJpaTest
@@ -111,12 +111,12 @@ class MarketRepositoryTest {
 
 ## Testcontainers
 
-- Use reusable containers for Postgres/Redis to mirror production
-- Wire via `@DynamicPropertySource` to inject JDBC URLs into Spring context
+- 운영과 같도록 Postgres/Redis는 재사용 가능한 컨테이너를 쓴다
+- `@ServiceConnection`(권장) 또는 `@DynamicPropertySource`로 JDBC URL을 스프링 컨텍스트에 주입한다
 
-## Coverage (JaCoCo)
+## 커버리지 (JaCoCo)
 
-Maven snippet:
+Maven 예시 (이 프로젝트는 Gradle `jacoco` 플러그인을 쓴다):
 ```xml
 <plugin>
   <groupId>org.jacoco</groupId>
@@ -135,13 +135,13 @@ Maven snippet:
 </plugin>
 ```
 
-## Assertions
+## 단언(Assertion)
 
-- Prefer AssertJ (`assertThat`) for readability
-- For JSON responses, use `jsonPath`
-- For exceptions: `assertThatThrownBy(...)`
+- 가독성을 위해 AssertJ(`assertThat`)를 쓴다
+- JSON 응답은 `jsonPath`로 검증한다
+- 예외는 `assertThatThrownBy(...)`로 검증한다
 
-## Test Data Builders
+## 테스트 데이터 빌더
 
 ```java
 class MarketBuilder {
@@ -151,9 +151,9 @@ class MarketBuilder {
 }
 ```
 
-## CI Commands
+## CI 명령어
 
 - Maven: `mvn -T 4 test` or `mvn verify`
 - Gradle: `./gradlew test jacocoTestReport`
 
-**Remember**: Keep tests fast, isolated, and deterministic. Test behavior, not implementation details.
+**기억할 것**: 테스트는 빠르고, 서로 독립적이고, 결과가 항상 같아야 한다. 구현 세부가 아니라 동작을 테스트한다.

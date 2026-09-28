@@ -1,11 +1,11 @@
 ---
 description: CLAUDE.md의 절대 금지 8항목을 하드 게이트로 검사하는 로컬 diff 코드 리뷰
-argument-hint: [blank for local review]
+argument-hint: [인자 없음 — 로컬 변경을 리뷰]
 ---
 
 # /cb-review-gate
 
-CreditBook의 uncommitted 변경사항을 CLAUDE.md 기준으로 검토한다. Claude Code 내장 `/code-review`(일반 품질/버그 리뷰)를 대체하지 않고, 그 위에 이 프로젝트 고유의 절대 금지 8항목을 하드 게이트로 얹는 용도다. 두 커맨드를 함께 쓰는 것을 권장한다.
+CreditBook의 커밋하지 않은 변경사항을 CLAUDE.md 기준으로 검토한다. Claude Code 내장 `/code-review`(일반 품질/버그 리뷰)를 대체하지 않고, 그 위에 이 프로젝트 고유의 절대 금지 8항목을 하드 게이트로 얹는 용도다. 두 커맨드를 함께 쓰는 것을 권장한다.
 
 ## 1단계 — 변경 파일 확인
 
@@ -29,7 +29,7 @@ git diff --name-only HEAD
 
 ## 3단계 — 심층 리뷰 위임
 
-지금은 서브에이전트가 `backend-dev` 하나뿐이다. `*.java`, DDD 계층 경계, JPA 매핑, Flyway 마이그레이션 관련 변경은 `backend-dev`에게 위임해 자체 점검(파일 내 "완료 전 self-check" 기준)을 받는다.
+지금은 서브에이전트가 `backend-dev` 하나뿐이다. `*.java`, DDD 계층 경계, JPA 매핑, Flyway 마이그레이션 관련 변경은 `backend-dev`에게 위임해 자체 점검(파일 내 "완료 전 자가 점검" 기준)을 받는다.
 
 S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되면 인증·PII·시크릿·삼켜진 예외 같은 항목은 그쪽으로 위임이 옮겨간다. 그 전까지는 아래 항목을 이 커맨드 안에서 직접 점검한다:
 - 평문 비밀번호 비교, JWT 검증 누락
@@ -41,7 +41,7 @@ S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되
 다음 형식으로 보고한다:
 
 ```text
-## 절대 금지 게이트: PASS / BLOCK
+## 절대 금지 게이트: 통과(PASS) / 차단(BLOCK)
 [BLOCK인 경우 위반 항목과 파일:줄 나열]
 
 ## backend-dev 리뷰 요약
@@ -50,8 +50,8 @@ S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되
 ## 보안/PII 직접 점검 (code-reviewer 생기기 전까지)
 - ...
 
-## 종합 판정: Approve / Warning / Block
+## 종합 판정: 승인(Approve) / 경고(Warning) / 차단(Block)
 ```
 
 ## 참고
-- 이 커맨드는 로컬 uncommitted 변경 전용이다. GitHub PR 전체에 대한 깊은 멀티 에이전트 리뷰가 필요하면 `/code-review ultra`(클라우드 리뷰)를 별도로 사용한다.
+- 이 커맨드는 로컬의 커밋 전 변경 전용이다. GitHub PR 전체에 대한 깊은 멀티 에이전트 리뷰가 필요하면 `/code-review ultra`(클라우드 리뷰)를 별도로 사용한다.

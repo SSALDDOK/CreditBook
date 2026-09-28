@@ -5,11 +5,11 @@ metadata:
   origin: ECC (Quarkus/CDI/reactive sections removed — Spring Boot only)
 ---
 
-# Java Coding Standards (Spring Boot)
+# Java 코딩 표준 (Spring Boot)
 
 읽기 쉽고 유지보수 가능한 Java 17+ 코드를 위한 표준.
 
-## When to Use
+## 언제 쓰는가
 
 - Spring Boot 프로젝트에서 Java 코드 작성/리뷰
 - 네이밍, 불변성, 예외 처리 컨벤션 점검
@@ -17,35 +17,35 @@ metadata:
 - Optional, 스트림, 제네릭 사용 리뷰
 - 패키지/프로젝트 구조 설계
 
-## Core Principles
+## 핵심 원칙
 
 - 영리함보다 명료함
 - 기본적으로 불변, 공유 가변 상태 최소화
 - 의미 있는 예외로 빠르게 실패
 - 일관된 네이밍과 패키지 구조
 
-## Naming
+## 네이밍
 
 ```java
-// PASS: 클래스/레코드: PascalCase
+// 좋음: 클래스/레코드: PascalCase
 public class ChargeService {}
 public record Money(BigDecimal amount) {}
 
-// PASS: 메서드/필드: camelCase
+// 좋음: 메서드/필드: camelCase
 private final PrepaidAccountRepository prepaidAccountRepository;
 public PrepaidAccount findByCustomerId(UUID customerId) {}
 
-// PASS: 상수: UPPER_SNAKE_CASE
+// 좋음: 상수: UPPER_SNAKE_CASE
 private static final int MAX_PAGE_SIZE = 100;
 
-// PASS: REST 컨트롤러는 *Controller
+// 좋음: REST 컨트롤러는 *Controller
 public class ChargeController {}
 ```
 
-## Immutability
+## 불변성
 
 ```java
-// PASS: record와 final 필드를 우선한다
+// 좋음: record와 final 필드를 우선한다
 public record LedgerEntryResponse(UUID id, BigDecimal amount, LedgerEntryType type) {}
 
 public class PrepaidAccount {
@@ -54,34 +54,34 @@ public class PrepaidAccount {
 }
 ```
 
-## Optional Usage
+## Optional 사용
 
 ```java
-// PASS: find* 메서드는 Optional을 반환한다
+// 좋음: find* 메서드는 Optional을 반환한다
 Optional<PrepaidAccount> account = prepaidAccountRepository.findByCustomerId(customerId);
 
-// PASS: get() 대신 map/flatMap, orElseThrow
+// 좋음: get() 대신 map/flatMap, orElseThrow
 return account
     .map(PrepaidAccountResponse::from)
     .orElseThrow(() -> new AccountNotFoundException(customerId));
 ```
 
-## Streams Best Practices
+## 스트림 모범 사례
 
 ```java
-// PASS: 변환에는 스트림을, 파이프라인은 짧게 유지
+// 좋음: 변환에는 스트림을, 파이프라인은 짧게 유지
 List<String> names = customers.stream()
     .map(Customer::name)
     .filter(Objects::nonNull)
     .toList();
 
-// FAIL: 복잡하게 중첩된 스트림은 피한다 — 명료함을 위해 루프를 선택할 것
+// 나쁨: 복잡하게 중첩된 스트림은 피한다 — 명료함을 위해 루프를 선택할 것
 ```
 
-## Dependency Injection
+## 의존성 주입
 
 ```java
-// PASS: 생성자 주입 (필드 @Autowired보다 우선)
+// 좋음: 생성자 주입 (필드 @Autowired보다 우선)
 @Service
 public class ChargeService {
   private final PrepaidAccountRepository prepaidAccountRepository;
@@ -91,12 +91,12 @@ public class ChargeService {
   }
 }
 
-// FAIL: 필드에 @Autowired
+// 나쁨: 필드에 @Autowired
 @Autowired
 private PrepaidAccountRepository prepaidAccountRepository; // 생성자 주입을 쓸 것
 ```
 
-## Exceptions
+## 예외
 
 - 도메인 에러는 unchecked exception으로, 기술적 예외는 컨텍스트를 담아 감싼다
 - 도메인 전용 예외를 만든다 (예: `InsufficientBalanceException`)
@@ -106,7 +106,7 @@ private PrepaidAccountRepository prepaidAccountRepository; // 생성자 주입�
 throw new InsufficientBalanceException(accountId, requestedAmount, currentBalance);
 ```
 
-### Centralised Exception Handling
+### 중앙 예외 처리
 
 ```java
 @RestControllerAdvice
@@ -123,7 +123,7 @@ public class GlobalExceptionHandler {
 }
 ```
 
-## Generics and Type Safety
+## 제네릭과 타입 안전성
 
 - raw type을 피하고 제네릭 파라미터를 명시한다
 - 재사용 유틸리티는 bounded generic을 우선한다
@@ -132,7 +132,7 @@ public class GlobalExceptionHandler {
 public <T extends Identifiable> Map<UUID, T> indexById(Collection<T> items) { ... }
 ```
 
-## Project Structure
+## 프로젝트 구조
 
 CreditBook은 계층이 아니라 도메인을 최상위로 둔다 (자세한 내용은 프로젝트 루트 `CLAUDE.md` 참고):
 
@@ -148,14 +148,14 @@ src/main/resources/
 src/test/java/... (main 구조를 미러링)
 ```
 
-## Formatting and Style
+## 포맷과 스타일
 
 - 스페이스는 프로젝트 표준(2 또는 4)을 일관되게 사용
 - 파일당 public 최상위 타입 하나
 - 메서드는 짧고 집중되게, 필요하면 헬퍼로 추출
 - 멤버 순서: 상수, 필드, 생성자, public 메서드, protected, private
 
-## Code Smells to Avoid
+## 피해야 할 코드 스멜
 
 - 긴 파라미터 목록 → DTO/builder 사용
 - 깊은 중첩 → 조기 반환(early return)
@@ -163,7 +163,7 @@ src/test/java/... (main 구조를 미러링)
 - 정적 가변 상태 → 의존성 주입 선호
 - 무음 catch 블록 → 로그를 남기고 조치하거나 rethrow
 
-## Logging
+## 로깅
 
 ```java
 // SLF4J
@@ -173,12 +173,12 @@ log.error("charge_failed accountId={}", accountId, ex);
 ```
 고객 전화번호, 비밀번호 해시 등 민감정보는 로그에 남기지 않는다.
 
-## Null Handling
+## null 처리
 
 - `@Nullable`은 불가피할 때만, 그 외에는 `@NonNull`
 - 입력값에는 Bean Validation(`@NotNull`, `@NotBlank`) 적용
 
-## Configuration
+## 설정
 
 ```java
 // @ConfigurationProperties
@@ -187,21 +187,21 @@ public record ChargeProperties(BigDecimal maxAmount) {}
 ```
 `creditbook.charge.max-amount` 같은 정책값은 이렇게 설정으로 바인딩하고, 코드에 상수로 하드코딩하지 않는다.
 
-## Testing Expectations
+## 테스트 기대치
 
 - JUnit 5 + AssertJ(fluent assertion)
 - Mockito로 목킹, 부분 목(partial mock)은 가급적 피함
 - 숨은 sleep 없이 결정적인(deterministic) 테스트
 - `@WebMvcTest`로 컨트롤러 슬라이스, `@DataJpaTest`로 리포지토리 슬라이스
 - `@SpringBootTest`는 진짜 통합 테스트에만 사용 (도메인 단위 테스트에는 쓰지 않는다 — CreditBook 테스트 규칙)
-- `@MockBean`으로 Spring 컨텍스트의 빈을 교체
+- `@MockitoBean`으로 Spring 컨텍스트의 빈을 교체 (Boot 4에서 `@MockBean`은 삭제됨 — `org.springframework.test.context.bean.override.mockito.MockitoBean`)
 
 ```java
 // 컨트롤러 테스트
 @WebMvcTest(ChargeController.class)
 class ChargeControllerTest {
   @Autowired MockMvc mockMvc;
-  @MockBean ChargeService chargeService;
+  @MockitoBean ChargeService chargeService;
 }
 
 // 서비스 단위 테스트 (스프링 컨텍스트 없음)
@@ -212,4 +212,4 @@ class ChargeServiceTest {
 }
 ```
 
-**Remember**: 코드는 의도가 분명하고, 타입이 명확하고, 관찰 가능해야 한다. 검증되지 않은 마이크로 최적화보다 유지보수성을 우선한다.
+**기억할 것**: 코드는 의도가 분명하고, 타입이 명확하고, 관찰 가능해야 한다. 검증되지 않은 마이크로 최적화보다 유지보수성을 우선한다.

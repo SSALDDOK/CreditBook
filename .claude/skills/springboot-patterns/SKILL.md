@@ -1,24 +1,26 @@
 ---
 name: springboot-patterns
-description: Spring Boot architecture patterns, REST API design, layered services, data access, caching, async processing, and logging. Use for Java Spring Boot backend work. Use when building or reviewing a Spring Boot backend — REST layer, services, data access, caching, or async work.
+description: Spring Boot 아키텍처 패턴 — REST API 설계, 계층형 서비스, 데이터 접근, 캐시, 비동기 처리, 로깅. Java Spring Boot 백엔드 작업 전반에 사용. Spring Boot 백엔드의 REST 계층·서비스·데이터 접근·캐시·비동기 작업을 만들거나 리뷰할 때 사용.
 metadata:
   origin: ECC
 ---
 
-# Spring Boot Development Patterns
+# Spring Boot 개발 패턴
 
-Spring Boot architecture and API patterns for scalable, production-grade services.
+확장 가능하고 운영 수준인 서비스를 위한 Spring Boot 아키텍처·API 패턴.
 
-## When to Activate
+> CreditBook 주의: 아래 예시의 `MarketController → MarketService → MarketRepository`는 계층형 예시일 뿐이다. 이 프로젝트는 도메인을 최상위로 두는 DDD 구조이고, 잔액 계산은 반드시 `PrepaidAccount` 안에 둔다 (CLAUDE.md 패키지 구조 참고).
 
-- Building REST APIs with Spring MVC or WebFlux
-- Structuring controller → service → repository layers
-- Configuring Spring Data JPA, caching, or async processing
-- Adding validation, exception handling, or pagination
-- Setting up profiles for dev/staging/production environments
-- Implementing event-driven patterns with Spring Events or Kafka
+## 언제 쓰는가
 
-## REST API Structure
+- Spring MVC 또는 WebFlux로 REST API 구축
+- controller → service → repository 계층 구성
+- Spring Data JPA, 캐시, 비동기 처리 설정
+- 검증, 예외 처리, 페이지네이션 추가
+- dev/staging/production 환경별 프로필 설정
+- Spring Events나 Kafka로 이벤트 기반 패턴 구현
+
+## REST API 구조
 
 ```java
 @RestController
@@ -47,7 +49,7 @@ class MarketController {
 }
 ```
 
-## Repository Pattern (Spring Data JPA)
+## 리포지토리 패턴 (Spring Data JPA)
 
 ```java
 public interface MarketRepository extends JpaRepository<MarketEntity, Long> {
@@ -56,7 +58,7 @@ public interface MarketRepository extends JpaRepository<MarketEntity, Long> {
 }
 ```
 
-## Service Layer with Transactions
+## 트랜잭션이 있는 서비스 계층
 
 ```java
 @Service
@@ -76,7 +78,7 @@ public class MarketService {
 }
 ```
 
-## DTOs and Validation
+## DTO와 검증
 
 ```java
 public record CreateMarketRequest(
@@ -92,7 +94,7 @@ public record MarketResponse(Long id, String name, MarketStatus status) {
 }
 ```
 
-## Exception Handling
+## 예외 처리
 
 ```java
 @ControllerAdvice
@@ -112,16 +114,16 @@ class GlobalExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ApiError> handleGeneric(Exception ex) {
-    // Log unexpected errors with stack traces
+    // 예상치 못한 오류는 스택트레이스와 함께 로그에만 남긴다 (응답에는 넣지 않는다)
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
         .body(ApiError.of("Internal server error"));
   }
 }
 ```
 
-## Caching
+## 캐시
 
-Requires `@EnableCaching` on a configuration class.
+설정 클래스에 `@EnableCaching`이 필요하다.
 
 ```java
 @Service
@@ -144,22 +146,22 @@ public class MarketCacheService {
 }
 ```
 
-## Async Processing
+## 비동기 처리
 
-Requires `@EnableAsync` on a configuration class.
+설정 클래스에 `@EnableAsync`가 필요하다.
 
 ```java
 @Service
 public class NotificationService {
   @Async
   public CompletableFuture<Void> sendAsync(Notification notification) {
-    // send email/SMS
+    // 이메일/SMS 발송
     return CompletableFuture.completedFuture(null);
   }
 }
 ```
 
-## Logging (SLF4J)
+## 로깅 (SLF4J)
 
 ```java
 @Service
@@ -169,7 +171,7 @@ public class ReportService {
   public Report generate(Long marketId) {
     log.info("generate_report marketId={}", marketId);
     try {
-      // logic
+      // 로직
     } catch (Exception ex) {
       log.error("generate_report_failed marketId={}", marketId, ex);
       throw ex;
@@ -179,7 +181,7 @@ public class ReportService {
 }
 ```
 
-## Middleware / Filters
+## 미들웨어 / 필터
 
 ```java
 @Component
@@ -201,14 +203,14 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 }
 ```
 
-## Pagination and Sorting
+## 페이지네이션과 정렬
 
 ```java
 PageRequest page = PageRequest.of(pageNumber, pageSize, Sort.by("createdAt").descending());
 Page<Market> results = marketService.list(page);
 ```
 
-## Error-Resilient External Calls
+## 오류에 강한 외부 호출 (재시도)
 
 ```java
 public <T> T withRetry(Supplier<T> supplier, int maxRetries) {
@@ -232,19 +234,18 @@ public <T> T withRetry(Supplier<T> supplier, int maxRetries) {
 }
 ```
 
-## Rate Limiting (Filter + Bucket4j)
+## 레이트 리밋 (필터 + Bucket4j)
 
-**Security Note**: The `X-Forwarded-For` header is untrusted by default because clients can spoof it.
-Only use forwarded headers when:
-1. Your app is behind a trusted reverse proxy (nginx, AWS ALB, etc.)
-2. You have registered `ForwardedHeaderFilter` as a bean
-3. You have configured `server.forward-headers-strategy=NATIVE` or `FRAMEWORK` in application properties
-4. Your proxy is configured to overwrite (not append to) the `X-Forwarded-For` header
+**보안 주의**: `X-Forwarded-For` 헤더는 클라이언트가 위조할 수 있어 기본적으로 신뢰하지 않는다.
+다음 조건을 모두 갖췄을 때만 포워딩 헤더를 쓴다:
+1. 앱이 신뢰할 수 있는 리버스 프록시(nginx, AWS ALB 등, CreditBook은 Render) 뒤에 있다
+2. `ForwardedHeaderFilter`를 빈으로 등록했다
+3. `server.forward-headers-strategy=NATIVE` 또는 `FRAMEWORK`를 설정했다
+4. 프록시가 `X-Forwarded-For` 헤더를 덧붙이지 않고 덮어쓰도록 설정돼 있다
 
-When `ForwardedHeaderFilter` is properly configured, `request.getRemoteAddr()` will automatically
-return the correct client IP from the forwarded headers. Without this configuration, use
-`request.getRemoteAddr()` directly—it returns the immediate connection IP, which is the only
-trustworthy value.
+`ForwardedHeaderFilter`가 제대로 설정되면 `request.getRemoteAddr()`가 포워딩 헤더에서 올바른 클라이언트 IP를
+자동으로 돌려준다. 이 설정이 없으면 `request.getRemoteAddr()`를 그대로 쓴다 — 직접 연결된 IP로,
+유일하게 믿을 수 있는 값이다.
 
 ```java
 @Component
@@ -252,32 +253,31 @@ public class RateLimitFilter extends OncePerRequestFilter {
   private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
 
   /*
-   * SECURITY: This filter uses request.getRemoteAddr() to identify clients for rate limiting.
+   * 보안: 이 필터는 레이트 리밋 대상 클라이언트를 request.getRemoteAddr()로 식별한다.
    *
-   * If your application is behind a reverse proxy (nginx, AWS ALB, etc.), you MUST configure
-   * Spring to handle forwarded headers properly for accurate client IP detection:
+   * 리버스 프록시(nginx, AWS ALB 등) 뒤에 있다면, 정확한 클라이언트 IP를 얻기 위해
+   * 반드시 스프링이 포워딩 헤더를 처리하도록 설정해야 한다:
    *
-   * 1. Set server.forward-headers-strategy=NATIVE (for cloud platforms) or FRAMEWORK in
-   *    application.properties/yaml
-   * 2. If using FRAMEWORK strategy, register ForwardedHeaderFilter:
+   * 1. application.yml에 server.forward-headers-strategy=NATIVE(클라우드 플랫폼) 또는
+   *    FRAMEWORK를 설정한다
+   * 2. FRAMEWORK 전략이면 ForwardedHeaderFilter를 등록한다:
    *
    *    @Bean
    *    ForwardedHeaderFilter forwardedHeaderFilter() {
    *        return new ForwardedHeaderFilter();
    *    }
    *
-   * 3. Ensure your proxy overwrites (not appends) the X-Forwarded-For header to prevent spoofing
-   * 4. Configure server.tomcat.remoteip.trusted-proxies or equivalent for your container
+   * 3. 위조를 막기 위해 프록시가 X-Forwarded-For를 덧붙이지 않고 덮어쓰게 한다
+   * 4. server.tomcat.remoteip.trusted-proxies 등 컨테이너에 맞는 신뢰 프록시를 설정한다
    *
-   * Without this configuration, request.getRemoteAddr() returns the proxy IP, not the client IP.
-   * Do NOT read X-Forwarded-For directly—it is trivially spoofable without trusted proxy handling.
+   * 이 설정이 없으면 request.getRemoteAddr()는 클라이언트가 아니라 프록시 IP를 돌려준다.
+   * X-Forwarded-For를 직접 읽지 않는다 — 신뢰 프록시 처리 없이는 쉽게 위조된다.
    */
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
       FilterChain filterChain) throws ServletException, IOException {
-    // Use getRemoteAddr() which returns the correct client IP when ForwardedHeaderFilter
-    // is configured, or the direct connection IP otherwise. Never trust X-Forwarded-For
-    // headers directly without proper proxy configuration.
+    // getRemoteAddr()는 ForwardedHeaderFilter가 설정돼 있으면 올바른 클라이언트 IP를,
+    // 아니면 직접 연결 IP를 돌려준다. 프록시 설정 없이 X-Forwarded-For를 직접 신뢰하지 않는다.
     String clientIp = request.getRemoteAddr();
 
     Bucket bucket = buckets.computeIfAbsent(clientIp,
@@ -294,22 +294,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
 }
 ```
 
-## Background Jobs
+## 백그라운드 작업
 
-Use Spring’s `@Scheduled` or integrate with queues (e.g., Kafka, SQS, RabbitMQ). Keep handlers idempotent and observable.
+Spring의 `@Scheduled`를 쓰거나 큐(Kafka, SQS, RabbitMQ 등)와 연동한다. 핸들러는 멱등적이고 관찰 가능하게 만든다.
 
-## Observability
+## 관측성(Observability)
 
-- Structured logging (JSON) via Logback encoder
-- Metrics: Micrometer + Prometheus/OTel
-- Tracing: Micrometer Tracing with OpenTelemetry or Brave backend
+- Logback 인코더로 구조화 로깅(JSON)
+- 메트릭: Micrometer + Prometheus/OTel
+- 트레이싱: Micrometer Tracing + OpenTelemetry 또는 Brave 백엔드
 
-## Production Defaults
+## 운영 기본값
 
-- Prefer constructor injection, avoid field injection
-- Enable `spring.mvc.problemdetails.enabled=true` for RFC 7807 errors (Spring Boot 3+)
-- Configure HikariCP pool sizes for workload, set timeouts
-- Use `@Transactional(readOnly = true)` for queries
-- Enforce null-safety via `@NonNull` and `Optional` where appropriate
+- 생성자 주입을 쓰고 필드 주입은 피한다
+- RFC 7807(9457) 오류 형식을 위해 `spring.mvc.problemdetails.enabled=true`를 켠다 (Spring Boot 3+)
+- 부하에 맞게 HikariCP 풀 크기와 타임아웃을 설정한다
+- 조회에는 `@Transactional(readOnly = true)`를 쓴다
+- 필요한 곳에 `@NonNull`과 `Optional`로 null 안전성을 지킨다
 
-**Remember**: Keep controllers thin, services focused, repositories simple, and errors handled centrally. Optimize for maintainability and testability.
+**기억할 것**: 컨트롤러는 얇게, 서비스는 한 가지 일에 집중, 리포지토리는 단순하게, 오류는 한곳에서 처리한다. 유지보수성과 테스트 용이성을 우선한다.
