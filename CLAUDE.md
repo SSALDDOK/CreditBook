@@ -19,9 +19,17 @@
 ## 코워크와의 인수인계 (인수인계 요청 DB)
 Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Code가 담당한다. 서로에게 넘길 일은 파일이 아니라 **인수인계 요청 DB**로 주고받는다 (Notion 메인의 "인수인계 요청" 섹션)
 - **요청 작성 시**: 결정이 필요하거나 Notion·Jira 반영이 필요한 게 생기면 이 DB에 행을 추가한다 (`요청자 = Claude Code`, `담당 = 코워크`). 사용자 결정이 먼저 필요하면 `상태 = 사용자 확인 필요`, 아니면 `대기`
-- **긴급 항목**: `긴급도 = 긴급`이면 DB에 쓰는 것과 별개로 **그 자리에서 사용자에게 바로 말한다** — 코워크 쪽 점검은 수·일 스케줄이라 며칠 늦을 수 있다
+- **긴급 항목**: `긴급도 = 긴급`이면 DB에 쓰는 것과 별개로 **그 자리에서 사용자에게 바로 말한다** — 코워크는 인수인계 DB를 매일 1회 점검하므로 최대 하루 늦을 수 있다
 - **완료 처리 시**: `처리 결과`에 바뀐 파일·페이지 또는 Jira 키를 남긴다
 - Notion·Jira를 Claude Code가 직접 고치지 않는다. 반대로 코워크는 리포를 건드리지 않는다
+
+### 기술 설계는 리포가 먼저 (2026-09-28 사용자 결정 — "Notion이 먼저" 원칙의 예외)
+스키마·기술 설계(인덱스, 트리거, 권한, 제약조건, JPA 매핑 등)는 Claude Code가 설계하고, 코워크는 문서로 정리한다.
+1. Claude Code가 설계안을 만들고 **Neon에서 롤백 전용 트랜잭션으로 검증**한다 (commit 금지, 끝나면 잔여 객체 없음 확인)
+2. 설계안을 채팅으로 제시하고 **사용자가 채팅에서 승인**한다
+3. 승인 즉시 Claude Code가 리포(마이그레이션·코드·이 파일)에 구현한다. 그리고 인수인계 요청 DB에 **Notion 문서의 절 구조(§ 번호·표·콜아웃)에 맞춘 문구 그대로**(SQL, 근거, 검증 결과, 변경 이력 행)를 적어 요청한다
+4. 코워크가 스키마 정의서·개발 컨벤션 등에 옮겨 적는다. 그때까지 리포가 Notion보다 앞서 있는 것은 허용되며, 불일치는 이 요청 행으로 추적한다
+- 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
 ## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월된 백엔드 셋업 최우선)
 1인 6주 포트폴리오, 1주 스프린트 6개. S1은 문서·설계만 끝내고 종료됐고, 백엔드 셋업은 S2로 이월됐다. **S2 첫 작업은 이월분(CB-5·CB-6·CB-7)이다** — 셋업이 끝나기 전에는 S2 본 목표(도메인 API)나 문서 개편을 새로 시작하지 않는다 (S1 회고 Try #1).
@@ -29,7 +37,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 S2 이월분:
 - Spring Boot 프로젝트 생성 + DDD 패키지 구조
 - Neon 연결 + Flyway `V1__init.sql` 적용
-- GitHub 저장소 생성 (브랜치 전략·커밋 규칙은 아래 Git 규칙대로)
+- GitHub 저장소 생성 (브랜치 전략·커밋 규칙은 아래 Git 규칙대로) — **CB-5·CB-7이 끝나면 Claude Code가 사용자에게 저장소를 만들라고 알린다** (그 전까지는 로컬 커밋만, 원격 백업 없음 — 2026-09-28 사용자 요청)
 - 최소 CI (GitHub Actions: push·PR 시 빌드 + 테스트)
 - 이월 DoD: `./gradlew bootRun`으로 앱이 뜨고 DB 연결 확인 / main push 시 CI 통과
 
@@ -127,6 +135,7 @@ com.creditbook
 | DTO | 용도 + Request/Response | `ChargeRequest`, `CustomerListResponse` |
 | 테이블·컬럼 | 복수형 snake_case | `prepaid_accounts`, `balance_after` |
 | 제약조건 | `ck_`/`ux_`/`ix_` + 테이블 + 의미 | `ck_ledger_entries_amount` |
+| 트리거·함수 | `trg_`/`fn_` + 테이블 + 의미 | `trg_ledger_entries_no_truncate`, `fn_ledger_entries_append_only` |
 | 테스트 메서드 | 영문 snake + `@DisplayName` 한글 | `use_fails_when_amount_exceeds_balance` |
 | 도메인 용어 | 문서와 코드가 같은 단어 | 사용=`use`(차감 아님), 충전 취소=`cancelCharge()`, 사용 취소=`cancelUse()` |
 
@@ -234,11 +243,32 @@ CREATE TABLE phone_access_logs (
     accessed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ix_phone_access_logs_customer ON phone_access_logs (customer_id, accessed_at DESC);
+
+-- append-only: ledger_entries 는 INSERT 만 허용한다. 정정은 반제 행(CHARGE_CANCEL/USE_CANCEL)으로만 한다.
+-- 코드 리뷰를 통과한 UPDATE/DELETE 가 배포돼도 DB 가 마지막 방어선이 된다 (절대 금지 1번)
+CREATE FUNCTION fn_ledger_entries_append_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ledger_entries is append-only: % is not allowed', TG_OP
+        USING ERRCODE = 'restrict_violation',
+              HINT = '정정은 CHARGE_CANCEL/USE_CANCEL 반제 행을 INSERT 한다';
+END;
+$$;
+
+CREATE TRIGGER trg_ledger_entries_no_update_delete
+    BEFORE UPDATE OR DELETE ON ledger_entries
+    FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only();
+
+-- TRUNCATE 는 행 트리거를 거치지 않으므로 문장 트리거로 따로 막는다
+CREATE TRIGGER trg_ledger_entries_no_truncate
+    BEFORE TRUNCATE ON ledger_entries
+    FOR EACH STATEMENT EXECUTE FUNCTION fn_ledger_entries_append_only();
 ```
 
 - `V1__init.sql`은 아직 어느 DB에도 적용되지 않았다. 적용 전까지는 V2를 만들지 말고 V1을 직접 고친다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
-- **append-only는 DB에서도 막는다**: 애플리케이션 DB 계정에서 `ledger_entries`의 UPDATE·DELETE 권한을 REVOKE(또는 예외를 내는 트리거). 구체 방식은 구현 시 스키마 정의서에 먼저 확정한다.
+- **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
+- **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
 - 정합성 점검 쿼리(잔액 대사, `balance_after` 누적합, 반제 무결성·유형 불일치)는 스키마 정의서 §6이 확정본이다. 모두 0행이어야 정상이며, 정합성 테스트와 배포 후 스모크에 그대로 쓴다.
 
 ## 절대 금지 (예외 없음, 하나라도 보이면 머지하지 않는다)
