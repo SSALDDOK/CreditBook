@@ -1,0 +1,20 @@
+# 이 파일을 같은 폴더에 application-local.yml 로 복사한 뒤 값을 채운다.
+# application-local.yml 은 .gitignore 대상 — 절대 커밋하지 않는다.
+# ./gradlew bootRun 은 기본으로 local 프로필을 켜고, 작업 디렉터리(backend/)의 이 파일을 읽는다.
+spring:
+  datasource:
+    # Neon 콘솔 > Connection string > Pooled connection, JDBC 형식
+    url: jdbc:postgresql://<endpoint>-pooler.<region>.aws.neon.tech/<database>?sslmode=require
+    username: <role>
+    password: <password>
+  # Flyway 는 direct 연결(-pooler 없는 호스트)로 돌린다.
+  # PgBouncer 트랜잭션 모드에서는 Flyway 의 세션 advisory lock 이 보장되지 않는다.
+  flyway:
+    url: jdbc:postgresql://<endpoint>.<region>.aws.neon.tech/<database>?sslmode=require
+    user: <role>
+    password: <password>
+
+management:
+  endpoint:
+    health:
+      show-details: always   # 로컬에서만 DB 연결 상태를 자세히 본다
