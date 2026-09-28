@@ -27,3 +27,10 @@ Thumbs.db
 # Node (frontend 추가 시)
 node_modules/
 dist/
+
+# Eclipse / STS
+.classpath
+.project
+.settings/
+.factorypath
+bin/
