@@ -62,15 +62,7 @@ S2 이월분:
 | test-writer | JUnit5 + Playwright 작성·실행 | S2부터 |
 | code-reviewer | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3부터 — PR이 실제로 쌓이기 시작하면 |
 
-### 서브에이전트 추가 절차
-해당 스프린트가 시작되면 Claude Code에 다음처럼 요청한다: *"ECC 리포(https://github.com/affaan-m/ECC.git)를 다시 확인해서 [에이전트 이름]을 backend-dev 만들 때처럼 만들어줘."* 그러면 이 순서로 진행한다:
-1. ECC 리포에서 관련 `agents/`·`commands/`·`skills/`만 얕게 가져온다 (전체 설치 아님)
-2. 이 문서의 절대 금지·계층 규칙·네이밍·테스트 규칙에 맞게 다듬는다 — 원본 그대로 복사하지 않는다
-3. Codex/Cursor/Gemini 등 다른 도구용 설정은 가져오지 않는다 (Claude Code 전용)
-4. 함께 쓸 skill을 8~12개 선별해 `.claude/skills/`에 추가하고, 무관한 프레임워크(Quarkus, Django 등) 예시는 이 프로젝트 스택(Spring Boot/Postgres) 예시로 바꾼다
-5. 기존 커맨드(`cb-review-gate`, `db-migration`, `feature-dev`)에 새 에이전트 이름을 반영해 참조를 갱신한다
-
-**요청 전에**: 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
+에이전트를 새로 만들 때는 [docs/claude-code-guide.md](docs/claude-code-guide.md)의 "새 에이전트 추가 절차"를 따른다. **요청 전에** 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
 
 ## 프로젝트 개요
 카페/식당 선결제 잔액 관리 웹앱. 결제 처리(PG)는 범위 밖 — 이미 받은 선결제를 기록·차감만 하는 장부 도구.
@@ -153,120 +145,16 @@ com.creditbook
 ## DB 스키마 — Flyway `V1__init.sql`
 테이블명은 `transactions`가 아니라 **`ledger_entries`**다 (PostgreSQL 예약어 `transaction`과의 혼동을 피하려고 2026-09-23에 확정 리네임).
 
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
+**확정본은 `backend/src/main/resources/db/migration/V1__init.sql`이다.** 스키마를 볼 때는 이 파일을 읽는다. SQL을 이 문서에 복사해 두지 않는다 — 두 곳을 함께 고쳐야 하고, 결국 어긋난다. 설계 근거와 정합성 쿼리(§6)는 Notion 스키마 정의서가 출처다.
 
-CREATE TABLE store_profile (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(30) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ck_store_profile_name CHECK (btrim(name) <> '')
-);
--- 단일 매장이므로 행은 하나뿐. 두 번째 INSERT 를 DB가 막는다
-CREATE UNIQUE INDEX ux_store_profile_singleton ON store_profile ((TRUE));
-
-CREATE TABLE employees (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    login_id             VARCHAR(50)  NOT NULL,
-    password_hash        VARCHAR(100) NOT NULL,
-    name                 VARCHAR(50)  NOT NULL,
-    role                 VARCHAR(10)  NOT NULL,
-    active               BOOLEAN      NOT NULL DEFAULT TRUE,
-    must_change_password BOOLEAN      NOT NULL DEFAULT TRUE,
-    last_login_at        TIMESTAMPTZ,
-    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT ux_employees_login_id UNIQUE (login_id),
-    CONSTRAINT ck_employees_role CHECK (role IN ('ADMIN', 'STAFF'))
-);
--- 활성 ADMIN 이 0명이 되는 것은 애플리케이션에서 막는다 (DB 제약으로는 표현 불가)
-CREATE INDEX ix_employees_active_role ON employees (active, role);
-
-CREATE TABLE customers (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(20)  NOT NULL,
-    phone      VARCHAR(20),
-    memo       VARCHAR(200),
-    active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT ck_customers_name_not_blank CHECK (btrim(name) <> ''),
-    CONSTRAINT ck_customers_phone_digits   CHECK (phone IS NULL OR phone ~ '^[0-9]{9,11}$')
-);
-CREATE INDEX ix_customers_name           ON customers (name);
-CREATE INDEX ix_customers_phone          ON customers (phone);
-CREATE INDEX ix_customers_active_created ON customers (active, created_at DESC);
-
-CREATE TABLE prepaid_accounts (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID          NOT NULL REFERENCES customers (id),
-    balance     NUMERIC(12,0) NOT NULL DEFAULT 0,
-    version     BIGINT        NOT NULL DEFAULT 0,
-    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    CONSTRAINT ux_prepaid_accounts_customer_id UNIQUE (customer_id),   -- 고객 1명당 계좌 1개
-    CONSTRAINT ck_prepaid_accounts_balance_non_negative CHECK (balance >= 0)
-);
-
-CREATE TABLE ledger_entries (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    seq             BIGSERIAL     NOT NULL,
-    account_id      UUID          NOT NULL REFERENCES prepaid_accounts (id),
-    type            VARCHAR(20)   NOT NULL,
-    amount          NUMERIC(12,0) NOT NULL,
-    signed_amount   NUMERIC(12,0) GENERATED ALWAYS AS (
-                        CASE WHEN type IN ('USE', 'CHARGE_CANCEL') THEN -amount ELSE amount END
-                    ) STORED,
-    balance_after   NUMERIC(12,0) NOT NULL,
-    memo            VARCHAR(200),
-    reverses_id     UUID          REFERENCES ledger_entries (id),
-    performed_by    UUID          NOT NULL REFERENCES employees (id),
-    performed_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    idempotency_key VARCHAR(64),
-    CONSTRAINT ux_ledger_entries_seq      UNIQUE (seq),
-    CONSTRAINT ck_ledger_entries_type     CHECK (type IN ('CHARGE', 'USE', 'CHARGE_CANCEL', 'USE_CANCEL')),
-    CONSTRAINT ck_ledger_entries_amount   CHECK (amount > 0),
-    CONSTRAINT ck_ledger_entries_balance  CHECK (balance_after >= 0),
-    CONSTRAINT ck_ledger_entries_reverses CHECK (
-        (type IN ('CHARGE_CANCEL', 'USE_CANCEL') AND reverses_id IS NOT NULL)
-        OR (type IN ('CHARGE', 'USE') AND reverses_id IS NULL)
-    )
-);
-CREATE INDEX ix_ledger_entries_account_seq       ON ledger_entries (account_id, seq DESC);
-CREATE INDEX ix_ledger_entries_account_performed ON ledger_entries (account_id, performed_at DESC);
-CREATE UNIQUE INDEX ux_ledger_entries_idem       ON ledger_entries (idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
-CREATE UNIQUE INDEX ux_ledger_entries_reverses   ON ledger_entries (reverses_id)
-    WHERE reverses_id IS NOT NULL;   -- 같은 건을 두 번 반제 못 함
-
-CREATE TABLE phone_access_logs (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID        NOT NULL REFERENCES customers (id),
-    accessed_by UUID        NOT NULL REFERENCES employees (id),
-    accessed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX ix_phone_access_logs_customer ON phone_access_logs (customer_id, accessed_at DESC);
-
--- append-only: ledger_entries 는 INSERT 만 허용한다. 정정은 반제 행(CHARGE_CANCEL/USE_CANCEL)으로만 한다.
--- 코드 리뷰를 통과한 UPDATE/DELETE 가 배포돼도 DB 가 마지막 방어선이 된다 (절대 금지 1번)
-CREATE FUNCTION fn_ledger_entries_append_only() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'ledger_entries is append-only: % is not allowed', TG_OP
-        USING ERRCODE = 'restrict_violation',
-              HINT = '정정은 CHARGE_CANCEL/USE_CANCEL 반제 행을 INSERT 한다';
-END;
-$$;
-
-CREATE TRIGGER trg_ledger_entries_no_update_delete
-    BEFORE UPDATE OR DELETE ON ledger_entries
-    FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only();
-
--- TRUNCATE 는 행 트리거를 거치지 않으므로 문장 트리거로 따로 막는다
-CREATE TRIGGER trg_ledger_entries_no_truncate
-    BEFORE TRUNCATE ON ledger_entries
-    FOR EACH STATEMENT EXECUTE FUNCTION fn_ledger_entries_append_only();
-```
+| 테이블 | 핵심 제약·인덱스·트리거 (이름으로 대화할 때 참고) |
+|---|---|
+| `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` |
+| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role` |
+| `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
+| `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version`(낙관적 락) |
+| `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
+| `phone_access_logs` | `ix_phone_access_logs_customer` |
 
 - `V1__init.sql`은 아직 어느 DB에도 적용되지 않았다. 적용 전까지는 V2를 만들지 말고 V1을 직접 고친다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
@@ -275,7 +163,7 @@ CREATE TRIGGER trg_ledger_entries_no_truncate
 - 정합성 점검 쿼리(잔액 대사, `balance_after` 누적합, 반제 무결성·유형 불일치)는 스키마 정의서 §6이 확정본이다. 모두 0행이어야 정상이며, 정합성 테스트와 배포 후 스모크에 그대로 쓴다.
 
 ## 절대 금지 (예외 없음, 하나라도 보이면 머지하지 않는다)
-1. `ledger_entries` 테이블에 UPDATE / DELETE — 정정은 반제 거래로만. 코드 리뷰뿐 아니라 DB 권한(REVOKE)·트리거로도 차단
+1. `ledger_entries` 테이블에 UPDATE / DELETE — 정정은 반제 거래로만. 코드 리뷰뿐 아니라 DB 트리거(`trg_ledger_entries_no_update_delete`, `trg_ledger_entries_no_truncate`)로도 차단. 트리거를 끄거나 지우는 코드·마이그레이션도 금지
 2. 금액에 `double` / `float`
 3. 잔액 컬럼을 애플리케이션 밖에서 직접 UPDATE
 4. 엔티티를 컨트롤러 응답으로 반환 (DTO 경유)
