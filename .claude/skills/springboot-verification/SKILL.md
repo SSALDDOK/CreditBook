@@ -1,23 +1,23 @@
 ---
 name: springboot-verification
-description: "Verification loop for Spring Boot projects: build, static analysis, tests with coverage, security scans, and diff review before release or PR."
+description: "Spring Boot 프로젝트 검증 루프 — 빌드, 정적 분석, 테스트와 커버리지, 보안 스캔, diff 리뷰를 릴리스나 PR 전에 순서대로 돌린다."
 metadata:
   origin: ECC
 ---
 
-# Spring Boot Verification Loop
+# Spring Boot 검증 루프
 
-Run before PRs, after major changes, and pre-deploy.
+PR 전, 큰 변경 후, 배포 전에 실행한다.
 
-## When to Activate
+## 언제 쓰는가
 
-- Before opening a pull request for a Spring Boot service
-- After major refactoring or dependency upgrades
-- Pre-deployment verification for staging or production
-- Running full build → lint → test → security scan pipeline
-- Validating test coverage meets thresholds
+- Spring Boot 서비스의 PR을 열기 전
+- 큰 리팩터링이나 의존성 업그레이드 후
+- 스테이징·운영 배포 전 검증
+- 빌드 → 린트 → 테스트 → 보안 스캔 전체 파이프라인 실행
+- 테스트 커버리지가 기준을 넘는지 확인
 
-## Phase 1: Build
+## 1단계: 빌드
 
 ```bash
 mvn -T 4 clean verify -DskipTests
@@ -25,36 +25,36 @@ mvn -T 4 clean verify -DskipTests
 ./gradlew clean assemble -x test
 ```
 
-If build fails, stop and fix.
+빌드가 실패하면 멈추고 고친다.
 
-## Phase 2: Static Analysis
+## 2단계: 정적 분석
 
-Maven (common plugins):
+Maven (자주 쓰는 플러그인):
 ```bash
 mvn -T 4 spotbugs:check pmd:check checkstyle:check
 ```
 
-Gradle (if configured):
+Gradle (설정돼 있다면):
 ```bash
 ./gradlew checkstyleMain pmdMain spotbugsMain
 ```
 
-## Phase 3: Tests + Coverage
+## 3단계: 테스트 + 커버리지
 
 ```bash
 mvn -T 4 test
-mvn jacoco:report   # verify 80%+ coverage
+mvn jacoco:report   # 커버리지 80% 이상인지 확인
 # or
 ./gradlew test jacocoTestReport
 ```
 
-Report:
-- Total tests, passed/failed
-- Coverage % (lines/branches)
+보고 항목:
+- 전체 테스트 수, 성공/실패
+- 커버리지 % (라인/분기)
 
-### Unit Tests
+### 단위 테스트
 
-Test service logic in isolation with mocked dependencies:
+의존성을 목으로 대체해 서비스 로직만 따로 검증한다:
 
 ```java
 @ExtendWith(MockitoExtension.class)
@@ -86,9 +86,9 @@ class UserServiceTest {
 }
 ```
 
-### Integration Tests with Testcontainers
+### Testcontainers 통합 테스트
 
-Test against a real database instead of H2:
+H2가 아니라 실제 데이터베이스로 검증한다:
 
 ```java
 @SpringBootTest
@@ -120,16 +120,16 @@ class UserRepositoryIntegrationTest {
 }
 ```
 
-### API Tests with MockMvc
+### MockMvc API 테스트
 
-Test controller layer with full Spring context:
+컨트롤러 계층을 웹 슬라이스 컨텍스트로 검증한다:
 
 ```java
 @WebMvcTest(UserController.class)
 class UserControllerTest {
 
   @Autowired private MockMvc mockMvc;
-  @MockBean private UserService userService;
+  @MockitoBean private UserService userService;   // Boot 4: @MockBean 삭제됨
 
   @Test
   void createUser_validInput_returns201() throws Exception {
@@ -157,76 +157,76 @@ class UserControllerTest {
 }
 ```
 
-## Phase 4: Security Scan
+## 4단계: 보안 스캔
 
 ```bash
-# Dependency CVEs
+# 의존성 CVE
 mvn org.owasp:dependency-check-maven:check
 # or
 ./gradlew dependencyCheckAnalyze
 
-# Secrets in source
+# 소스 코드의 시크릿
 grep -rn "password\s*=\s*\"" src/ --include="*.java" --include="*.yml" --include="*.properties"
 grep -rn "sk-\|api_key\|secret" src/ --include="*.java" --include="*.yml"
 
-# Secrets (git history)
-git secrets --scan  # if configured
+# 시크릿 (git 이력)
+git secrets --scan  # 설정돼 있다면
 ```
 
-### Common Security Findings
+### 자주 나오는 보안 지적 사항
 
 ```
-# Check for System.out.println (use logger instead)
+# System.out.println 확인 (로거를 쓸 것)
 grep -rn "System\.out\.print" src/main/ --include="*.java"
 
-# Check for raw exception messages in responses
+# 응답에 예외 메시지를 그대로 넣는지 확인
 grep -rn "e\.getMessage()" src/main/ --include="*.java"
 
-# Check for wildcard CORS
+# 와일드카드 CORS 확인
 grep -rn "allowedOrigins.*\*" src/main/ --include="*.java"
 ```
 
-## Phase 5: Lint/Format (optional gate)
+## 5단계: 린트/포맷 (선택 게이트)
 
 ```bash
-mvn spotless:apply   # if using Spotless plugin
+mvn spotless:apply   # Spotless 플러그인을 쓴다면
 ./gradlew spotlessApply
 ```
 
-## Phase 6: Diff Review
+## 6단계: diff 리뷰
 
 ```bash
 git diff --stat
 git diff
 ```
 
-Checklist:
-- No debugging logs left (`System.out`, `log.debug` without guards)
-- Meaningful errors and HTTP statuses
-- Transactions and validation present where needed
-- Config changes documented
+체크리스트:
+- 디버깅 로그가 남아 있지 않다 (`System.out`, 가드 없는 `log.debug`)
+- 오류 메시지와 HTTP 상태 코드가 의미 있다
+- 필요한 곳에 트랜잭션과 검증이 있다
+- 설정 변경이 문서화됐다
 
-## Output Template
+## 보고 양식
 
 ```
-VERIFICATION REPORT
-===================
-Build:     [PASS/FAIL]
-Static:    [PASS/FAIL] (spotbugs/pmd/checkstyle)
-Tests:     [PASS/FAIL] (X/Y passed, Z% coverage)
-Security:  [PASS/FAIL] (CVE findings: N)
-Diff:      [X files changed]
+검증 보고서
+===========
+빌드:      [통과/실패]
+정적 분석: [통과/실패] (spotbugs/pmd/checkstyle)
+테스트:    [통과/실패] (X/Y 통과, 커버리지 Z%)
+보안:      [통과/실패] (CVE N건)
+diff:      [파일 X개 변경]
 
-Overall:   [READY / NOT READY]
+종합:      [준비됨 / 준비 안 됨]
 
-Issues to Fix:
+고칠 항목:
 1. ...
 2. ...
 ```
 
-## Continuous Mode
+## 반복 실행
 
-- Re-run phases on significant changes or every 30–60 minutes in long sessions
-- Keep a short loop: `mvn -T 4 test` + spotbugs for quick feedback
+- 큰 변경이 있을 때, 또는 긴 세션에서는 30–60분마다 다시 돌린다
+- 빠른 피드백용 짧은 루프: `./gradlew test` + 정적 분석
 
-**Remember**: Fast feedback beats late surprises. Keep the gate strict—treat warnings as defects in production systems.
+**기억할 것**: 늦게 놀라는 것보다 빨리 아는 게 낫다. 게이트는 엄격하게 — 운영 시스템에서는 경고도 결함으로 취급한다.

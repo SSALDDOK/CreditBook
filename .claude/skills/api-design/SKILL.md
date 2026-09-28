@@ -5,25 +5,25 @@ metadata:
   origin: ECC (implementation examples replaced with Spring Boot)
 ---
 
-# API Design Patterns
+# API 설계 패턴
 
-Conventions and best practices for designing consistent, developer-friendly REST APIs.
+일관되고 쓰기 쉬운 REST API를 설계하기 위한 컨벤션과 모범 사례.
 
-## When to Activate
+## 언제 쓰는가
 
-- Designing new API endpoints
-- Reviewing existing API contracts
-- Adding pagination, filtering, or sorting
-- Implementing error handling for APIs
-- Planning API versioning strategy
-- Building public or partner-facing APIs
+- 새 API 엔드포인트 설계
+- 기존 API 계약 리뷰
+- 페이지네이션, 필터링, 정렬 추가
+- API 오류 처리 구현
+- API 버저닝 전략 수립
+- 공개·파트너용 API 구축
 
-## Resource Design
+## 리소스 설계
 
-### URL Structure
+### URL 구조
 
 ```
-# Resources are nouns, plural, lowercase, kebab-case
+# 리소스는 명사, 복수형, 소문자, kebab-case
 GET    /api/v1/users
 GET    /api/v1/users/:id
 POST   /api/v1/users
@@ -31,90 +31,90 @@ PUT    /api/v1/users/:id
 PATCH  /api/v1/users/:id
 DELETE /api/v1/users/:id
 
-# Sub-resources for relationships
+# 관계는 하위 리소스로
 GET    /api/v1/users/:id/orders
 POST   /api/v1/users/:id/orders
 
-# Actions that don't map to CRUD (use verbs sparingly)
+# CRUD로 표현되지 않는 동작 (동사는 최소한으로)
 POST   /api/v1/orders/:id/cancel
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 ```
 
-### Naming Rules
+### 네이밍 규칙
 
 ```
-# GOOD
-/api/v1/team-members          # kebab-case for multi-word resources
-/api/v1/orders?status=active  # query params for filtering
-/api/v1/users/123/orders      # nested resources for ownership
+# 좋음
+/api/v1/team-members          # 여러 단어 리소스는 kebab-case
+/api/v1/orders?status=active  # 필터링은 쿼리 파라미터로
+/api/v1/users/123/orders      # 소유 관계는 중첩 리소스로
 
-# BAD
-/api/v1/getUsers              # verb in URL
-/api/v1/user                  # singular (use plural)
-/api/v1/team_members          # snake_case in URLs
-/api/v1/users/123/getOrders   # verb in nested resource
+# 나쁨
+/api/v1/getUsers              # URL에 동사
+/api/v1/user                  # 단수형 (복수형을 쓸 것)
+/api/v1/team_members          # URL에 snake_case
+/api/v1/users/123/getOrders   # 중첩 리소스에 동사
 ```
 
-## HTTP Methods and Status Codes
+## HTTP 메서드와 상태 코드
 
-### Method Semantics
+### 메서드 의미
 
-| Method | Idempotent | Safe | Use For |
+| 메서드 | 멱등성 | 안전성 | 용도 |
 |--------|-----------|------|---------|
-| GET | Yes | Yes | Retrieve resources |
-| POST | No | No | Create resources, trigger actions |
-| PUT | Yes | No | Full replacement of a resource |
-| PATCH | No* | No | Partial update of a resource |
-| DELETE | Yes | No | Remove a resource |
+| GET | 예 | 예 | 리소스 조회 |
+| POST | 아니오 | 아니오 | 리소스 생성, 동작 실행 |
+| PUT | 예 | 아니오 | 리소스 전체 교체 |
+| PATCH | 아니오* | 아니오 | 리소스 부분 수정 |
+| DELETE | 예 | 아니오 | 리소스 삭제 |
 
-*PATCH can be made idempotent with proper implementation
+*PATCH도 구현에 따라 멱등하게 만들 수 있다
 
-### Status Code Reference
-
-```
-# Success
-200 OK                    — GET, PUT, PATCH (with response body)
-201 Created               — POST (include Location header)
-204 No Content            — DELETE, PUT (no response body)
-
-# Client Errors
-400 Bad Request           — Validation failure, malformed JSON
-401 Unauthorized          — Missing or invalid authentication
-403 Forbidden             — Authenticated but not authorized
-404 Not Found             — Resource doesn't exist
-409 Conflict              — Duplicate entry, state conflict
-422 Unprocessable Entity  — Semantically invalid (valid JSON, bad data)
-429 Too Many Requests     — Rate limit exceeded
-
-# Server Errors
-500 Internal Server Error — Unexpected failure (never expose details)
-502 Bad Gateway           — Upstream service failed
-503 Service Unavailable   — Temporary overload, include Retry-After
-```
-
-### Common Mistakes
+### 상태 코드 참조
 
 ```
-# BAD: 200 for everything
+# 성공
+200 OK                    — GET, PUT, PATCH (응답 본문 있음)
+201 Created               — POST (Location 헤더 포함)
+204 No Content            — DELETE, PUT (응답 본문 없음)
+
+# 클라이언트 오류
+400 Bad Request           — 검증 실패, 깨진 JSON
+401 Unauthorized          — 인증 없음 또는 잘못된 인증
+403 Forbidden             — 인증됐지만 권한 없음
+404 Not Found             — 리소스가 없음
+409 Conflict              — 중복, 상태 충돌 (CreditBook: 동시 차감 충돌)
+422 Unprocessable Entity  — 형식은 맞지만 의미상 잘못된 데이터 (CreditBook: 잔액 부족)
+429 Too Many Requests     — 레이트 리밋 초과
+
+# 서버 오류
+500 Internal Server Error — 예상치 못한 실패 (세부 정보 절대 노출 금지)
+502 Bad Gateway           — 상위 서비스 실패
+503 Service Unavailable   — 일시적 과부하, Retry-After 포함
+```
+
+### 흔한 실수
+
+```
+# 나쁨: 모든 응답을 200으로
 { "status": 200, "success": false, "error": "Not found" }
 
-# GOOD: Use HTTP status codes semantically
+# 좋음: HTTP 상태 코드를 의미대로 사용
 HTTP/1.1 404 Not Found
 { "error": { "code": "not_found", "message": "User not found" } }
 
-# BAD: 500 for validation errors
-# GOOD: 400 or 422 with field-level details
+# 나쁨: 검증 오류에 500
+# 좋음: 필드별 상세와 함께 400 또는 422
 
-# BAD: 200 for created resources
-# GOOD: 201 with Location header
+# 나쁨: 생성에 200
+# 좋음: Location 헤더와 함께 201
 HTTP/1.1 201 Created
 Location: /api/v1/users/abc-123
 ```
 
-## Response Format
+## 응답 형식
 
-### Success Response
+### 성공 응답
 
 ```json
 {
@@ -127,7 +127,7 @@ Location: /api/v1/users/abc-123
 }
 ```
 
-### Collection Response (with Pagination)
+### 목록 응답 (페이지네이션 포함)
 
 ```json
 {
@@ -149,7 +149,7 @@ Location: /api/v1/users/abc-123
 }
 ```
 
-### Error Response
+### 오류 응답
 
 ```json
 {
@@ -172,10 +172,10 @@ Location: /api/v1/users/abc-123
 }
 ```
 
-### Response Envelope Variants
+### 응답 봉투(envelope) 방식
 
 ```typescript
-// Option A: Envelope with data wrapper (recommended for public APIs)
+// 방식 A: data로 감싸는 봉투 (공개 API에 권장)
 interface ApiResponse<T> {
   data: T;
   meta?: PaginationMeta;
@@ -190,38 +190,38 @@ interface ApiError {
   };
 }
 
-// Option B: Flat response (simpler, common for internal APIs)
-// Success: just return the resource directly
-// Error: return error object
-// Distinguish by HTTP status code
+// 방식 B: 평면 응답 (단순, 내부 API에 흔함)
+// 성공: 리소스를 그대로 반환
+// 오류: 오류 객체 반환
+// HTTP 상태 코드로 구분
 ```
 
-## Pagination
+## 페이지네이션
 
-### Offset-Based (Simple)
+### 오프셋 방식 (단순)
 
 ```
 GET /api/v1/users?page=2&per_page=20
 
-# Implementation
+# 구현
 SELECT * FROM users
 ORDER BY created_at DESC
 LIMIT 20 OFFSET 20;
 ```
 
-**Pros:** Easy to implement, supports "jump to page N"
-**Cons:** Slow on large offsets (OFFSET 100000), inconsistent with concurrent inserts
+**장점:** 구현이 쉽고 "N페이지로 이동"을 지원한다
+**단점:** 오프셋이 크면 느리고(OFFSET 100000), 동시에 삽입되면 결과가 어긋난다
 
-### Cursor-Based (Scalable)
+### 커서 방식 (확장성)
 
 ```
 GET /api/v1/users?cursor=eyJpZCI6MTIzfQ&limit=20
 
-# Implementation
+# 구현
 SELECT * FROM users
 WHERE id > :cursor_id
 ORDER BY id ASC
-LIMIT 21;  -- fetch one extra to determine has_next
+LIMIT 21;  -- 다음 페이지 여부를 알기 위해 하나 더 가져온다
 ```
 
 ```json
@@ -234,83 +234,83 @@ LIMIT 21;  -- fetch one extra to determine has_next
 }
 ```
 
-**Pros:** Consistent performance regardless of position, stable with concurrent inserts
-**Cons:** Cannot jump to arbitrary page, cursor is opaque
+**장점:** 위치와 상관없이 성능이 일정하고, 동시 삽입에도 안정적이다
+**단점:** 임의 페이지로 이동할 수 없고, 커서 값이 불투명하다
 
-### When to Use Which
+### 언제 무엇을 쓰나
 
-| Use Case | Pagination Type |
+| 용도 | 페이지네이션 방식 |
 |----------|----------------|
-| Admin dashboards, small datasets (<10K) | Offset |
-| Infinite scroll, feeds, large datasets | Cursor |
-| Public APIs | Cursor (default) with offset (optional) |
-| Search results | Offset (users expect page numbers) |
+| 관리자 대시보드, 작은 데이터(1만 건 미만) | 오프셋 |
+| 무한 스크롤, 피드, 큰 데이터 | 커서 |
+| 공개 API | 커서(기본) + 오프셋(선택) |
+| 검색 결과 | 오프셋 (사용자가 페이지 번호를 기대) |
 
-## Filtering, Sorting, and Search
+## 필터링, 정렬, 검색
 
-### Filtering
+### 필터링
 
 ```
-# Simple equality
+# 단순 동등 비교
 GET /api/v1/orders?status=active&customer_id=abc-123
 
-# Comparison operators (use bracket notation)
+# 비교 연산자 (대괄호 표기)
 GET /api/v1/products?price[gte]=10&price[lte]=100
 GET /api/v1/orders?created_at[after]=2025-01-01
 
-# Multiple values (comma-separated)
+# 여러 값 (쉼표 구분)
 GET /api/v1/products?category=electronics,clothing
 
-# Nested fields (dot notation)
+# 중첩 필드 (점 표기)
 GET /api/v1/orders?customer.country=US
 ```
 
-### Sorting
+### 정렬
 
 ```
-# Single field (prefix - for descending)
+# 단일 필드 (내림차순은 - 접두사)
 GET /api/v1/products?sort=-created_at
 
-# Multiple fields (comma-separated)
+# 여러 필드 (쉼표 구분)
 GET /api/v1/products?sort=-featured,price,-created_at
 ```
 
-### Full-Text Search
+### 전문 검색
 
 ```
-# Search query parameter
+# 검색 쿼리 파라미터
 GET /api/v1/products?q=wireless+headphones
 
-# Field-specific search
+# 필드별 검색
 GET /api/v1/users?email=alice
 ```
 
-### Sparse Fieldsets
+### 필드 선택 (Sparse Fieldsets)
 
 ```
-# Return only specified fields (reduces payload)
+# 지정한 필드만 반환 (응답 크기 감소)
 GET /api/v1/users?fields=id,name,email
 GET /api/v1/orders?fields=id,total,status&include=customer.name
 ```
 
-## Authentication and Authorization
+## 인증과 인가
 
-### Token-Based Auth
+### 토큰 기반 인증
 
 ```
-# Bearer token in Authorization header
+# Authorization 헤더의 Bearer 토큰
 GET /api/v1/users
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 
-# API key (for server-to-server)
+# API 키 (서버 간 통신용)
 GET /api/v1/data
 X-API-Key: sk_live_abc123
 ```
 
-### Authorization Patterns
+### 인가 패턴
 
 ```typescript
-// Resource-level: check ownership
+// 리소스 수준: 소유권 확인
 app.get("/api/v1/orders/:id", async (req, res) => {
   const order = await Order.findById(req.params.id);
   if (!order) return res.status(404).json({ error: { code: "not_found" } });
@@ -318,16 +318,16 @@ app.get("/api/v1/orders/:id", async (req, res) => {
   return res.json({ data: order });
 });
 
-// Role-based: check permissions
+// 역할 기반: 권한 확인
 app.delete("/api/v1/users/:id", requireRole("admin"), async (req, res) => {
   await User.delete(req.params.id);
   return res.status(204).send();
 });
 ```
 
-## Rate Limiting
+## 레이트 리밋
 
-### Headers
+### 헤더
 
 ```
 HTTP/1.1 200 OK
@@ -335,7 +335,7 @@ X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1640000000
 
-# When exceeded
+# 초과했을 때
 HTTP/1.1 429 Too Many Requests
 Retry-After: 60
 {
@@ -346,58 +346,58 @@ Retry-After: 60
 }
 ```
 
-### Rate Limit Tiers
+### 레이트 리밋 등급
 
-| Tier | Limit | Window | Use Case |
+| 등급 | 한도 | 기준 | 용도 |
 |------|-------|--------|----------|
-| Anonymous | 30/min | Per IP | Public endpoints |
-| Authenticated | 100/min | Per user | Standard API access |
-| Premium | 1000/min | Per API key | Paid API plans |
-| Internal | 10000/min | Per service | Service-to-service |
+| 익명 | 분당 30 | IP별 | 공개 엔드포인트 |
+| 인증됨 | 분당 100 | 사용자별 | 일반 API 접근 |
+| 프리미엄 | 분당 1000 | API 키별 | 유료 API 요금제 |
+| 내부 | 분당 10000 | 서비스별 | 서비스 간 통신 |
 
-## Versioning
+## 버저닝
 
-### URL Path Versioning (Recommended)
+### URL 경로 버저닝 (권장)
 
 ```
 /api/v1/users
 /api/v2/users
 ```
 
-**Pros:** Explicit, easy to route, cacheable
-**Cons:** URL changes between versions
+**장점:** 명시적이고, 라우팅이 쉽고, 캐시 가능
+**단점:** 버전마다 URL이 바뀐다
 
-### Header Versioning
+### 헤더 버저닝
 
 ```
 GET /api/users
 Accept: application/vnd.myapp.v2+json
 ```
 
-**Pros:** Clean URLs
-**Cons:** Harder to test, easy to forget
+**장점:** URL이 깔끔하다
+**단점:** 테스트가 어렵고 빠뜨리기 쉽다
 
-### Versioning Strategy
+### 버저닝 전략
 
 ```
-1. Start with /api/v1/ — don't version until you need to
-2. Maintain at most 2 active versions (current + previous)
-3. Deprecation timeline:
-   - Announce deprecation (6 months notice for public APIs)
-   - Add Sunset header: Sunset: Sat, 01 Jan 2026 00:00:00 GMT
-   - Return 410 Gone after sunset date
-4. Non-breaking changes don't need a new version:
-   - Adding new fields to responses
-   - Adding new optional query parameters
-   - Adding new endpoints
-5. Breaking changes require a new version:
-   - Removing or renaming fields
-   - Changing field types
-   - Changing URL structure
-   - Changing authentication method
+1. /api/v1/ 로 시작한다 — 필요해지기 전까지 버전을 올리지 않는다
+2. 활성 버전은 최대 2개 (현재 + 이전)
+3. 폐기 일정:
+   - 폐기 예고 (공개 API는 6개월 전)
+   - Sunset 헤더 추가: Sunset: Sat, 01 Jan 2026 00:00:00 GMT
+   - 폐기일 이후 410 Gone 반환
+4. 호환되는 변경은 새 버전이 필요 없다:
+   - 응답에 새 필드 추가
+   - 선택적 쿼리 파라미터 추가
+   - 새 엔드포인트 추가
+5. 호환이 깨지는 변경은 새 버전이 필요하다:
+   - 필드 삭제·이름 변경
+   - 필드 타입 변경
+   - URL 구조 변경
+   - 인증 방식 변경
 ```
 
-## Implementation Patterns (Spring Boot)
+## 구현 패턴 (Spring Boot)
 
 ### 컨트롤러 + Bean Validation + DTO
 
@@ -459,7 +459,7 @@ class GlobalExceptionHandler {
 }
 ```
 
-## API Design Checklist
+## API 설계 체크리스트
 
 새 엔드포인트를 배포하기 전에:
 

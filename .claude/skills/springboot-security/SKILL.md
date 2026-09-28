@@ -1,29 +1,29 @@
 ---
 name: springboot-security
-description: Spring Security best practices for authn/authz, validation, CSRF, secrets, headers, rate limiting, and dependency security in Java Spring Boot services. Use when reviewing Spring Security authn/authz, validation, CSRF, secrets, headers, or rate limiting.
+description: Java Spring Boot 서비스의 Spring Security 모범 사례 — 인증(authn)/인가(authz), 입력 검증, CSRF, 시크릿, 보안 헤더, 레이트 리밋, 의존성 보안. Spring Security 인증·인가, 검증, CSRF, 시크릿, 헤더, 레이트 리밋을 구현하거나 리뷰할 때 사용.
 metadata:
   origin: ECC
 ---
 
-# Spring Boot Security Review
+# Spring Boot 보안 리뷰
 
-Use when adding auth, handling input, creating endpoints, or dealing with secrets.
+인증을 추가하거나, 입력을 처리하거나, 엔드포인트를 만들거나, 시크릿을 다룰 때 참고한다.
 
-## When to Activate
+## 언제 쓰는가
 
-- Adding authentication (JWT, OAuth2, session-based)
-- Implementing authorization (@PreAuthorize, role-based access)
-- Validating user input (Bean Validation, custom validators)
-- Configuring CORS, CSRF, or security headers
-- Managing secrets (Vault, environment variables)
-- Adding rate limiting or brute-force protection
-- Scanning dependencies for CVEs
+- 인증 추가 (JWT, OAuth2, 세션 기반)
+- 인가 구현 (@PreAuthorize, 역할 기반 접근)
+- 사용자 입력 검증 (Bean Validation, 커스텀 검증기)
+- CORS, CSRF, 보안 헤더 설정
+- 시크릿 관리 (Vault, 환경변수)
+- 레이트 리밋이나 무차별 대입(brute-force) 방어 추가
+- 의존성 CVE 스캔
 
-## Authentication
+## 인증
 
-- Prefer stateless JWT or opaque tokens with revocation list
-- Use `httpOnly`, `Secure`, `SameSite=Strict` cookies for sessions
-- Validate tokens with `OncePerRequestFilter` or resource server
+- 무상태(stateless) JWT, 또는 폐기 목록이 있는 불투명 토큰을 쓴다
+- 세션 쿠키는 `httpOnly`, `Secure`, `SameSite=Strict`로 설정한다
+- 토큰은 `OncePerRequestFilter` 또는 리소스 서버로 검증한다
 
 ```java
 @Component
@@ -48,11 +48,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 }
 ```
 
-## Authorization
+## 인가
 
-- Enable method security: `@EnableMethodSecurity`
-- Use `@PreAuthorize("hasRole('ADMIN')")` or `@PreAuthorize("@authz.canEdit(#id)")`
-- Deny by default; expose only required scopes
+- 메서드 보안 활성화: `@EnableMethodSecurity`
+- `@PreAuthorize("hasRole('ADMIN')")` 또는 `@PreAuthorize("@authz.canEdit(#id)")`를 쓴다 (CreditBook: 고객 비활성화는 ADMIN만, REQ-16)
+- 기본은 거부. 필요한 범위만 연다
 
 ```java
 @RestController
@@ -74,20 +74,20 @@ public class AdminController {
 }
 ```
 
-## Input Validation
+## 입력 검증
 
-- Use Bean Validation with `@Valid` on controllers
-- Apply constraints on DTOs: `@NotBlank`, `@Email`, `@Size`, custom validators
-- Sanitize any HTML with a whitelist before rendering
+- 컨트롤러에서 `@Valid`와 Bean Validation을 쓴다
+- DTO에 제약을 건다: `@NotBlank`, `@Email`, `@Size`, 커스텀 검증기
+- HTML은 렌더링 전에 허용 목록(whitelist) 방식으로 정제한다
 
 ```java
-// BAD: No validation
+// 나쁨: 검증 없음
 @PostMapping("/users")
 public User createUser(@RequestBody UserDto dto) {
   return userService.create(dto);
 }
 
-// GOOD: Validated DTO
+// 좋음: 검증된 DTO
 public record CreateUserDto(
     @NotBlank @Size(max = 100) String name,
     @NotBlank @Email String email,
@@ -101,45 +101,45 @@ public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserDto dto)
 }
 ```
 
-## SQL Injection Prevention
+## SQL 인젝션 방지
 
-- Use Spring Data repositories or parameterized queries
-- For native queries, use `:param` bindings; never concatenate strings
+- Spring Data 리포지토리나 파라미터 바인딩 쿼리를 쓴다
+- 네이티브 쿼리는 `:param` 바인딩을 쓰고, 문자열을 이어 붙이지 않는다
 
 ```java
-// BAD: String concatenation in native query
+// 나쁨: 네이티브 쿼리에 문자열 연결
 @Query(value = "SELECT * FROM users WHERE name = '" + name + "'", nativeQuery = true)
 
-// GOOD: Parameterized native query
+// 좋음: 파라미터 바인딩 네이티브 쿼리
 @Query(value = "SELECT * FROM users WHERE name = :name", nativeQuery = true)
 List<User> findByName(@Param("name") String name);
 
-// GOOD: Spring Data derived query (auto-parameterized)
+// 좋음: Spring Data 파생 쿼리 (자동 바인딩)
 List<User> findByEmailAndActiveTrue(String email);
 ```
 
-## Password Encoding
+## 비밀번호 인코딩
 
-- Always hash passwords with BCrypt or Argon2 — never store plaintext
-- Use `PasswordEncoder` bean, not manual hashing
+- 비밀번호는 항상 BCrypt나 Argon2로 해시한다 — 평문 저장 금지
+- 직접 해시하지 말고 `PasswordEncoder` 빈을 쓴다
 
 ```java
 @Bean
 public PasswordEncoder passwordEncoder() {
-  return new BCryptPasswordEncoder(12); // cost factor 12
+  return new BCryptPasswordEncoder(12); // 비용 계수 12
 }
 
-// In service
+// 서비스에서
 public User register(CreateUserDto dto) {
   String hashedPassword = passwordEncoder.encode(dto.password());
   return userRepository.save(new User(dto.email(), hashedPassword));
 }
 ```
 
-## CSRF Protection
+## CSRF 방어
 
-- For browser session apps, keep CSRF enabled; include token in forms/headers
-- For pure APIs with Bearer tokens, disable CSRF and rely on stateless auth
+- 브라우저 세션 기반 앱은 CSRF를 켜 두고, 폼·헤더에 토큰을 넣는다
+- Bearer 토큰을 쓰는 순수 API는 CSRF를 끄고 무상태 인증에 의존한다
 
 ```java
 http
@@ -147,24 +147,24 @@ http
   .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 ```
 
-## Secrets Management
+## 시크릿 관리
 
-- No secrets in source; load from env or vault
-- Keep `application.yml` free of credentials; use placeholders
-- Rotate tokens and DB credentials regularly
+- 소스에 시크릿을 두지 않는다. 환경변수나 vault에서 읽는다
+- `application.yml`에는 자격증명을 두지 않고 플레이스홀더를 쓴다
+- 토큰과 DB 자격증명은 주기적으로 교체한다
 
 ```yaml
-# BAD: Hardcoded in application.yml
+# 나쁨: application.yml에 하드코딩
 spring:
   datasource:
     password: mySecretPassword123
 
-# GOOD: Environment variable placeholder
+# 좋음: 환경변수 플레이스홀더
 spring:
   datasource:
     password: ${DB_PASSWORD}
 
-# GOOD: Spring Cloud Vault integration
+# 좋음: Spring Cloud Vault 연동
 spring:
   cloud:
     vault:
@@ -172,7 +172,7 @@ spring:
       token: ${VAULT_TOKEN}
 ```
 
-## Security Headers
+## 보안 헤더
 
 ```java
 http
@@ -184,10 +184,10 @@ http
     .referrerPolicy(rp -> rp.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)));
 ```
 
-## CORS Configuration
+## CORS 설정
 
-- Configure CORS at the security filter level, not per-controller
-- Restrict allowed origins — never use `*` in production
+- CORS는 컨트롤러별이 아니라 보안 필터 수준에서 설정한다
+- 허용 출처를 제한한다 — 운영에서 `*` 금지
 
 ```java
 @Bean
@@ -204,17 +204,17 @@ public CorsConfigurationSource corsConfigurationSource() {
   return source;
 }
 
-// In SecurityFilterChain:
+// SecurityFilterChain에서:
 http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
 ```
 
-## Rate Limiting
+## 레이트 리밋
 
-- Apply Bucket4j or gateway-level limits on expensive endpoints
-- Log and alert on bursts; return 429 with retry hints
+- 비용이 큰 엔드포인트에 Bucket4j나 게이트웨이 수준 제한을 건다
+- 급증은 로그와 알림으로 잡고, 재시도 힌트와 함께 429를 반환한다
 
 ```java
-// Using Bucket4j for per-endpoint rate limiting
+// Bucket4j로 엔드포인트별 레이트 리밋
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
   private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
@@ -241,33 +241,33 @@ public class RateLimitFilter extends OncePerRequestFilter {
 }
 ```
 
-## Dependency Security
+## 의존성 보안
 
-- Run OWASP Dependency Check / Snyk in CI
-- Keep Spring Boot and Spring Security on supported versions
-- Fail builds on known CVEs
+- CI에서 OWASP Dependency Check / Snyk를 돌린다
+- Spring Boot와 Spring Security는 지원 중인 버전을 유지한다
+- 알려진 CVE가 있으면 빌드를 실패시킨다
 
-## Logging and PII
+## 로깅과 개인정보(PII)
 
-- Never log secrets, tokens, passwords, or full PAN data
-- Redact sensitive fields; use structured JSON logging
+- 시크릿, 토큰, 비밀번호, 카드번호 전체를 로그에 남기지 않는다 (CreditBook: 고객 이름·연락처도 남기지 않는다)
+- 민감 필드는 가리고(redact), 구조화된 JSON 로깅을 쓴다
 
-## File Uploads
+## 파일 업로드
 
-- Validate size, content type, and extension
-- Store outside web root; scan if required
+- 크기, 콘텐츠 타입, 확장자를 검증한다
+- 웹 루트 밖에 저장하고, 필요하면 악성 코드 검사를 한다
 
-## Checklist Before Release
+## 릴리스 전 체크리스트
 
-- [ ] Auth tokens validated and expired correctly
-- [ ] Authorization guards on every sensitive path
-- [ ] All inputs validated and sanitized
-- [ ] No string-concatenated SQL
-- [ ] CSRF posture correct for app type
-- [ ] Secrets externalized; none committed
-- [ ] Security headers configured
-- [ ] Rate limiting on APIs
-- [ ] Dependencies scanned and up to date
-- [ ] Logs free of sensitive data
+- [ ] 인증 토큰이 올바르게 검증·만료된다
+- [ ] 민감한 경로마다 인가 검사가 있다
+- [ ] 모든 입력이 검증·정제된다
+- [ ] 문자열 연결로 만든 SQL이 없다
+- [ ] 앱 유형에 맞는 CSRF 설정이다
+- [ ] 시크릿이 외부화돼 있고 커밋된 것이 없다
+- [ ] 보안 헤더가 설정돼 있다
+- [ ] API에 레이트 리밋이 있다
+- [ ] 의존성을 스캔했고 최신이다
+- [ ] 로그에 민감정보가 없다
 
-**Remember**: Deny by default, validate inputs, least privilege, and secure-by-configuration first.
+**기억할 것**: 기본은 거부, 입력은 검증, 권한은 최소로, 설정으로 먼저 안전하게.
