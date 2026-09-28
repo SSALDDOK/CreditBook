@@ -155,6 +155,54 @@ class V1SchemaConstraintsTest {
 				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ck_ledger_entries_amount"));
 	}
 
+	@Test
+	@DisplayName("같은 로그인 ID로 직원을 두 번 만들 수 없다")
+	void duplicate_login_id_is_rejected() {
+		// given: 같은 로그인 ID 의 직원이 이미 있다
+		String loginId = "dup-" + UUID.randomUUID().toString().substring(0, 8);
+		insertEmployee(loginId);
+
+		// when / then
+		assertThatThrownBy(() -> insertEmployee(loginId))
+				.isInstanceOf(DataIntegrityViolationException.class)
+				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ux_employees_login_id"));
+	}
+
+	@Test
+	@DisplayName("고객 1명에게 선결제 계좌를 두 개 만들 수 없다")
+	void second_account_for_same_customer_is_rejected() {
+		// given: 계좌가 이미 있는 고객
+		UUID customerId = jdbcTemplate.queryForObject(
+				"SELECT customer_id FROM prepaid_accounts WHERE id = ?", UUID.class, accountId);
+
+		// when / then
+		assertThatThrownBy(() -> jdbcTemplate.update(
+				"INSERT INTO prepaid_accounts (customer_id) VALUES (?)", customerId))
+				.isInstanceOf(DataIntegrityViolationException.class)
+				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ux_prepaid_accounts_customer_id"));
+	}
+
+	@Test
+	@DisplayName("거래 순번(seq)은 중복될 수 없다")
+	void duplicate_seq_is_rejected() {
+		// given: 이미 저장된 거래의 seq
+		UUID entryId = insertLedgerEntry("CHARGE", 1_000, 11_000, null);
+		Long seq = jdbcTemplate.queryForObject("SELECT seq FROM ledger_entries WHERE id = ?", Long.class, entryId);
+
+		// when / then: 같은 seq 를 직접 지정해 넣는다
+		assertThatThrownBy(() -> jdbcTemplate.update(
+				"INSERT INTO ledger_entries (seq, account_id, type, amount, balance_after, performed_by) "
+						+ "VALUES (?, ?, 'CHARGE', 1000, 12000, ?)", seq, accountId, employeeId))
+				.isInstanceOf(DataIntegrityViolationException.class)
+				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ux_ledger_entries_seq"));
+	}
+
+	private void insertEmployee(String loginId) {
+		jdbcTemplate.update(
+				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, 'hashed-password', '직원', 'STAFF')",
+				loginId);
+	}
+
 	private UUID insertLedgerEntry(String type, long amount, long balanceAfter, UUID reversesId) {
 		return jdbcTemplate.queryForObject(
 				"INSERT INTO ledger_entries (account_id, type, amount, balance_after, reverses_id, performed_by) "

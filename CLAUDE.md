@@ -78,7 +78,7 @@ S2 이월분:
 **핵심 가치는 기능이 아니라 잔액 정합성과 추적 가능성.**
 
 ## 기술 스택
-- 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + Spring Boot 3, DDD 구조
+- 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + **Spring Boot 4.0.8**, DDD 구조. 리포의 `backend/` 하위 (2026-09-28 결정: 3.5 라인은 OSS 지원 종료, 4.1보다 검증 기간이 긴 4.0 라인. Boot 4에서는 `@MockBean` 대신 `@MockitoBean`)
 - DB: PostgreSQL (Neon, 서버리스)
 - 테스트: JUnit5(단위) + Playwright(E2E)
 - 마이그레이션: Flyway
@@ -168,7 +168,7 @@ CREATE UNIQUE INDEX ux_store_profile_singleton ON store_profile ((TRUE));
 
 CREATE TABLE employees (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    login_id             VARCHAR(50)  NOT NULL UNIQUE,
+    login_id             VARCHAR(50)  NOT NULL,
     password_hash        VARCHAR(100) NOT NULL,
     name                 VARCHAR(50)  NOT NULL,
     role                 VARCHAR(10)  NOT NULL,
@@ -177,6 +177,7 @@ CREATE TABLE employees (
     last_login_at        TIMESTAMPTZ,
     created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT ux_employees_login_id UNIQUE (login_id),
     CONSTRAINT ck_employees_role CHECK (role IN ('ADMIN', 'STAFF'))
 );
 -- 활성 ADMIN 이 0명이 되는 것은 애플리케이션에서 막는다 (DB 제약으로는 표현 불가)
@@ -199,16 +200,17 @@ CREATE INDEX ix_customers_active_created ON customers (active, created_at DESC);
 
 CREATE TABLE prepaid_accounts (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID          NOT NULL UNIQUE REFERENCES customers (id),
+    customer_id UUID          NOT NULL REFERENCES customers (id),
     balance     NUMERIC(12,0) NOT NULL DEFAULT 0,
     version     BIGINT        NOT NULL DEFAULT 0,
     updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT ux_prepaid_accounts_customer_id UNIQUE (customer_id),   -- 고객 1명당 계좌 1개
     CONSTRAINT ck_prepaid_accounts_balance_non_negative CHECK (balance >= 0)
 );
 
 CREATE TABLE ledger_entries (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    seq             BIGSERIAL     NOT NULL UNIQUE,
+    seq             BIGSERIAL     NOT NULL,
     account_id      UUID          NOT NULL REFERENCES prepaid_accounts (id),
     type            VARCHAR(20)   NOT NULL,
     amount          NUMERIC(12,0) NOT NULL,
@@ -221,6 +223,7 @@ CREATE TABLE ledger_entries (
     performed_by    UUID          NOT NULL REFERENCES employees (id),
     performed_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
     idempotency_key VARCHAR(64),
+    CONSTRAINT ux_ledger_entries_seq      UNIQUE (seq),
     CONSTRAINT ck_ledger_entries_type     CHECK (type IN ('CHARGE', 'USE', 'CHARGE_CANCEL', 'USE_CANCEL')),
     CONSTRAINT ck_ledger_entries_amount   CHECK (amount > 0),
     CONSTRAINT ck_ledger_entries_balance  CHECK (balance_after >= 0),
@@ -312,9 +315,10 @@ CREATE TRIGGER trg_ledger_entries_no_truncate
 - CI에 JaCoCo 커버리지 리포트, `domain` 패키지에는 PIT 뮤테이션 테스트
 
 ## Neon 연결
-1. Neon 프로젝트의 connection string을 발급받는다 (Pooled connection 권장)
-2. `application-local.yml` 또는 `.env`에 `SPRING_DATASOURCE_URL` / `USERNAME` / `PASSWORD`로 저장 — **절대 커밋하지 않는다** (`.gitignore` 확인)
-3. Flyway가 `V1__init.sql`을 첫 실행 시 자동 적용
+1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
+2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
+3. Flyway가 `V1__init.sql`을 첫 `bootRun` 시 자동 적용한다 — V1은 아직 미적용이므로 **적용 전에는 `bootRun`을 실행하지 않는다**(적용 시점은 사용자와 정한다)
+4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
 - `creditbook.charge.max-amount: 300000` — **1회** 충전 한도(잔액 상한 아님). 경계값 테스트가 상한을 바꿔가며 돌아야 하므로 설정값으로 둔다

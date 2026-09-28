@@ -12,7 +12,7 @@ CREATE UNIQUE INDEX ux_store_profile_singleton ON store_profile ((TRUE));
 
 CREATE TABLE employees (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    login_id             VARCHAR(50)  NOT NULL UNIQUE,
+    login_id             VARCHAR(50)  NOT NULL,
     password_hash        VARCHAR(100) NOT NULL,
     name                 VARCHAR(50)  NOT NULL,
     role                 VARCHAR(10)  NOT NULL,
@@ -21,6 +21,7 @@ CREATE TABLE employees (
     last_login_at        TIMESTAMPTZ,
     created_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT ux_employees_login_id UNIQUE (login_id),
     CONSTRAINT ck_employees_role CHECK (role IN ('ADMIN', 'STAFF'))
 );
 -- 활성 ADMIN 이 0명이 되는 것은 애플리케이션에서 막는다 (DB 제약으로는 표현 불가)
@@ -43,16 +44,17 @@ CREATE INDEX ix_customers_active_created ON customers (active, created_at DESC);
 
 CREATE TABLE prepaid_accounts (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID          NOT NULL UNIQUE REFERENCES customers (id),
+    customer_id UUID          NOT NULL REFERENCES customers (id),
     balance     NUMERIC(12,0) NOT NULL DEFAULT 0,
     version     BIGINT        NOT NULL DEFAULT 0,
     updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT ux_prepaid_accounts_customer_id UNIQUE (customer_id),   -- 고객 1명당 계좌 1개
     CONSTRAINT ck_prepaid_accounts_balance_non_negative CHECK (balance >= 0)
 );
 
 CREATE TABLE ledger_entries (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    seq             BIGSERIAL     NOT NULL UNIQUE,
+    seq             BIGSERIAL     NOT NULL,
     account_id      UUID          NOT NULL REFERENCES prepaid_accounts (id),
     type            VARCHAR(20)   NOT NULL,
     amount          NUMERIC(12,0) NOT NULL,
@@ -65,6 +67,7 @@ CREATE TABLE ledger_entries (
     performed_by    UUID          NOT NULL REFERENCES employees (id),
     performed_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
     idempotency_key VARCHAR(64),
+    CONSTRAINT ux_ledger_entries_seq      UNIQUE (seq),
     CONSTRAINT ck_ledger_entries_type     CHECK (type IN ('CHARGE', 'USE', 'CHARGE_CANCEL', 'USE_CANCEL')),
     CONSTRAINT ck_ledger_entries_amount   CHECK (amount > 0),
     CONSTRAINT ck_ledger_entries_balance  CHECK (balance_after >= 0),
