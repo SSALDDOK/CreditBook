@@ -1,0 +1,29 @@
+# 시크릿 — 절대 커밋 금지 (CLAUDE.md 절대 금지 #5)
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+
+# Gradle / 빌드 산출물
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend 추가 시)
+node_modules/
+dist/
