@@ -8,8 +8,8 @@
   - 스프린트 보드: `collection://cb292543-5bea-46aa-8970-9191533e66df`
 - 워크스페이스 인덱스(결정 로그 등): 리포와 별개로 Claude 계정의 Project 문서에 있다 — 필요하면 사용자에게 요청
 
-마지막 동기화: 2026-09-27 (S1 종료·이월 반영, 세션 시작 점검에 스프린트 보드 추가)
-2026-09-28 기준 **리포가 Notion보다 앞서 있다** (Boot 4.0.8, append-only 트리거, UNIQUE 명명, FK 인덱스 결정, `main` 보호·병합 절차). Notion 반영은 인수인계 요청 DB에 대기 중 — 세션 시작 점검 때 해당 요청들이 `완료`가 됐는지도 확인한다
+마지막 동기화: 2026-09-29 (09-28 인수인계 요청 3건 — Boot 4.0.8, append-only 트리거·UNIQUE 명명·FK 인덱스, S2 이월 현황·`main` 보호 절차 — 모두 Notion 반영 `완료` 확인)
+2026-09-29 기준 리포가 Notion보다 앞선 것은 **V1 Neon 적용·로컬 Docker 설치** 두 가지다 (인수인계 요청 DB에 반영 요청)
 
 ## 세션 시작 점검 (Notion 읽기 전용)
 1. **인수인계 요청 DB**: `담당 = Claude Code`, `상태 = 대기`인 행을 확인해 사용자에게 알린다. 처리는 사용자가 승인한 뒤에 한다 (알림만, 자동 처리 없음)
@@ -32,19 +32,19 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 4. 코워크가 스키마 정의서·개발 컨벤션 등에 옮겨 적는다. 그때까지 리포가 Notion보다 앞서 있는 것은 허용되며, 불일치는 이 요청 행으로 추적한다
 - 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
-## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월된 백엔드 셋업 최우선)
+## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월분 09.29 완료 → 도메인 API 착수)
 1인 6주 포트폴리오, 1주 스프린트 6개. S1은 문서·설계만 끝내고 종료됐고, 백엔드 셋업은 S2로 이월됐다. **S2 첫 작업은 이월분(CB-5·CB-6·CB-7)이다** — 셋업이 끝나기 전에는 S2 본 목표(도메인 API)나 문서 개편을 새로 시작하지 않는다 (S1 회고 Try #1).
 
-S2 이월분 (2026-09-28 기준 진행 상황):
+S2 이월분 (2026-09-29 기준 — 모두 완료):
 - [x] Spring Boot 프로젝트 생성 + DDD 패키지 구조 — CB-6, PR #2
 - [x] Neon 연결 — `bootRun`으로 DB `UP` 확인 (이월 DoD 1 충족)
 - [x] `V1__init.sql` 작성·검증 — CB-5·CB-7, PR #3·#4. CI에서 테스트 21건 통과
-- [ ] **`V1__init.sql`을 Neon에 실제 적용** — 다음 세션 첫 작업. 되돌릴 수 없으므로 **시작 전에 사용자에게 한 번 더 확인**하고, 적용 후 `flyway_schema_history`와 테이블 6개·트리거를 확인한 뒤 이 문서의 "V1 미적용" 표시를 고친다
+- [x] `V1__init.sql`을 Neon에 실제 적용 (2026-09-29, 사용자 확인 후 `bootRun`) — `flyway_schema_history` v1 `success = true`, 테이블 6개·트리거 2개·`fn_ledger_entries_append_only` 확인, health `UP`
 - [x] GitHub 저장소 — https://github.com/SSALDDOK/CreditBook (공개)
 - [x] 최소 CI + `main` 브랜치 보호 (이월 DoD 2 "main push 시 CI 통과" 충족)
-- [ ] (권장) 사용자 PC에 Docker Desktop 설치 — WSL 미설치 상태. 설치되면 로컬에서도 Testcontainers 테스트가 실행된다. 그 전까지 로컬 `./gradlew build`의 통합 테스트는 스킵된다
+- [x] 사용자 PC에 Docker Desktop 설치 (2026-09-29, WSL 2 백엔드) — 로컬 `./gradlew build`에서 Testcontainers 테스트 21건 실행·통과(스킵 0). 테스트 중에만 Docker Desktop이 켜져 있으면 된다
 
-이월분이 모두 끝나면 S2 본 목표(충전·사용·취소 도메인 + 정합성 증명 테스트)로 넘어간다. 그때 CB-5·CB-6·CB-7 완료 처리와 스프린트 보드 갱신을 인수인계 요청으로 확인한다.
+이월분이 모두 끝났으므로 **다음 작업은 S2 본 목표(충전·사용·취소 도메인 + 정합성 증명 테스트)**다. CB-5·CB-6·CB-7 완료 처리와 스프린트 보드 갱신은 인수인계 요청으로 넘겼다.
 
 | 스프린트 | 기간 | 목표 |
 |---|---|---|
@@ -161,7 +161,7 @@ com.creditbook
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
 
-- `V1__init.sql`은 아직 어느 DB에도 적용되지 않았다. 적용 전까지는 V2를 만들지 말고 V1을 직접 고친다.
+- `V1__init.sql`은 **2026-09-29 Neon에 적용됐다. 이제 V1은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 스키마 변경은 `V2__...sql`부터 새 파일로 만든다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
 - **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
@@ -215,7 +215,7 @@ com.creditbook
 ## Neon 연결
 1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
 2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
-3. Flyway가 `V1__init.sql`을 첫 `bootRun` 시 자동 적용한다 — V1은 아직 미적용이므로 **적용 전에는 `bootRun`을 실행하지 않는다**(적용 시점은 사용자와 정한다)
+3. Flyway는 `bootRun`마다 대기 중인 마이그레이션을 Neon에 자동 적용한다 (V1은 2026-09-29 적용 완료). 따라서 **새 `V2__...sql` 이상을 만든 뒤의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
 4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)

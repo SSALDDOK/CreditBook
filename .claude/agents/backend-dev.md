@@ -91,7 +91,7 @@ grep -rn "\.balance\.add\|\.balance\.subtract\|\.balance\s*=" backend/src/main/j
 ## Flyway 마이그레이션
 
 - 위치: `backend/src/main/resources/db/migration/`. 작성 절차는 `/db-migration` 커맨드를 따른다
-- 새 파일은 `V{n}__snake_case_description.sql`. **이미 어느 DB에든 적용된** `V__` 파일은 절대 수정 금지(체크섬 오류). 아직 적용 전인 파일(CLAUDE.md에 "미적용"으로 적힌 V1 등)은 직접 고친다 — 애매하면 멈추고 묻는다
+- 새 파일은 `V{n}__snake_case_description.sql`. **이미 어느 DB에든 적용된** `V__` 파일은 절대 수정 금지(체크섬 오류). 아직 적용 전인 파일(CLAUDE.md에 "미적용"으로 적힌 파일. V1은 2026-09-29 Neon 적용 완료)은 직접 고친다 — 애매하면 멈추고 묻는다
 - **`bootRun` 금지(사용자가 지시한 경우 제외)** — Flyway가 Neon에 마이그레이션을 실제로 적용해 버린다
 - `ledger_entries`는 append-only — 컬럼 추가는 가능하나 기존 행을 바꾸는 UPDATE·DELETE는 트리거가 거절한다
 - 금액은 `NUMERIC(12,0)`, ID는 `UUID DEFAULT gen_random_uuid()`, 시각은 `TIMESTAMPTZ`
