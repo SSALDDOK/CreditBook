@@ -2,6 +2,7 @@ package com.creditbook.prepaid.domain;
 
 import static com.creditbook.prepaid.domain.PrepaidFixtures.EMPLOYEE_ID;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.NOW;
+import static com.creditbook.prepaid.domain.PrepaidFixtures.POLICY;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.accountWithBalance;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.won;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,7 +24,7 @@ class PrepaidAccountChargeTest {
 		PrepaidAccount account = accountWithBalance(0);
 
 		// when
-		LedgerEntry entry = account.charge(won(50_000), EMPLOYEE_ID, NOW, "음료");
+		LedgerEntry entry = account.charge(won(50_000), POLICY, EMPLOYEE_ID, NOW, "음료");
 
 		// then
 		assertThat(account.getBalance()).isEqualByComparingTo("50000");
@@ -46,7 +47,7 @@ class PrepaidAccountChargeTest {
 		Instant serverTime = Instant.parse("2026-10-01T03:15:30Z");
 
 		// when
-		LedgerEntry charge = account.charge(won(1_000), staffId, serverTime, null);
+		LedgerEntry charge = account.charge(won(1_000), POLICY, staffId, serverTime, null);
 		LedgerEntry use = account.use(won(500), staffId, serverTime.plusSeconds(1), null);
 
 		// then
@@ -64,8 +65,8 @@ class PrepaidAccountChargeTest {
 		PrepaidAccount account = accountWithBalance(0);
 
 		// when
-		LedgerEntry blank = account.charge(won(1_000), EMPLOYEE_ID, NOW, "   ");
-		LedgerEntry padded = account.charge(won(1_000), EMPLOYEE_ID, NOW, "  원두 ");
+		LedgerEntry blank = account.charge(won(1_000), POLICY, EMPLOYEE_ID, NOW, "   ");
+		LedgerEntry padded = account.charge(won(1_000), POLICY, EMPLOYEE_ID, NOW, "  원두 ");
 
 		// then
 		assertThat(blank.getMemo()).isNull();

@@ -63,11 +63,18 @@ public class PrepaidAccount {
 
 	/**
 	 * 충전한다 (REQ-5). 잔액이 금액만큼 늘고 CHARGE 거래가 만들어진다.
+	 * 한도는 1회 충전 금액에만 적용된다 — 여러 번 충전해 잔액이 한도를 넘는 것은 허용한다 (REQ-6).
 	 *
+	 * @throws ChargeLimitExceededException 금액이 1회 충전 한도를 넘을 때
 	 * @throws InvalidAmountException 금액이 null·0 이하·소수점이거나 충전 후 잔액이 NUMERIC(12,0) 범위를 넘을 때
 	 */
-	public LedgerEntry charge(BigDecimal amount, UUID performedBy, Instant performedAt, String memo) {
+	public LedgerEntry charge(BigDecimal amount, ChargePolicy policy, UUID performedBy, Instant performedAt,
+			String memo) {
+		Objects.requireNonNull(policy, "policy");
 		BigDecimal value = requireValidAmount(amount);
+		if (!policy.isWithinLimit(value)) {
+			throw new ChargeLimitExceededException(policy.maxAmount());
+		}
 		BigDecimal newBalance = requireWithinRange(this.balance.add(value));
 		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.CHARGE, value, newBalance,
 				normalizeMemo(memo), performedBy, performedAt));

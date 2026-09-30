@@ -12,6 +12,10 @@ final class PrepaidFixtures {
 
 	static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
 	static final Instant NOW = Instant.parse("2026-09-30T01:00:00Z");
+	/** application.yml 의 creditbook.charge.max-amount 와 같은 1회 충전 한도. */
+	static final ChargePolicy POLICY = ChargePolicy.ofMaxAmount(300_000);
+	/** 준비용 — 한도에 막히지 않고 원하는 잔액을 한 번에 만든다. */
+	private static final ChargePolicy SETUP_POLICY = new ChargePolicy(PrepaidAccount.NUMERIC_12_MAX);
 
 	private PrepaidFixtures() {
 	}
@@ -28,7 +32,7 @@ final class PrepaidFixtures {
 	static PrepaidAccount accountWithBalance(long balance) {
 		PrepaidAccount account = newAccount();
 		if (balance > 0) {
-			account.charge(won(balance), EMPLOYEE_ID, NOW, null);
+			account.charge(won(balance), SETUP_POLICY, EMPLOYEE_ID, NOW, null);
 		}
 		return account;
 	}

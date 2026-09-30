@@ -40,6 +40,8 @@ class PrepaidJpaMappingTest {
 	@PersistenceContext
 	EntityManager em;
 
+	private static final ChargePolicy POLICY = ChargePolicy.ofMaxAmount(300_000);
+
 	private UUID employeeId;
 	private UUID customerId;
 
@@ -60,7 +62,7 @@ class PrepaidJpaMappingTest {
 		Instant now = Instant.parse("2026-09-30T01:00:00Z");
 		PrepaidAccount account = PrepaidAccount.open(customerId, now);
 		em.persist(account);
-		LedgerEntry charge = account.charge(BigDecimal.valueOf(50_000), employeeId, now, "음료");
+		LedgerEntry charge = account.charge(BigDecimal.valueOf(50_000), POLICY, employeeId, now, "음료");
 		em.persist(charge);
 		LedgerEntry use = account.use(BigDecimal.valueOf(4_500), employeeId, now.plusSeconds(60), null);
 		em.persist(use);
@@ -99,7 +101,7 @@ class PrepaidJpaMappingTest {
 		Long initialVersion = account.getVersion();
 
 		// when
-		em.persist(account.charge(BigDecimal.valueOf(1_000), employeeId, now, null));
+		em.persist(account.charge(BigDecimal.valueOf(1_000), POLICY, employeeId, now, null));
 		em.flush();
 
 		// then

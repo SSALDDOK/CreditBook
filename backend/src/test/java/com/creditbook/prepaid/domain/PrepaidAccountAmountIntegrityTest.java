@@ -2,6 +2,7 @@ package com.creditbook.prepaid.domain;
 
 import static com.creditbook.prepaid.domain.PrepaidFixtures.EMPLOYEE_ID;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.NOW;
+import static com.creditbook.prepaid.domain.PrepaidFixtures.POLICY;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.accountWithBalance;
 import static com.creditbook.prepaid.domain.PrepaidFixtures.won;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +33,7 @@ class PrepaidAccountAmountIntegrityTest {
 			if (i % 3 == 2) {
 				entries.add(account.use(won(1), EMPLOYEE_ID, NOW, null));
 			} else {
-				entries.add(account.charge(won(1), EMPLOYEE_ID, NOW, null));
+				entries.add(account.charge(won(1), POLICY, EMPLOYEE_ID, NOW, null));
 			}
 		}
 
@@ -55,7 +56,7 @@ class PrepaidAccountAmountIntegrityTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 
 		// when / then
-		assertThatThrownBy(() -> account.charge(new BigDecimal(amount), EMPLOYEE_ID, NOW, null))
+		assertThatThrownBy(() -> account.charge(new BigDecimal(amount), POLICY, EMPLOYEE_ID, NOW, null))
 				.isInstanceOf(InvalidAmountException.class);
 		assertThat(account.getBalance()).isEqualByComparingTo("10000");
 	}
@@ -80,7 +81,7 @@ class PrepaidAccountAmountIntegrityTest {
 		PrepaidAccount account = accountWithBalance(0);
 
 		// when
-		LedgerEntry entry = account.charge(new BigDecimal("4500.00"), EMPLOYEE_ID, NOW, null);
+		LedgerEntry entry = account.charge(new BigDecimal("4500.00"), POLICY, EMPLOYEE_ID, NOW, null);
 
 		// then
 		assertThat(entry.getAmount().scale()).isZero();
