@@ -80,6 +80,7 @@ S2 이월분 (2026-09-29 기준 — 모두 완료):
 - 테스트: JUnit5(단위) + Playwright(E2E)
 - 마이그레이션: Flyway
 - 배포: Vercel(FE) + Render(BE) + GitHub Actions(CI/CD)
+- 도구 간 연결(Docker·Testcontainers vs Neon, Flyway 동작, 의존성 읽는 법, 육안 확인 방법, 병합 역할 분담)은 [docs/dev-environment-guide.md](docs/dev-environment-guide.md)에 설명돼 있다. 사용자가 도구 동작을 물으면 이 문서를 기준으로 답하고, 환경이 바뀌면 함께 고친다
 
 ## 패키지 구조 (DDD, 도메인 최상위)
 계층을 최상위로 두지 않는다. `controller / service / repository` 로 나누면 한 기능을 고칠 때 세 폴더를 오가야 하고 도메인 경계가 드러나지 않는다.
