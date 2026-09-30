@@ -71,7 +71,7 @@ class CustomerControllerTest {
 				.andExpect(header().string("Location", endsWith("/api/customers/" + CUSTOMER_ID)))
 				.andExpect(jsonPath("$.id").value(CUSTOMER_ID.toString()))
 				.andExpect(jsonPath("$.name").value("김단골"))
-				.andExpect(jsonPath("$.phone").value("01012345678"))
+				.andExpect(jsonPath("$.maskedPhone").value("010-****-5678"))
 				.andExpect(jsonPath("$.balance").value(0))
 				.andExpect(jsonPath("$.createdAt").value("2026-09-30T01:00:00Z"))
 				.andExpect(jsonPath("$.accountId").doesNotExist())
@@ -91,8 +91,29 @@ class CustomerControllerTest {
 						{"name": "김단골", "phone": "010-1234-5678"}
 						"""))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.phone").value("01012345678"));
+				.andExpect(jsonPath("$.maskedPhone").value("010-****-5678"));
 		verify(customerService).register("김단골", "01012345678");
+	}
+
+	@Test
+	@Tag("REQ-26")
+	@DisplayName("등록 응답에는 연락처 원문이 어디에도 없고 가운데 자리를 가린 연락처만 있다")
+	void register_response_never_contains_raw_phone() throws Exception {
+		// given
+		given(customerService.register("김단골", "01012345678")).willReturn(registered("김단골", "01012345678"));
+
+		// when / then
+		mockMvc.perform(post("/api/customers")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name": "김단골", "phone": "010-1234-5678"}
+						"""))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.maskedPhone").value("010-****-5678"))
+				.andExpect(jsonPath("$.phone").doesNotExist())
+				.andExpect(content().string(not(containsString("01012345678"))))
+				.andExpect(content().string(not(containsString("010-1234-5678"))))
+				.andExpect(content().string(not(containsString("1234"))));
 	}
 
 	@ParameterizedTest(name = "[{index}] 연락처 {0}")

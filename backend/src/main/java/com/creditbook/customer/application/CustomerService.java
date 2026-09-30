@@ -5,11 +5,15 @@ import java.time.Instant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerRepository;
+import com.creditbook.customer.domain.CustomerSearchKeyword;
+import com.creditbook.customer.domain.CustomerSummary;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 
@@ -49,6 +53,24 @@ public class CustomerService {
 		log.info("customer registered: customerId={}, accountId={}", customer.getId(), account.getId());
 		return new RegisteredCustomer(customer.getId(), customer.getName(), customer.getPhone(), account.getId(),
 				account.getBalance(), customer.getCreatedAt());
+	}
+
+	/**
+	 * 활성 고객을 잔액과 함께 검색한다 (REQ-2). 검색어가 비면 전체, 숫자만이면 연락처 뒷자리, 그 밖은 이름 부분 일치.
+	 * 비활성 고객은 목록에서 빠진다 (REQ-4). 정렬은 최근 등록순 고정.
+	 *
+	 * @param query 검색어 (null 가능). 개인정보일 수 있으므로 로그에 남기지 않는다
+	 * @param page 0부터 시작하는 페이지 번호 (형식 검증은 controller 가 한다)
+	 * @param size 페이지 크기
+	 */
+	@Transactional(readOnly = true)
+	public Page<CustomerSummary> search(String query, int page, int size) {
+		CustomerSearchKeyword keyword = CustomerSearchKeyword.parse(query);
+		Page<CustomerSummary> result = customerRepository.searchActive(keyword, PageRequest.of(page, size));
+		// 검색어 값은 남기지 않고 해석 유형만 남긴다
+		log.debug("customer search: type={}, page={}, size={}, total={}", keyword.type(), page, size,
+				result.getTotalElements());
+		return result;
 	}
 
 }
