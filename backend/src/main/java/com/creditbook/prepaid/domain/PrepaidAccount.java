@@ -84,12 +84,12 @@ public class PrepaidAccount {
 	 * 사용한다 (REQ-8). 잔액이 금액만큼 줄고 USE 거래가 만들어진다. 잔액과 같은 금액까지 쓸 수 있다.
 	 *
 	 * @throws InvalidAmountException 금액이 null·0 이하·소수점일 때
-	 * @throws InsufficientBalanceException 금액이 잔액보다 클 때 (거래는 만들어지지 않는다)
+	 * @throws InsufficientBalanceException 금액이 잔액보다 클 때. 부족 금액을 담는다 (REQ-9, 거래는 만들어지지 않는다)
 	 */
 	public LedgerEntry use(BigDecimal amount, UUID performedBy, Instant performedAt, String memo) {
 		BigDecimal value = requireValidAmount(amount);
 		if (!canUse(value)) {
-			throw new InsufficientBalanceException(balance, value);
+			throw new InsufficientBalanceException(this.balance, value, value.subtract(this.balance));
 		}
 		BigDecimal newBalance = this.balance.subtract(value);
 		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.USE, value, newBalance,
