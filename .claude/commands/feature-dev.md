@@ -58,5 +58,7 @@ feat(CB-42): 충전 API 추가
 
 ```bash
 git push -u origin feature/CB-42-charge-api
-gh pr create --title "feat(CB-42): 충전 API 추가" --body "..."
+gh pr create --title "CB-42 충전 API 추가" --body "..."
 ```
+
+PR 제목은 **맨 앞에 Jira 키**를 붙인다(여러 이슈면 모두). 아직 완료되지 않은 이슈의 키는 PR 제목·커밋에 넣지 않는다 — Jira의 "PR 병합 → 완료" 자동화가 적힌 키를 모두 완료로 바꾼다 (CLAUDE.md "Git / 커밋 규칙").
