@@ -1,15 +1,18 @@
 package com.creditbook.prepaid.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.postgresql.util.PSQLException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -88,6 +91,59 @@ class PrepaidJpaMappingTest {
 		String storedType = jdbcTemplate.queryForObject(
 				"SELECT type FROM ledger_entries WHERE id = ?", String.class, use.getId());
 		assertThat(storedType).isEqualTo("USE");
+	}
+
+	@Test
+	@Tag("REQ-34")
+	@DisplayName("사용 취소 거래는 reverses_id 와 양수 signed_amount 로 저장된다")
+	void use_cancel_is_persisted_as_reversal() {
+		// given
+		Instant now = Instant.parse("2026-09-30T01:00:00Z");
+		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		em.persist(account);
+		em.persist(account.charge(BigDecimal.valueOf(10_000), POLICY, employeeId, now, null));
+		LedgerEntry use = account.use(BigDecimal.valueOf(3_000), employeeId, now, null);
+		em.persist(use);
+
+		// when
+		LedgerEntry cancel = account.cancelUse(use, Optional.empty(), "주문 착오", employeeId, now);
+		em.persist(cancel);
+		em.flush();
+		em.clear();
+
+		// then
+		LedgerEntry reloaded = em.find(LedgerEntry.class, cancel.getId());
+		assertThat(reloaded.getType()).isEqualTo(LedgerEntryType.USE_CANCEL);
+		assertThat(reloaded.getReversesId()).isEqualTo(use.getId());
+		assertThat(reloaded.getSignedAmount()).isEqualByComparingTo("3000");
+		assertThat(reloaded.getBalanceAfter()).isEqualByComparingTo("10000");
+		assertThat(em.find(PrepaidAccount.class, account.getId()).getBalance()).isEqualByComparingTo("10000");
+	}
+
+	@Test
+	@Tag("REQ-34")
+	@DisplayName("서비스가 기존 취소를 놓쳐도 같은 사용 건의 두 번째 취소는 DB 가 ux_ledger_entries_reverses 로 막는다")
+	void second_use_cancel_is_blocked_by_db_unique_index() {
+		// given: 서비스가 기존 취소 조회를 빠뜨려 도메인에 empty 를 두 번 넘긴 상황
+		Instant now = Instant.parse("2026-09-30T01:00:00Z");
+		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		em.persist(account);
+		em.persist(account.charge(BigDecimal.valueOf(10_000), POLICY, employeeId, now, null));
+		LedgerEntry use = account.use(BigDecimal.valueOf(3_000), employeeId, now, null);
+		em.persist(use);
+		em.persist(account.cancelUse(use, Optional.empty(), "주문 착오", employeeId, now));
+		em.flush();
+
+		// when
+		LedgerEntry duplicate = account.cancelUse(use, Optional.empty(), "중복 요청", employeeId, now);
+
+		// then
+		assertThatThrownBy(() -> {
+			em.persist(duplicate);
+			em.flush();
+		}).rootCause()
+				.isInstanceOfSatisfying(PSQLException.class, e -> assertThat(
+						e.getServerErrorMessage().getConstraint()).isEqualTo("ux_ledger_entries_reverses"));
 	}
 
 	@Test

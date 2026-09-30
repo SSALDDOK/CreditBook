@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.persistence.Column;
@@ -96,9 +97,65 @@ public class PrepaidAccount {
 				normalizeMemo(memo), performedBy, performedAt));
 	}
 
+	/**
+	 * 사용 건을 취소한다 (REQ-34). 원 거래는 그대로 두고 USE_CANCEL 반제 거래를 추가해 사용 금액만큼 잔액을 되돌린다.
+	 * 전액 취소만 있고 기한은 없다.
+	 * <p>
+	 * 이 계좌는 거래 이력을 들고 있지 않으므로 "이미 취소됐는가" 는 혼자 알 수 없다. 호출자(서비스)가
+	 * {@code reverses_id = target.id} 인 거래를 조회해 {@code existingCancel} 로 넘기고, 판단은 여기서 한다.
+	 * 조회와 저장 사이에 다른 요청이 끼어들면 DB 의 ux_ledger_entries_reverses 가 두 번째 반제를 막는다.
+	 *
+	 * @param target 취소할 사용 거래
+	 * @param existingCancel target 을 이미 반제한 거래 (없으면 empty)
+	 * @param reason 취소 사유 (필수, 앞뒤 공백 제거 후 memo 에 저장)
+	 * @throws InvalidCancelTargetException target 이 다른 계좌의 거래이거나 USE 가 아닐 때 (반제 행 포함)
+	 * @throws AlreadyCancelledException target 이 이미 취소됐을 때
+	 * @throws CancelReasonRequiredException 사유가 null·공백일 때
+	 * @throws IllegalArgumentException existingCancel 이 target 을 반제한 거래가 아닐 때 (호출자 버그)
+	 */
+	public LedgerEntry cancelUse(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt) {
+		requireReversible(target, LedgerEntryType.USE_CANCEL, existingCancel);
+		String normalizedReason = requireReason(reason);
+		BigDecimal newBalance = requireWithinRange(this.balance.add(target.getAmount()));
+		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.USE_CANCEL, target.getAmount(), newBalance,
+				normalizedReason, target.getId(), performedBy, performedAt));
+	}
+
 	/** 이 금액을 지금 사용할 수 있는가 (잔액 이하인가). */
 	public boolean canUse(BigDecimal amount) {
 		return amount != null && this.balance.compareTo(amount) >= 0;
+	}
+
+	/** 반제 공통 규칙: 같은 계좌, 유형 대응(반제 행은 다시 반제 불가), 원본 1건당 반제 1건. */
+	private void requireReversible(LedgerEntry target, LedgerEntryType reversalType,
+			Optional<LedgerEntry> existingCancel) {
+		Objects.requireNonNull(target, "target");
+		Objects.requireNonNull(existingCancel, "existingCancel");
+		if (!this.id.equals(target.getAccountId())) {
+			throw new InvalidCancelTargetException("다른 계좌의 거래는 취소할 수 없습니다.");
+		}
+		if (target.isReversal()) {
+			throw new InvalidCancelTargetException("취소 거래는 다시 취소할 수 없습니다.");
+		}
+		if (target.getType() != reversalType.reversedType()) {
+			throw new InvalidCancelTargetException(
+					reversalType + " 는 " + reversalType.reversedType() + " 거래만 취소할 수 있습니다.");
+		}
+		if (existingCancel.isPresent()) {
+			LedgerEntry cancel = existingCancel.get();
+			if (!target.getId().equals(cancel.getReversesId())) {
+				throw new IllegalArgumentException("existingCancel 은 target 을 반제한 거래여야 한다");
+			}
+			throw new AlreadyCancelledException(target.getId(), cancel.getId());
+		}
+	}
+
+	private static String requireReason(String reason) {
+		if (reason == null || reason.isBlank()) {
+			throw new CancelReasonRequiredException();
+		}
+		return normalizeMemo(reason);
 	}
 
 	private LedgerEntry apply(BigDecimal newBalance, LedgerEntry entry) {
