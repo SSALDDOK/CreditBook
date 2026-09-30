@@ -35,7 +35,7 @@ public class CustomerService {
 	/**
 	 * 고객을 등록하고 잔액 0원인 선결제 계좌를 함께 연다 (REQ-1). 둘 다 저장되거나 둘 다 저장되지 않는다.
 	 *
-	 * @param phone 숫자만 남긴 정규형 또는 null
+	 * @param phone 숫자만 남긴 정규형 (필수)
 	 */
 	@Transactional
 	public RegisteredCustomer register(String name, String phone) {

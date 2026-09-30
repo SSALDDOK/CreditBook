@@ -47,23 +47,22 @@ class CustomerTest {
 		String paddedName = "  김단골 ";
 
 		// when
-		Customer customer = Customer.register(paddedName, null, NOW);
+		Customer customer = Customer.register(paddedName, "01012345678", NOW);
 
 		// then
 		assertThat(customer.getName()).isEqualTo("김단골");
 	}
 
-	@Test
-	@DisplayName("연락처 없이도 등록할 수 있다")
-	void register_allows_missing_phone() {
-		// given
-		String phone = null;
+	@ParameterizedTest(name = "[{index}] 연락처 \"{0}\"")
+	@NullAndEmptySource
+	@DisplayName("연락처를 입력하지 않으면 등록이 거절된다")
+	void register_rejects_missing_phone(String phone) {
+		// given: null, 빈 문자열 (연락처 필수 — 2026-09-30 사용자 결정)
 
-		// when
-		Customer customer = Customer.register("김단골", phone, NOW);
-
-		// then
-		assertThat(customer.getPhone()).isNull();
+		// when / then
+		assertThatThrownBy(() -> Customer.register("김단골", phone, NOW))
+				.isInstanceOf(InvalidPhoneNumberException.class)
+				.hasMessage("연락처를 입력해 주세요.");
 	}
 
 	@ParameterizedTest(name = "[{index}] 연락처 \"{0}\"")
@@ -81,10 +80,10 @@ class CustomerTest {
 
 	@ParameterizedTest(name = "[{index}] 연락처 \"{0}\"")
 	@ValueSource(strings = { "01234567", "010123456789", "010-1234-5678", "010 1234 5678", "0101234567a",
-			"０１０１２３４５６７８", "", " " })
+			"０１０１２３４５６７８", " " })
 	@DisplayName("연락처가 숫자 9–11자리가 아니면 등록이 거절된다")
 	void register_rejects_phone_not_9_to_11_digits(String phone) {
-		// given: 8자리·12자리, 하이픈·공백·문자·전각 숫자 포함, 빈 문자열
+		// given: 8자리·12자리, 하이픈·공백·문자·전각 숫자 포함, 공백뿐
 
 		// when / then
 		assertThatThrownBy(() -> Customer.register("김단골", phone, NOW))
@@ -113,7 +112,7 @@ class CustomerTest {
 		String name = "가".repeat(length);
 
 		// when
-		Customer customer = Customer.register(name, null, NOW);
+		Customer customer = Customer.register(name, "01012345678", NOW);
 
 		// then
 		assertThat(customer.getName()).hasSize(length);
@@ -126,7 +125,7 @@ class CustomerTest {
 		String name = "가".repeat(21);
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register(name, null, NOW))
+		assertThatThrownBy(() -> Customer.register(name, "01012345678", NOW))
 				.isInstanceOf(InvalidCustomerNameException.class)
 				.hasMessage("이름은 20자 이하여야 합니다.");
 	}
@@ -139,8 +138,8 @@ class CustomerTest {
 		String emoji = "😀".repeat(20);
 
 		// when
-		Customer strippedToLimit = Customer.register(padded, null, NOW);
-		Customer surrogatePairs = Customer.register(emoji, null, NOW);
+		Customer strippedToLimit = Customer.register(padded, "01012345678", NOW);
+		Customer surrogatePairs = Customer.register(emoji, "01012345678", NOW);
 
 		// then
 		assertThat(strippedToLimit.getName()).isEqualTo("가".repeat(20));
@@ -151,7 +150,7 @@ class CustomerTest {
 	@DisplayName("등록 시각 없이는 고객을 만들 수 없다")
 	void register_requires_registered_time() {
 		// when / then
-		assertThatThrownBy(() -> Customer.register("김단골", null, null))
+		assertThatThrownBy(() -> Customer.register("김단골", "01012345678", null))
 				.isInstanceOf(NullPointerException.class);
 	}
 
