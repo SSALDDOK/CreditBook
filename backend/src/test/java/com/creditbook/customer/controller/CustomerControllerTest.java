@@ -5,8 +5,6 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -98,19 +96,21 @@ class CustomerControllerTest {
 	}
 
 	@ParameterizedTest(name = "[{index}] 연락처 {0}")
-	@ValueSource(strings = { "\"phone\": null", "\"phone\": \"\"", "\"memo\": \"연락처 없음\"" })
-	@DisplayName("연락처를 입력하지 않으면 연락처 없이 등록한다")
-	void register_without_phone(String phoneField) throws Exception {
-		// given
-		given(customerService.register(eq("김단골"), isNull())).willReturn(registered("김단골", null));
+	@ValueSource(strings = { "\"phone\": null", "\"phone\": \"\"", "\"memo\": \"연락처 필드 없음\"" })
+	@DisplayName("연락처를 입력하지 않으면 400으로 거절하고 등록하지 않는다")
+	void register_rejects_missing_phone_with_400(String phoneField) throws Exception {
+		// given: null, 빈 문자열, 필드 누락 (연락처 필수 — 2026-09-30 사용자 결정)
 
 		// when / then
 		mockMvc.perform(post("/api/customers")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"name\": \"김단골\", " + phoneField + "}"))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.phone").isEmpty());
-		verify(customerService).register(eq("김단골"), isNull());
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("phone"))
+				.andExpect(jsonPath("$.fieldErrors[0].message").value("연락처를 입력해 주세요."));
+		verify(customerService, never()).register(any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] 이름 {0}")
@@ -156,7 +156,7 @@ class CustomerControllerTest {
 		// when / then
 		mockMvc.perform(post("/api/customers")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\": \"김단골\"}"))
+				.content("{\"name\": \"김단골\", \"phone\": \"01012345678\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_CUSTOMER_NAME"))
 				.andExpect(jsonPath("$.message").value("이름은 20자 이하여야 합니다."))
@@ -185,7 +185,7 @@ class CustomerControllerTest {
 		// when / then
 		mockMvc.perform(post("/api/customers")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\": \"김단골\"}"))
+				.content("{\"name\": \"김단골\", \"phone\": \"01012345678\"}"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
 	}
@@ -200,7 +200,7 @@ class CustomerControllerTest {
 		// when / then
 		mockMvc.perform(post("/api/customers")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\": \"김단골\"}"))
+				.content("{\"name\": \"김단골\", \"phone\": \"01012345678\"}"))
 				.andExpect(status().isInternalServerError())
 				.andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
 				.andExpect(content().string(not(containsString("secret"))))

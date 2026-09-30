@@ -85,7 +85,7 @@ class CustomerServiceTest {
 		String name = "김단골";
 
 		// when
-		RegisteredCustomer result = service.register(name, null);
+		RegisteredCustomer result = service.register(name, "01012345678");
 
 		// then
 		ArgumentCaptor<PrepaidAccount> accountCaptor = ArgumentCaptor.forClass(PrepaidAccount.class);
