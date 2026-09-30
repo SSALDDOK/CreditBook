@@ -13,6 +13,7 @@ Git 버전 관리, 브랜치 전략, 협업 개발의 모범 사례.
 > - **GitHub Flow만** 쓴다. `develop` 브랜치 없음. `main`은 항상 배포 가능하고 PR로만 병합한다
 > - 브랜치: `feature/CB-42-charge-api`, `fix/CB-57-balance-boundary` — Jira 키(`CB-n`) 포함
 > - 커밋: `<type>(<Jira 키>): <한 줄 요약>` — type은 feat/fix/test/refactor/docs/chore
+> - PR 제목: 맨 앞에 Jira 키 — `CB-42 충전 API 추가` (여러 이슈면 모두). 미완료 이슈의 키는 넣지 않는다 (Jira "PR 병합 → 완료" 자동화)
 > - 혼자 작업해도 PR을 거치고, CI가 실패한 상태로 병합하지 않는다
 >
 > 아래의 Trunk-Based, GitFlow, scope 예시(`auth`, `api` 등)는 일반 참고용이다.
@@ -232,13 +233,15 @@ git push --force-with-lease origin feature/user-auth
 ### PR 제목 형식
 
 ```
-<type>(<scope>): <description>
+<Jira 키> <description>
 
 예시:
-feat(CB-42): 충전 API 추가
-fix(CB-57): 잔액 경계값 사용 거절 수정
-docs(CB-20): API 명세 갱신
+CB-42 충전 API 추가
+CB-57 잔액 경계값 사용 거절 수정
+CB-27 CB-29 충전 금액 검증·잔액 부족 차단
 ```
+
+CreditBook은 PR 제목 맨 앞에 Jira 키를 둔다 — GitHub for Atlassian 연동이 병합 후에도 PR과 이슈를 연결하도록.
 
 ### PR 설명 템플릿
 
