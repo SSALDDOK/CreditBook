@@ -10,6 +10,8 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
@@ -35,6 +37,26 @@ public class GlobalExceptionHandler {
 				.toList();
 		log.debug("request validation failed: fields={}", fieldErrors.stream().map(ErrorResponse.FieldError::field).toList());
 		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT, fieldErrors));
+	}
+
+	/** 쿼리 파라미터 등 메서드 인자 검증 실패 (@RequestParam 의 @Min·@Max·@Size). 거절된 값은 응답·로그에 넣지 않는다. */
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	ResponseEntity<ErrorResponse> handleMethodValidation(HandlerMethodValidationException ex) {
+		List<ErrorResponse.FieldError> fieldErrors = ex.getParameterValidationResults().stream()
+				.flatMap(result -> result.getResolvableErrors().stream()
+						.map(error -> new ErrorResponse.FieldError(result.getMethodParameter().getParameterName(),
+								error.getDefaultMessage())))
+				.toList();
+		log.debug("parameter validation failed: fields={}", fieldErrors.stream().map(ErrorResponse.FieldError::field).toList());
+		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT, fieldErrors));
+	}
+
+	/** 쿼리 파라미터 타입 불일치 (예: page=abc). 처리하지 않으면 아래의 Exception 처리기가 500 으로 응답한다. */
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+		log.debug("parameter type mismatch: field={}", ex.getName());
+		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT,
+				List.of(new ErrorResponse.FieldError(ex.getName(), "형식이 올바르지 않습니다."))));
 	}
 
 	/** JSON 문법 오류, 타입 불일치 등 본문을 읽지 못한 경우. */
