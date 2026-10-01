@@ -26,7 +26,8 @@ import jakarta.persistence.Table;
 @Table(name = "ledger_entries")
 public class LedgerEntry {
 
-	static final int MEMO_MAX_LENGTH = 200;
+	/** ledger_entries.memo VARCHAR(200) */
+	public static final int MEMO_MAX_LENGTH = 200;
 
 	@Id
 	@Column(name = "id", nullable = false, updatable = false)

@@ -93,6 +93,7 @@ class ChargeServiceTest {
 		assertThat(result.entryId()).isEqualTo(entry.getId());
 		assertThat(result.accountId()).isEqualTo(account.getId());
 		assertThat(result.customerId()).isEqualTo(CUSTOMER_ID);
+		assertThat(result.type()).isEqualTo(LedgerEntryType.CHARGE);
 		assertThat(result.amount()).isEqualByComparingTo("50000");
 		assertThat(result.balanceAfter()).isEqualByComparingTo("50000");
 		assertThat(result.memo()).isEqualTo("음료");
