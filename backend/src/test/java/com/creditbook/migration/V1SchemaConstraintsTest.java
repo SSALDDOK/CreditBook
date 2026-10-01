@@ -48,8 +48,8 @@ class V1SchemaConstraintsTest {
 				UUID.class, loginId, "hashed-password", "테스트 관리자");
 
 		UUID customerId = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name) VALUES (?) RETURNING id",
-				UUID.class, "홍길동");
+				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id",
+				UUID.class, "홍길동", "01012345678");
 
 		accountId = jdbcTemplate.queryForObject(
 				"INSERT INTO prepaid_accounts (customer_id, balance) VALUES (?, 10000) RETURNING id",

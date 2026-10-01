@@ -55,7 +55,7 @@ class PrepaidJpaMappingTest {
 				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, ?, ?, 'STAFF') RETURNING id",
 				UUID.class, loginId, "hashed-password", "매핑 테스트 직원");
 		customerId = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name) VALUES (?) RETURNING id", UUID.class, "매핑고객");
+				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id", UUID.class, "매핑고객", "01012345678");
 	}
 
 	@Test
