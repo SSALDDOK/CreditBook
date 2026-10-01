@@ -57,7 +57,7 @@ class CustomerTest {
 	@NullAndEmptySource
 	@DisplayName("연락처를 입력하지 않으면 등록이 거절된다")
 	void register_rejects_missing_phone(String phone) {
-		// given: null, 빈 문자열 (연락처 필수 — 2026-09-30 사용자 결정)
+		// given: null, 빈 문자열 (연락처 필수)
 
 		// when / then
 		assertThatThrownBy(() -> Customer.register("김단골", phone, NOW))
