@@ -63,8 +63,8 @@ public class Customer {
 
 	/**
 	 * 고객을 등록한다 (REQ-1). 이름은 앞뒤 공백을 지워 저장한다.
-	 * 연락처는 필수다 (2026-09-30 사용자 결정). customers.phone 은 V1 에서 NULL 을 허용하지만
-	 * DB 의 NOT NULL 전환은 별도 기술 설계로 미뤘으므로, 지금은 이 도메인 검증이 필수 규칙을 지킨다.
+	 * 연락처는 필수다. customers.phone 은 V1 에서 NULL 을 허용하므로
+	 * 이 도메인 검증이 필수 규칙을 지킨다.
 	 *
 	 * @param phone 숫자 9–11자리
 	 * @throws InvalidCustomerNameException 이름이 null·공백뿐이거나 20자를 넘을 때
