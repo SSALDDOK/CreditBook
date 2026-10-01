@@ -16,6 +16,16 @@ public enum ErrorCode {
 	INVALID_CUSTOMER_NAME(HttpStatus.BAD_REQUEST, "이름을 확인해 주세요."),
 	INVALID_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "연락처는 숫자 9–11자리여야 합니다."),
 
+	// 400 — 선결제 도메인 규칙 (message 에 도메인이 정한 사유가 실린다)
+	INVALID_AMOUNT(HttpStatus.BAD_REQUEST, "금액을 확인해 주세요."),
+	CHARGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "1회 충전 한도를 넘었습니다."),
+
+	// 401 — 인증
+	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
+
+	// 404 — 대상 없음
+	CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "고객을 찾을 수 없습니다."),
+
 	// 4xx — Spring MVC 가 판단하는 요청 오류
 	NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
 	METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."),
