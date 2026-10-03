@@ -8,8 +8,7 @@
   - 스프린트 보드: `collection://cb292543-5bea-46aa-8970-9191533e66df`
 - 워크스페이스 인덱스(결정 로그 등): 리포와 별개로 Claude 계정의 Project 문서에 있다 — 필요하면 사용자에게 요청
 
-마지막 동기화: 2026-10-01 (요청 2건 반영 — 새 이슈 CB-34~38과 스프린트 배치, CB-28 범위 축소, REQ-10 → S3, 공개 산출물 표기 규칙. 개발 컨벤션 §1.3·스키마 정의서 §3.2·§3.4·§4는 Notion 반영 `완료` 확인)
-2026-10-01 기준 리포가 Notion보다 앞선 것은 없다. V2(`customers.phone` NOT NULL)는 Notion에 "Neon 적용 전"으로 적혀 있으며, Neon에 적용하면 인수인계 요청으로 알린다
+마지막 동기화: 2026-10-03 (요구사항 대표 Jira 키·작성 규칙 6 반영). 리포가 Notion보다 앞선 것: V2 Neon 적용(2026-10-03) — 스키마 정의서의 "Neon 적용 전" 표기 수정을 인수인계 요청으로 넘겼다
 
 ## 세션 시작 점검 (Notion 읽기 전용)
 1. **인수인계 요청 DB**: `담당 = Claude Code`, `상태 = 대기`인 행을 확인해 사용자에게 알린다. 처리는 사용자가 승인한 뒤에 한다 (알림만, 자동 처리 없음)
@@ -32,56 +31,39 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 4. 코워크가 스키마 정의서·개발 컨벤션 등에 옮겨 적는다. 그때까지 리포가 Notion보다 앞서 있는 것은 허용되며, 불일치는 이 요청 행으로 추적한다
 - 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
-## 스프린트 로드맵 (현재: S2 — 09.28 시작, 이월분 09.29 완료, 09.30 도메인 착수)
-1인 6주 포트폴리오, 1주 스프린트 6개. S1은 문서·설계만 끝내고 종료됐고, 백엔드 셋업은 S2로 이월됐다. **S2 첫 작업은 이월분(CB-5·CB-6·CB-7)이다** — 셋업이 끝나기 전에는 S2 본 목표(도메인 API)나 문서 개편을 새로 시작하지 않는다 (S1 회고 Try #1).
+## 스프린트 로드맵 (현재: S2)
+1인 6주 포트폴리오, 1주 스프린트 6개.
 
-S2 이월분 (2026-09-29 기준 — 모두 완료):
-- [x] Spring Boot 프로젝트 생성 + DDD 패키지 구조 — CB-6, PR #2
-- [x] Neon 연결 — `bootRun`으로 DB `UP` 확인 (이월 DoD 1 충족)
-- [x] `V1__init.sql` 작성·검증 — CB-5·CB-7, PR #3·#4. CI에서 테스트 21건 통과
-- [x] `V1__init.sql`을 Neon에 실제 적용 (2026-09-29, 사용자 확인 후 `bootRun`) — `flyway_schema_history` v1 `success = true`, 테이블 6개·트리거 2개·`fn_ledger_entries_append_only` 확인, health `UP`
-- [x] GitHub 저장소 — https://github.com/SSALDDOK/CreditBook (공개)
-- [x] 최소 CI + `main` 브랜치 보호 (이월 DoD 2 "main push 시 CI 통과" 충족)
-- [x] 사용자 PC에 Docker Desktop 설치 (2026-09-29, WSL 2 백엔드) — 로컬 `./gradlew build`에서 Testcontainers 테스트 21건 실행·통과(스킵 0). 테스트 중에만 Docker Desktop이 켜져 있으면 된다
-
-이월분이 모두 끝났으므로 S2 본 목표에 들어간다. CB-5·CB-6·CB-7 완료 처리와 스프린트 보드 갱신은 인수인계 요청으로 넘겼다.
-
-**S2 범위 조정** (2026-09-29 사용자 결정, Jira 반영 완료): 남은 5일에 이슈 14건은 과부하라 줄였다. 설계 결정과 V1 스키마는 그대로다.
-- S2에 남은 이슈: CB-8(사용 취소 `cancelUse`), CB-13(REQ 태그·JaCoCo), CB-24~31(고객 등록·목록, 충전·금액 검증, 사용·잔액 부족, BigDecimal, 감사 기록)
-- S3로: CB-11(정합성 대사 통합 테스트)·CB-12(동시성 통합 테스트)·CB-32(프론트 초기 세팅 + 고객 목록 화면)·CB-33(REQ-14 거래 수정·삭제 API 부재 검증)
-- S4로: CB-9(충전 취소 `cancelCharge`, REQ-7)·CB-10(반제 대상 검증 전반). 단 **사용 취소의 대상 검증**(USE가 아닌 거래·다른 계좌 거래·이미 취소된 건 거절)은 CB-8에서 함께 구현한다
-- 통합 테스트는 S3에서 한 번에 작성한다. S2 API는 도메인 단위 테스트와 DB 제약(`ck_prepaid_accounts_balance_non_negative`·`@Version`)을 안전장치로 삼는다 (2026-09-30 사용자 결정)
-
-**10-01 추가 조정** (사용자 결정, Jira 반영 완료):
-- CB-27(금액 검증)·CB-29(잔액 부족)는 서버 몫(API 응답에 사유·현재 잔액·부족액)이 끝나면 S2에서 완료한다. 화면 표시는 S4 프론트 이슈 CB-36(충전 모달, SCR-6)·CB-37(사용 화면, SCR-7)의 인수조건으로 넘겼다
-- CB-28(사용 API)에서 **비활성 고객 사용 거부는 뺀다** → CB-35에서 다룬다
-- 멱등키는 S2 API에서 쓰지 않는다(`idempotency_key` NULL). REQ-10(중복 차감 방지) 목표 스프린트를 S4 → S3로 옮겼다
-- S3 새 이슈와 선행 순서: CB-34(멱등키, REQ-10) → CB-14(사용 취소 API, REQ-34), CB-38(고객 비활성화, REQ-4) → CB-35(재활성화·비활성 고객 사용 거부, REQ-33). CB-14는 인증도 선행한다(인수조건에 권한 거절 포함)
+**이슈 배치에서 지켜야 할 것** (2026-09-29·10-01 사용자 결정, Jira 반영 완료):
+- S2 남은 이슈: CB-28(사용 API)·CB-29(잔액 부족, CB-28과 함께), CB-31(감사 기록), CB-13(REQ 태그·JaCoCo)
+- **사용 취소의 대상 검증**(USE가 아닌 거래·다른 계좌 거래·이미 취소된 건 거절)은 CB-8에 있다. 충전 취소(CB-9)와 반제 검증 전반(CB-10)은 S4
+- 통합 테스트(CB-11 대사·CB-12 동시성·CB-33 REQ-14 API 부재)는 S3에서 한 번에 쓴다. S2 API는 도메인 단위 테스트와 DB 제약(`ck_prepaid_accounts_balance_non_negative`·`@Version`)을 안전장치로 삼는다
+- CB-27·CB-29는 서버 몫(API 응답에 사유·현재 잔액·부족액)이 끝나면 완료한다. 화면 표시는 S4의 CB-36(충전 모달, SCR-6)·CB-37(사용 화면, SCR-7)이 맡는다
+- CB-28은 **비활성 고객 사용 거부를 빼고** 만든다(CB-35). S2 API는 멱등키를 받지 않는다(`idempotency_key` NULL, CB-34)
+- S3 선행 순서: CB-34(멱등키) → CB-14(사용 취소 API, 인증도 선행), CB-38(고객 비활성화) → CB-35(재활성화·비활성 고객 사용 거부)
 
 | 스프린트 | 기간 | 목표 |
 |---|---|---|
-| S1 (완료, 일부 이월) | 09.21–09.27 | 요구사항 33건 확정, 설계 문서, 도메인 모델. 백엔드 뼈대·CI는 S2로 이월 |
-| **S2** | 09.28–10.04 | **이월된 백엔드 셋업 + 최소 CI** → 충전·사용·사용 취소로 잔액이 정확히 변하는 것을 단위 테스트로 증명. 고객·충전·사용 API |
+| S1 (완료) | 09.21–09.27 | 요구사항 33건 확정, 설계 문서, 도메인 모델 |
+| **S2** | 09.28–10.04 | 백엔드 셋업·최소 CI(완료) → 충전·사용·사용 취소로 잔액이 정확히 변하는 것을 단위 테스트로 증명. 고객·충전·사용 API |
 | S3 | 10.05–10.11 | 인증, REST API 완성(사용 취소 API·멱등키·고객 비활성화·재활성화 포함) + 통합 테스트(대사·동시성·REQ-14 API 부재), React 첫 화면, E2E 착수 |
 | S4 | 10.12–10.18 | 충전 취소, 프론트-백 연동(충전 모달·사용 화면), 거래 이력 조회, E2E 스모크 |
 | S5 | 10.19–10.25 | 보안 점검과 탐색적 테스트, 버그 픽스 |
 | S6 | 10.26–11.01 | 배포 파이프라인, 배포, 문서 마무리 |
 
-최소 CI는 S2 이월분에서 가장 먼저 세운다 — "CI 실패 상태에서 병합 금지" 규칙은 코드가 생기는 순간부터 적용되기 때문이다. S6에는 배포 파이프라인만 남는다.
-
 ## 서브에이전트 구성 계획
-`.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev 하나만 있다. S2 범위 조정으로 프론트 화면과 통합 테스트가 S3로 옮겨져, test-writer·frontend-dev도 S3에 추가한다. S2 도메인 단위 테스트는 backend-dev가 겸한다.
+`.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev 하나만 있고, S2 도메인 단위 테스트는 backend-dev가 겸한다.
 
 **작업 배정은 먼저 제안하고 컨펌받는다** (2026-09-30 사용자 요청): 할 일이 생기면 Claude Code가 "무슨 일을 → 어느 에이전트(또는 Claude Code 본인)에게 → 왜"를 먼저 말하고, 사용자가 컨펌한 뒤에 에이전트를 띄운다.
 
 | 이름 | 역할 | 필요 시점 |
 |---|---|---|
 | backend-dev | Spring Boot 도메인/API 구현 | S1부터 |
-| frontend-dev | React + Vite UI 구현 | S3부터 (CB-32 이동) |
-| test-writer | JUnit5 + Playwright 작성·실행 | S3부터 (통합 테스트 이동) |
+| frontend-dev | React + Vite UI 구현 | S3부터 (CB-32) |
+| test-writer | JUnit5 + Playwright 작성·실행 | S3부터 (통합 테스트) |
 | code-reviewer | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3부터 — PR이 실제로 쌓이기 시작하면 |
 
-에이전트를 새로 만들 때는 [docs/claude-code-guide.md](docs/claude-code-guide.md)의 "새 에이전트 추가 절차"를 따른다. **요청 전에** 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
+에이전트를 새로 만들 때는 [.claude/claude-code-guide.md](.claude/claude-code-guide.md)의 "새 에이전트 추가 절차"를 따른다. **요청 전에** 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
 
 ## 프로젝트 개요
 카페/식당 선결제 잔액 관리 웹앱. 결제 처리(PG)는 범위 밖 — 이미 받은 선결제를 기록·차감만 하는 장부 도구.
@@ -90,11 +72,8 @@ S2 이월분 (2026-09-29 기준 — 모두 완료):
 
 ## 기술 스택
 - 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + **Spring Boot 4.0.8**, DDD 구조. 리포의 `backend/` 하위 (2026-09-28 결정: 3.5 라인은 OSS 지원 종료, 4.1보다 검증 기간이 긴 4.0 라인. Boot 4에서는 `@MockBean` 대신 `@MockitoBean`)
-- DB: PostgreSQL (Neon, 서버리스)
-- 테스트: JUnit5(단위) + Playwright(E2E)
-- 마이그레이션: Flyway
-- 배포: Vercel(FE) + Render(BE) + GitHub Actions(CI/CD)
-- 도구 간 연결(Docker·Testcontainers vs Neon, Flyway 동작, 의존성 읽는 법, 육안 확인 방법, 병합 역할 분담)은 [docs/dev-environment-guide.md](docs/dev-environment-guide.md)에 설명돼 있다. 사용자가 도구 동작을 물으면 이 문서를 기준으로 답하고, 환경이 바뀌면 함께 고친다
+- DB: PostgreSQL (Neon, 서버리스) · 마이그레이션: Flyway · 테스트: JUnit5(단위) + Playwright(E2E) · 배포: Vercel(FE) + Render(BE) + GitHub Actions(CI/CD)
+- 도구 간 연결(Docker·Testcontainers vs Neon, Flyway 동작, 의존성 읽는 법, 육안 확인 방법)은 [docs/dev-environment-guide.md](docs/dev-environment-guide.md)에 설명돼 있다. 사용자가 도구 동작을 물으면 이 문서를 기준으로 답하고, 환경이 바뀌면 함께 고친다
 
 ## 패키지 구조 (DDD, 도메인 최상위)
 계층을 최상위로 두지 않는다. `controller / service / repository` 로 나누면 한 기능을 고칠 때 세 폴더를 오가야 하고 도메인 경계가 드러나지 않는다.
@@ -178,7 +157,7 @@ com.creditbook
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
 
-- `V1__init.sql`은 **2026-09-29 Neon에 적용됐다. 이제 V1은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 스키마 변경은 `V2__...sql`부터 새 파일로 만든다.
+- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 스키마 변경은 `V3__...sql`부터 새 파일로 만든다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
 - **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
@@ -205,7 +184,7 @@ com.creditbook
 
 ## Git / 커밋 규칙
 - GitHub Flow만 사용 (develop 브랜치 없음). `main`은 항상 배포 가능, PR로만 병합
-- Jira 프로젝트 키는 **`CB`**다 (이전 `KAN`에서 확정 변경). S1~S6 작업 이슈는 CB-4~CB-23으로 생성돼 있다
+- 저장소: https://github.com/SSALDDOK/CreditBook (공개). Jira 프로젝트 키는 **`CB`**
 - 브랜치: `feature/CB-42-charge-api`, `fix/CB-57-balance-boundary` — Jira 키 포함
 - 커밋: `<type>(<Jira 키>): <한 줄 요약>` — type은 feat/fix/test/refactor/docs/chore
 - **PR 제목 맨 앞에 Jira 키**: `CB-24 고객 등록 API`. 한 PR에 여러 이슈가 있으면 모두 적는다(`CB-27 CB-29 ...`). Jira의 GitHub for Atlassian 연동이 브랜치·커밋·PR 제목의 키로 이슈를 연결하는데, 브랜치는 병합 후 지우므로 PR 제목에 키가 남아야 한다 (2026-09-30)
@@ -215,9 +194,9 @@ com.creditbook
 - Jira 이슈가 없는 설정·문서 작업은 `chore/<설명>` 브랜치 (개발 컨벤션 §1.1)
 - **`main` 브랜치 보호** (2026-09-28): 필수 검사 `backend build & test` 통과, 최신 `main` 기준 검사 필수, 관리자 포함, PR로만 반영(승인자 0명), 강제 push·삭제 금지. **CLAUDE.md 한 줄도 이 절차를 거친다**
 - 흐름: 로컬 커밋 → 브랜치 push → PR → CI 🟢 → Merge(= `main` 반영) → `main` CI 자동 실행
+- **병합 역할**: 브랜치·커밋·push·PR 생성·CI 확인·병합 요청은 Claude Code. GitHub에서 병합(**Create a merge commit**)은 사용자. 병합 뒤 로컬 `main` 최신화(`git pull --ff-only`)와 로컬·원격 브랜치·worktree 삭제는 Claude Code
 - 병합 방식은 **merge commit** (squash·rebase 금지 — 쌓인 PR의 커밋이 어긋난다)
-- **쌓인 PR(stacked)을 병합할 때**: 앞 PR 병합 → **다음 PR의 base를 먼저 `main`으로 바꾼 뒤** 앞 브랜치를 삭제한다. 브랜치를 먼저 지우면 GitHub가 다음 PR을 자동으로 옮기지 않고 **닫아 버린다** (2026-09-28 #2에서 발생, 복구함)
-
+- **쌓인 PR(stacked)을 병합할 때**: 앞 PR 병합 → **다음 PR의 base를 먼저 `main`으로 바꾼 뒤** 앞 브랜치를 삭제한다. 브랜치를 먼저 지우면 GitHub가 다음 PR을 자동으로 옮기지 않고 **닫아 버린다**
 ## 공개 산출물 표기 규칙 (2026-10-01 사용자 결정)
 - 채용 담당자가 보는 산출물(코드 주석, 커밋 메시지, PR 제목·본문, 리포 문서, Notion 문서·DB 행, Jira 설명·댓글)에는 "코워크"·"클로드 코드"·"Claude Code" 같은 도구 이름과 도구 사이의 협업 과정(의견 대기, 요청 주고받기)을 쓰지 않는다. 결정자를 "사용자"로 적는 것은 허용한다
 - 예외: 인수인계 요청 DB, 워크스페이스 인덱스, CLAUDE.md와 `.claude/` 같은 도구 설정 파일. Notion의 루트 검토자용 요약과 프로젝트 개요 §8 도구 분업 표의 AI 도구 공개 문구도 그대로 둔다(AI 활용을 숨기지 않는다)
@@ -231,17 +210,18 @@ com.creditbook
 - 통합 테스트는 Testcontainers (H2는 GENERATED 컬럼·부분 인덱스 동작이 달라 운영과 다르게 나옴)
 - 테스트는 실행 순서에 의존하지 않는다
 - 버그 수정은 재현 테스트 먼저 작성
-- **정합성 증명 테스트 3종**은 반드시 갖춘다. 3번(append-only DB 차단)은 CB-7에서 완료돼 CI에서 돌고 있어 S2 완료 기준에 남고, 1·2번은 S2 범위 조정으로 S3 완료 기준이 됐다(CB-11·CB-12):
+- **정합성 증명 테스트 3종**은 반드시 갖춘다. 3번은 CB-7에서 완료돼 CI에서 돈다. 1·2번은 S3(CB-11·CB-12):
   1. 대사 — 시나리오 실행 후 스키마 정의서 §6 쿼리가 모두 0행
   2. 동시성 — 같은 계좌 동시 차감 시 초과분은 409, 최종 잔액 = 성공 거래 합계
   3. append-only 차단 — 애플리케이션 계정으로 `ledger_entries` UPDATE/DELETE 시도가 실패
 - 도메인 테스트에는 `@DisplayName`에 더해 `@Tag("REQ-xxx")` — 요구사항 명세 DB의 REQ ID와 연결
+- 요구사항 "상태"는 구현 진행을, 검증 여부는 연결된 TC의 "실행 결과"로 본다 (요구사항 명세서 작성 규칙 6). 서버가 끝나도 화면 검증 E2E TC가 미실행이면 그 요구사항의 검증은 끝나지 않았다. 요구사항 DB의 "Jira 키"는 그 요구사항을 마지막으로 끝내는 이슈 1개, 나머지는 "관련 Jira"
 - CI에 JaCoCo 커버리지 리포트, `domain` 패키지에는 PIT 뮤테이션 테스트
 
 ## Neon 연결
 1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
 2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
-3. Flyway는 `bootRun`마다 대기 중인 마이그레이션을 Neon에 자동 적용한다 (V1은 2026-09-29 적용 완료). 따라서 **새 `V2__...sql` 이상을 만든 뒤의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
+3. Flyway는 `bootRun`마다 대기 중인 마이그레이션을 Neon에 자동 적용한다 (V1·V2 적용 완료). 따라서 **새 마이그레이션 파일을 만든 뒤의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
 4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
