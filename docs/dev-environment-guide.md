@@ -147,19 +147,13 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 - Spring Security + JWT 라이브러리 (S3, 인증·권한)
 - PIT 뮤테이션 테스트 (`domain` 패키지 테스트가 버그를 실제로 잡는지 검증)
 
-## 6. PR 병합과 정리 — 역할 분담
+## 6. PR 병합과 정리
 
-| 단계 | 담당 |
-|---|---|
-| 브랜치·커밋·push·PR 생성, CI 통과 확인, **병합 요청** | Claude Code |
-| GitHub에서 병합 (**Create a merge commit** → Confirm merge) | 사용자 |
-| 로컬 `main` 최신화, 로컬·원격 브랜치 삭제, 병합 후 `main` CI 확인 | Claude Code |
-
-- 병합 방식은 merge commit만 쓴다 (squash·rebase 금지)
+- GitHub에서 **Create a merge commit** → Confirm merge로 병합한다. 병합 방식은 merge commit만 쓴다 (squash·rebase 금지)
 - CI(`backend build & test`)가 통과하지 않으면 `main` 보호 규칙 때문에 병합 버튼이 막힌다
 - 쌓인 PR이 있으면 원격 브랜치를 지우기 전에 다음 PR의 base를 `main`으로 먼저 바꾼다 (CLAUDE.md 병합 절차)
 
-Claude Code가 하는 로컬 정리:
+병합 후 로컬 정리:
 ```powershell
 git switch main
 git pull --ff-only
