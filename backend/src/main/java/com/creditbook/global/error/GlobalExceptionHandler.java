@@ -15,6 +15,10 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
+import com.creditbook.global.security.UnauthenticatedException;
+import com.creditbook.prepaid.domain.ChargeLimitExceededException;
+import com.creditbook.prepaid.domain.InvalidAmountException;
+import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 import jakarta.persistence.OptimisticLockException;
 
@@ -74,6 +78,30 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidPhoneNumberException.class)
 	ResponseEntity<ErrorResponse> handleInvalidPhoneNumber(InvalidPhoneNumberException ex) {
 		return respond(ErrorCode.INVALID_PHONE_NUMBER, ErrorResponse.of(ErrorCode.INVALID_PHONE_NUMBER, ex.getMessage()));
+	}
+
+	/** 1회 충전 한도 초과. {@link InvalidAmountException} 의 하위 타입이라 코드를 따로 주려고 별도 처리기를 둔다. */
+	@ExceptionHandler(ChargeLimitExceededException.class)
+	ResponseEntity<ErrorResponse> handleChargeLimitExceeded(ChargeLimitExceededException ex) {
+		return respond(ErrorCode.CHARGE_LIMIT_EXCEEDED, ErrorResponse.of(ErrorCode.CHARGE_LIMIT_EXCEEDED, ex.getMessage()));
+	}
+
+	/** 거래 금액 규칙 위반 (0 이하, 소수점, 범위 초과 등). 사유는 도메인 문구를 그대로 싣는다. */
+	@ExceptionHandler(InvalidAmountException.class)
+	ResponseEntity<ErrorResponse> handleInvalidAmount(InvalidAmountException ex) {
+		return respond(ErrorCode.INVALID_AMOUNT, ErrorResponse.of(ErrorCode.INVALID_AMOUNT, ex.getMessage()));
+	}
+
+	@ExceptionHandler(PrepaidAccountNotFoundException.class)
+	ResponseEntity<ErrorResponse> handleAccountNotFound(PrepaidAccountNotFoundException ex) {
+		return respond(ErrorCode.CUSTOMER_NOT_FOUND, ErrorResponse.of(ErrorCode.CUSTOMER_NOT_FOUND));
+	}
+
+	/** 현재 직원을 알 수 없는 요청. 정상적인 거절이므로 WARN. */
+	@ExceptionHandler(UnauthenticatedException.class)
+	ResponseEntity<ErrorResponse> handleUnauthenticated(UnauthenticatedException ex) {
+		log.warn("request rejected: unauthenticated");
+		return respond(ErrorCode.UNAUTHENTICATED, ErrorResponse.of(ErrorCode.UNAUTHENTICATED));
 	}
 
 	/** 같은 계좌를 동시에 바꿔 @Version 검사에 걸린 경우. 정상 동작이므로 WARN. */
