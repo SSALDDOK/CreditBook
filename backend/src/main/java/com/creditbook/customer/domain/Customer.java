@@ -33,7 +33,7 @@ public class Customer {
 	@Column(name = "name", nullable = false, length = NAME_MAX_LENGTH)
 	private String name;
 
-	@Column(name = "phone", length = 20)
+	@Column(name = "phone", nullable = false, length = 20)
 	private String phone;
 
 	@Column(name = "memo", length = 200)
@@ -63,8 +63,7 @@ public class Customer {
 
 	/**
 	 * 고객을 등록한다 (REQ-1). 이름은 앞뒤 공백을 지워 저장한다.
-	 * 연락처는 필수다. customers.phone 은 V1 에서 NULL 을 허용하므로
-	 * 이 도메인 검증이 필수 규칙을 지킨다.
+	 * 연락처는 필수다. DB(customers.phone NOT NULL, V2)와 이 도메인 검증이 함께 지킨다.
 	 *
 	 * @param phone 숫자 9–11자리
 	 * @throws InvalidCustomerNameException 이름이 null·공백뿐이거나 20자를 넘을 때
