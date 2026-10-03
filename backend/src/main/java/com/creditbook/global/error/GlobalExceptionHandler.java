@@ -17,6 +17,7 @@ import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
+import com.creditbook.prepaid.domain.InsufficientBalanceException;
 import com.creditbook.prepaid.domain.InvalidAmountException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
@@ -90,6 +91,18 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidAmountException.class)
 	ResponseEntity<ErrorResponse> handleInvalidAmount(InvalidAmountException ex) {
 		return respond(ErrorCode.INVALID_AMOUNT, ErrorResponse.of(ErrorCode.INVALID_AMOUNT, ex.getMessage()));
+	}
+
+	/**
+	 * 잔액보다 큰 금액 사용 (REQ-9). 사유 문구와 함께 현재 잔액·부족액을 details 에 싣는다.
+	 * 정상적인 거절이라 WARN 로그는 서비스가 계좌 ID 와 함께 남기고 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(InsufficientBalanceException.class)
+	ResponseEntity<ErrorResponse> handleInsufficientBalance(InsufficientBalanceException ex) {
+		ErrorResponse.InsufficientBalanceDetails details =
+				new ErrorResponse.InsufficientBalanceDetails(ex.getBalance(), ex.getShortage());
+		return respond(ErrorCode.INSUFFICIENT_BALANCE,
+				ErrorResponse.of(ErrorCode.INSUFFICIENT_BALANCE, ex.getMessage(), details));
 	}
 
 	@ExceptionHandler(PrepaidAccountNotFoundException.class)

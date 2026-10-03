@@ -19,6 +19,8 @@ public enum ErrorCode {
 	// 400 — 선결제 도메인 규칙 (message 에 도메인이 정한 사유가 실린다)
 	INVALID_AMOUNT(HttpStatus.BAD_REQUEST, "금액을 확인해 주세요."),
 	CHARGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "1회 충전 한도를 넘었습니다."),
+	/** 잔액보다 큰 금액 사용 (REQ-9). 현재 잔액·부족액은 응답의 details 에 실린다. */
+	INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "잔액이 부족합니다."),
 
 	// 401 — 인증
 	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
