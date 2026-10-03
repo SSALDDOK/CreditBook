@@ -120,7 +120,7 @@ class CustomerControllerTest {
 	@ValueSource(strings = { "\"phone\": null", "\"phone\": \"\"", "\"memo\": \"연락처 필드 없음\"" })
 	@DisplayName("연락처를 입력하지 않으면 400으로 거절하고 등록하지 않는다")
 	void register_rejects_missing_phone_with_400(String phoneField) throws Exception {
-		// given: null, 빈 문자열, 필드 누락 (연락처 필수 — 2026-09-30 사용자 결정)
+		// given: null, 빈 문자열, 필드 누락 (연락처 필수)
 
 		// when / then
 		mockMvc.perform(post("/api/customers")
