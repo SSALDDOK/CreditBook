@@ -63,6 +63,8 @@ class PrepaidAccountUseTest {
 			"0,    1,    false, 1",
 	})
 	@Tag("REQ-9")
+	@Tag("TC-2")
+	@Tag("TC-3")
 	@DisplayName("잔액과 같은 금액까지는 사용할 수 있고 1원이라도 넘으면 부족 금액과 함께 거절된다")
 	void use_balance_boundaries(long balance, long amount, boolean accepted, long shortage) {
 		// given
@@ -84,6 +86,7 @@ class PrepaidAccountUseTest {
 
 	@ParameterizedTest(name = "{0}원 사용은 금액 오류로 거절된다")
 	@ValueSource(longs = { 0, -1 })
+	@Tag("REQ-8")
 	@DisplayName("0원·음수 사용은 잔액 부족이 아니라 금액 오류로 거절된다")
 	void use_rejects_non_positive_amount(long amount) {
 		// given

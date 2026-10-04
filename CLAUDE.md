@@ -215,7 +215,10 @@ com.creditbook
   1. 대사 — 시나리오 실행 후 스키마 정의서 §6 쿼리가 모두 0행
   2. 동시성 — 같은 계좌 동시 차감 시 초과분은 409, 최종 잔액 = 성공 거래 합계
   3. append-only 차단 — 애플리케이션 계정으로 `ledger_entries` UPDATE/DELETE 시도가 실패
-- 도메인 테스트에는 `@DisplayName`에 더해 `@Tag("REQ-xxx")` — 요구사항 명세 DB의 REQ ID와 연결
+- **테스트를 쓰기 전에 Notion 테스트 케이스 DB(`collection://cbd2d40a-c35a-41ba-974f-91f52caee287`)와 테스트 계획서를 확인한다** (2026-10-04 사용자 결정). 그 REQ의 TC가 정한 레벨(단위·통합·E2E)과 유형으로 쓰고, Jira 인수조건과 요구사항 DB 인수조건이 다르면 요구사항 DB를 따른다. TC 레벨이 통합이라 이번 스프린트에서 쓸 수 없으면 인수인계 요청 DB에 S3 이동을 요청한다
+- 도메인 테스트에는 `@DisplayName`에 더해 `@Tag("REQ-xxx")` — 요구사항 명세 DB의 REQ ID와 연결 (클래스 단위 태그 허용)
+- TC를 검증하는 테스트에는 REQ 태그와 함께 `@Tag("TC-n")`을 붙인다(대체 아님). 한 테스트가 여러 TC를 검증하면 여러 개 붙인다. TC 실행 결과는 이 태그가 붙은 테스트의 **main CI 결과로만** 판정하고(테스트 계획서 §5.1), TC 태그가 든 PR이 병합돼 CI가 통과하면 인수인계 요청 DB에 "TC-n Pass" 보고(TC 번호, 테스트 클래스#메서드, PR 번호, CI 실행 링크, 날짜)를 쓴다
+- 도메인 패키지 라인 커버리지 80% 미만이면 `build`가 실패한다(`jacocoTestCoverageVerification`, REQ-21·TC-32). 게이트 동작은 `./gradlew jacocoTestCoverageVerification -PdomainLineCoverageMin=0.99`로 확인한다(PowerShell에서는 `-P` 인자를 따옴표로 감싼다)
 - 요구사항 "상태"는 구현 진행을, 검증 여부는 연결된 TC의 "실행 결과"로 본다 (요구사항 명세서 작성 규칙 6). 서버가 끝나도 화면 검증 E2E TC가 미실행이면 그 요구사항의 검증은 끝나지 않았다. 요구사항 DB의 "Jira 키"는 그 요구사항을 마지막으로 끝내는 이슈 1개, 나머지는 "관련 Jira"
 - CI에 JaCoCo 커버리지 리포트, `domain` 패키지에는 PIT 뮤테이션 테스트
 

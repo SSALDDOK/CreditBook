@@ -22,6 +22,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class PrepaidAccountAmountIntegrityTest {
 
 	@Test
+	@Tag("TC-6")
 	@DisplayName("1원 단위 거래를 1,000건 반복해도 잔액 조회 시 거래 합계와 잔액이 정확히 일치한다")
 	void balance_equals_sum_of_entries_after_1000_one_won_entries() {
 		// given
