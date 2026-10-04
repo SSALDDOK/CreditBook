@@ -159,6 +159,24 @@ class UsageControllerTest {
 		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID);
 	}
 
+	@Test
+	@Tag("REQ-20")
+	@DisplayName("요청 본문에 클라이언트 시각을 넣어도 무시되고 서버 시각이 기록된다")
+	void performed_at_comes_from_server_clock_not_request_body() throws Exception {
+		// given
+		given(usageService.use(any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
+
+		// when
+		mockMvc.perform(post(URL)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\": 1000, \"performedAt\": \"2020-01-01T00:00:00Z\"}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.performedAt").value("2026-10-01T01:00:00Z"));
+
+		// then
+		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID);
+	}
+
 	@ParameterizedTest(name = "[{index}] 잔액 {0}원, 사용 {1}원 → 부족액 {2}원")
 	@CsvSource({
 			"3000, 5000, 2000",

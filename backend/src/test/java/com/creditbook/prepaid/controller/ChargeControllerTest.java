@@ -129,6 +129,24 @@ class ChargeControllerTest {
 		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID);
 	}
 
+	@Test
+	@Tag("REQ-20")
+	@DisplayName("요청 본문에 클라이언트 시각을 넣어도 무시되고 서버 시각이 기록된다")
+	void performed_at_comes_from_server_clock_not_request_body() throws Exception {
+		// given
+		given(chargeService.charge(any(), any(), any(), any())).willReturn(charged(10_000, 10_000, null));
+
+		// when
+		mockMvc.perform(post(URL)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\": 10000, \"performedAt\": \"2020-01-01T00:00:00Z\"}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.performedAt").value("2026-10-01T01:00:00Z"));
+
+		// then
+		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID);
+	}
+
 	@ParameterizedTest(name = "[{index}] {0}")
 	@ValueSource(strings = { "{}", "{\"amount\": null}", "{\"memo\": \"음료\"}" })
 	@DisplayName("금액을 입력하지 않으면 400으로 거절하고 충전하지 않는다")
