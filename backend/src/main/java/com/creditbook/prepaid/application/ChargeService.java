@@ -21,7 +21,7 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
  * 충전 유스케이스 (REQ-5). 트랜잭션 경계만 잡고, 금액 검증·한도·잔액 계산은 {@link PrepaidAccount} 가 한다.
  * <p>
  * 계좌의 잔액 변경(dirty checking 으로 UPDATE, @Version 증가)과 CHARGE 거래 추가가 한 트랜잭션에서 함께 반영되거나
- * 함께 취소된다. 같은 계좌에 동시에 충전·사용하면 늦게 커밋하는 쪽이 낙관적 락 충돌로 실패한다.
+ * 함께 취소된다. 같은 계좌에 동시에 충전·사용하면 늦게 커밋하는 쪽이 Optimistic Lock(낙관적 락) 충돌로 실패한다.
  */
 @Service
 public class ChargeService {

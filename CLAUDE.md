@@ -154,7 +154,7 @@ com.creditbook
 | `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` |
 | `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role` |
 | `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
-| `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version`(낙관적 락) |
+| `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version` — Optimistic Lock(낙관적 락) |
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
 
