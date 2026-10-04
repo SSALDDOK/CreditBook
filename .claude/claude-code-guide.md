@@ -7,11 +7,13 @@ CreditBook 리포의 `.claude/`에 들어 있는 도구를 언제, 어떻게 쓰
 
 | 종류 | 위치 | 누가 실행하나 | 확실하게 쓰는 법 |
 |---|---|---|---|
-| **커맨드** | `.claude/commands/` | 사용자가 입력할 때 | `/이름 인자` |
-| **Skill** | `.claude/skills/`, 전역 `~/.claude/skills/` | Claude가 작업 내용을 보고 판단해 불러온다 (빠질 수 있음) | 요청에 이름을 적는다 — "jpa-patterns 참고해서 ~" |
-| **에이전트** | `.claude/agents/` | 사용자가 요청할 때만 | "backend-dev 에이전트로 ~ 해줘" |
+| **커맨드** | `.claude/commands/` | 사용자가 입력하거나, Claude Code가 작업에 맞으면 직접 부른다 | `/이름 인자` |
+| **Skill** | `.claude/skills/`, 전역 `~/.claude/skills/` | Claude Code·에이전트가 작업 내용을 보고 불러온다 | 요청에 이름을 적는다 — "jpa-patterns 참고해서 ~" |
+| **에이전트** | `.claude/agents/` | 사용자가 컨펌한 뒤에만 | "backend-dev 에이전트로 ~ 해줘" |
 
-**원칙**: 규칙을 강제해야 하는 단계는 커맨드로 직접 부르고, skill은 평소엔 맡기되 특정 기준을 꼭 따르게 하고 싶을 때 이름을 적는다.
+**원칙** (2026-10-04): Claude Code는 작업을 시작할 때 커맨드·skill 목록을 확인하고 맞는 것을 직접 쓴다. 작업 배정을 제안할 때 "무슨 일 → 누구 → 왜 → 쓸 커맨드·skill"을 함께 적어 컨펌받는다. 커밋·PR 직전에는 `/cb-review-gate`를 기본으로 돌린다.
+
+**에이전트와 커맨드·skill**: 서브에이전트는 슬래시 커맨드를 입력할 수 없다. 대신 에이전트 정의의 `skills`에 적은 커맨드·skill은 시작할 때 내용이 미리 들어가고, `tools`에 `Skill`이 있으면 실행 중에 필요한 skill을 불러 쓴다. backend-dev는 `feature-dev`·`java-coding-standards`·`jpa-patterns`·`springboot-tdd`를 미리 불러오고 나머지는 필요할 때 부른다.
 
 ---
 
@@ -81,10 +83,10 @@ archify 요청 예 (포트폴리오 문서용):
 
 | 에이전트 | 역할 | 상태 |
 |---|---|---|
-| `backend-dev` | Spring Boot 도메인/API 구현, Flyway, 도메인 테스트. test-writer·code-reviewer가 생기기 전까지 그 역할도 겸함 (모델: opus) | 사용 중 |
-| `test-writer` | JUnit5 + Playwright 작성·실행 | S2 추가 예정 (백엔드 셋업 후) |
-| `frontend-dev` | React + Vite UI | S2 추가 예정 (백엔드 셋업 후) |
-| `code-reviewer` | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3 추가 예정 |
+| `backend-dev` | Spring Boot 도메인/API 구현, Flyway, 도메인 테스트. test-writer·code-reviewer가 생기기 전까지 그 역할도 겸함 (모델: opus). `/feature-dev` 1–5단계를 따르고 커밋·PR은 하지 않는다 | 사용 중 |
+| `test-writer` | JUnit5 + Playwright 실행·검증·개선안 제시 (테스트 작성은 사용자) | S3 추가 예정 (통합 테스트) |
+| `frontend-dev` | React + Vite UI | S3 추가 예정 (CB-32) |
+| `code-reviewer` | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3 추가 예정 (PR이 쌓이기 시작하면) |
 
 - **맡길 만한 것**: "backend-dev 에이전트로 CB-8 도메인 로직과 테스트까지 통째로 해줘" — 범위가 분명하고 메인 대화를 어지럽히고 싶지 않은 작업
 - **직접 하는 게 나은 것**: 작은 수정, 대화 맥락이 필요한 작업
@@ -102,7 +104,7 @@ archify 요청 예 (포트폴리오 문서용):
 2. CLAUDE.md의 절대 금지·계층 규칙·네이밍·테스트 규칙에 맞게 다듬는다 — 원본을 그대로 복사하지 않는다
 3. Codex/Cursor/Gemini 등 다른 도구용 설정은 가져오지 않는다 (Claude Code 전용)
 4. 함께 쓸 skill을 8~12개 골라 `.claude/skills/`에 추가하고, 무관한 프레임워크(Quarkus, Django 등) 예시는 이 프로젝트 스택(Spring Boot/Postgres) 예시로 바꾼다. 설명은 한국어로 쓰되 `description`의 영어 키워드는 남긴다(skill 자동 선택용)
-5. 기존 커맨드(`cb-review-gate`, `db-migration`, `feature-dev`)에 새 에이전트 이름을 반영해 참조를 갱신한다
+5. 기존 커맨드(`cb-review-gate`, `db-migration`, `feature-dev`)에 새 에이전트 이름을 반영해 참조를 갱신한다. 에이전트 정의에는 미리 불러올 커맨드·skill(`skills`)과 `tools`의 `Skill`을 넣는다 — 넣지 않으면 커맨드를 만들어 두고도 에이전트가 쓰지 않는다
 6. 에이전트 파일의 `model`을 정한다 (backend-dev는 opus)
 7. 이 문서의 에이전트 표와 skill 표를 갱신한다
 
