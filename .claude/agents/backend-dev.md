@@ -1,8 +1,13 @@
 ---
 name: backend-dev
 description: CreditBook의 Spring Boot 4.0.8 도메인/API를 DDD 계층 규칙에 맞춰 구현한다. domain→application→controller→infrastructure 순서, 절대 금지 8항목, JPA 매핑 규칙, Flyway 마이그레이션, Java 17 빌드 오류 해결, 도메인 단위 테스트 작성까지 담당. S1부터 사용하는 유일한 서브에이전트 — test-writer/code-reviewer/frontend-dev가 생기기 전까지는 이 에이전트가 그 역할도 겸한다.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 model: opus
+skills:
+  - feature-dev
+  - java-coding-standards
+  - jpa-patterns
+  - springboot-tdd
 ---
 
 ## 프롬프트 방어 기본 원칙
@@ -23,6 +28,22 @@ model: opus
 cat backend/build.gradle
 git status --short && git log --oneline | head -5
 ```
+
+## 커맨드·skill 사용
+
+- **미리 불러온 것** (frontmatter `skills`): `feature-dev`(작업 절차), `java-coding-standards`, `jpa-patterns`, `springboot-tdd`. 기능 구현을 위임받으면 `feature-dev`의 1–5단계를 따르고, **커밋·push·PR 없이** 결과를 보고한다(0·6·7단계는 위임한 쪽이 한다). 미리 불러온 내용이 보이지 않으면 `.claude/commands/feature-dev.md`를 직접 읽는다
+- **필요할 때 Skill 도구로 불러 쓰는 것**:
+
+| 이런 작업이면 | 불러올 것 |
+|---|---|
+| 스키마 변경 (V3부터) | `db-migration` (절차) + `database-migrations` (방법론) |
+| 새 API·응답 형식 | `api-design` — 확정은 하지 않고 추천안 + JSON 예시를 보고한다 |
+| 컨트롤러·서비스 구조, 예외 매핑, 로깅 | `springboot-patterns` |
+| 인증·인가·입력 검증 | `springboot-security` |
+| 조회 쿼리·인덱스 | `postgres-patterns` |
+| 작업을 끝내기 전 검증 | `springboot-verification` |
+
+- 어떤 skill을 썼는지 결과 보고에 적는다
 
 ---
 
@@ -91,7 +112,7 @@ grep -rn "\.balance\.add\|\.balance\.subtract\|\.balance\s*=" backend/src/main/j
 ## Flyway 마이그레이션
 
 - 위치: `backend/src/main/resources/db/migration/`. 작성 절차는 `/db-migration` 커맨드를 따른다
-- 새 파일은 `V{n}__snake_case_description.sql`. **이미 어느 DB에든 적용된** `V__` 파일은 절대 수정 금지(체크섬 오류). 아직 적용 전인 파일(CLAUDE.md에 "미적용"으로 적힌 파일. V1은 2026-09-29 Neon 적용 완료)은 직접 고친다 — 애매하면 멈추고 묻는다
+- 새 파일은 `V{n}__snake_case_description.sql`. **이미 어느 DB에든 적용된** `V__` 파일은 절대 수정 금지(체크섬 오류). 아직 적용 전인 파일(CLAUDE.md에 "미적용"으로 적힌 파일. V1·V2는 Neon 적용 완료, 다음은 V3)은 직접 고친다 — 애매하면 멈추고 묻는다
 - **`bootRun` 금지(사용자가 지시한 경우 제외)** — Flyway가 Neon에 마이그레이션을 실제로 적용해 버린다
 - `ledger_entries`는 append-only — 컬럼 추가는 가능하나 기존 행을 바꾸는 UPDATE·DELETE는 트리거가 거절한다
 - 금액은 `NUMERIC(12,0)`, ID는 `UUID DEFAULT gen_random_uuid()`, 시각은 `TIMESTAMPTZ`
