@@ -142,7 +142,8 @@ grep -rn "\.balance\.add\|\.balance\.subtract\|\.balance\s*=" backend/src/main/j
 - 통합 테스트는 Testcontainers (H2 금지, 위 이유 동일). `@RequiresDocker` + `@Import(TestcontainersConfiguration.class)`(postgres:18-alpine, Neon과 같은 메이저). 로컬에 Docker가 없으면 스킵되며 **스킵을 통과로 보고하지 않는다**
 - 제약 위반 테스트는 예외 타입뿐 아니라 **제약 이름**(`PSQLException.getServerErrorMessage().getConstraint()`) 또는 SQLSTATE까지 확인한다
 - 버그 수정은 재현 테스트를 먼저 작성해 실패를 확인한 뒤 고친다
-- 도메인 테스트에 `@Tag("REQ-xxx")`를 붙여 요구사항 명세 DB와 연결한다
+- 도메인 테스트에 `@Tag("REQ-xxx")`를 붙여 요구사항 명세 DB와 연결한다. 요청에 TC ID가 적혀 있으면 그 TC를 검증하는 테스트에 `@Tag("TC-n")`도 붙이고(여러 TC면 여러 개), TC가 정한 레벨(단위·통합)로 쓴다. 요청에 적힌 TC 레벨과 다르게 써야 하면 멈추고 보고한다
+- domain 패키지 라인 커버리지가 80% 미만이면 `build`가 실패한다 (`jacocoTestCoverageVerification`)
 - **정합성 증명 테스트 3종**: 대사(스키마 정의서 §6 쿼리 0행), 동시성(초과분 409·최종 잔액 일치), append-only 차단(애플리케이션 계정 UPDATE/DELETE 실패)
 
 ## Neon 연결

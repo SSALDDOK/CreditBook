@@ -59,6 +59,7 @@ class PrepaidJpaMappingTest {
 	}
 
 	@Test
+	@Tag("REQ-19")
 	@DisplayName("계좌와 거래를 저장하면 DB 가 seq 와 signed_amount 를 채우고 잔액·balance_after 가 그대로 저장된다")
 	void persisted_entries_read_back_db_generated_columns() {
 		// given
@@ -147,6 +148,7 @@ class PrepaidJpaMappingTest {
 	}
 
 	@Test
+	@Tag("REQ-10")
 	@DisplayName("계좌 잔액이 바뀌면 version 이 올라간다")
 	void version_increments_when_balance_changes() {
 		// given

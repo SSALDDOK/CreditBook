@@ -18,6 +18,7 @@ class PrepaidAccountChargeTest {
 
 	@Test
 	@Tag("REQ-5")
+	@Tag("TC-1")
 	@DisplayName("잔액 0원 고객에게 50,000원 충전을 등록하면 잔액이 50,000원이 되고 CHARGE 유형 거래가 1건 생성된다")
 	void charge_increases_balance_and_creates_charge_entry() {
 		// given
@@ -59,6 +60,7 @@ class PrepaidAccountChargeTest {
 	}
 
 	@Test
+	@Tag("REQ-5")
 	@DisplayName("빈 메모는 저장하지 않고 앞뒤 공백은 지운다")
 	void blank_memo_is_stored_as_null_and_memo_is_stripped() {
 		// given

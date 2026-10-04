@@ -26,6 +26,7 @@ class PrepaidAccountCancelUseTest {
 	private static final String REASON = "주문 착오";
 
 	@Test
+	@Tag("TC-33")
 	@DisplayName("사용 건을 취소하면 원 거래는 그대로 두고 USE_CANCEL 반제 거래가 추가되어 잔액이 사용 금액만큼 복구된다")
 	void cancel_use_adds_use_cancel_entry_and_restores_balance() {
 		// given
@@ -70,6 +71,7 @@ class PrepaidAccountCancelUseTest {
 	@ParameterizedTest(name = "사유 [{0}] 로는 취소할 수 없다")
 	@NullAndEmptySource
 	@ValueSource(strings = { "   ", "\t" })
+	@Tag("TC-34")
 	@DisplayName("사용 취소는 사유가 필수다")
 	void cancel_use_requires_reason(String reason) {
 		// given
@@ -127,6 +129,7 @@ class PrepaidAccountCancelUseTest {
 	}
 
 	@Test
+	@Tag("TC-34")
 	@DisplayName("이미 취소된 사용 건은 다시 취소할 수 없다")
 	void cancel_use_rejects_already_cancelled_use() {
 		// given

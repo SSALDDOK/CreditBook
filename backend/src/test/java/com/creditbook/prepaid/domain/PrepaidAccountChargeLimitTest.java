@@ -31,6 +31,8 @@ class PrepaidAccountChargeLimitTest {
 			"10000,  10000,  ACCEPTED",
 			"10000,  10001,  LIMIT_EXCEEDED",
 	})
+	@Tag("TC-4")
+	@Tag("TC-5")
 	@DisplayName("0원·음수·1회 충전 한도 초과 금액은 충전되지 않는다")
 	void charge_amount_boundaries(long maxAmount, long amount, String expected) {
 		// given
@@ -61,6 +63,7 @@ class PrepaidAccountChargeLimitTest {
 	}
 
 	@Test
+	@Tag("TC-5")
 	@DisplayName("충전 한도는 1회 한도이며 잔액 상한이 아니다 — 여러 번 충전해 30만원을 넘을 수 있다")
 	void limit_applies_per_charge_not_to_balance() {
 		// given
