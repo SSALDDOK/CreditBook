@@ -12,9 +12,9 @@ CreditBook에서 새 기능을 구현하는 표준 절차다. **입력**: $ARGUM
 | 단계 | 담당 |
 |---|---|
 | 0 브랜치, 5 `/cb-review-gate`, 6 커밋, 7 PR | Claude Code (CLAUDE.md "병합 역할") |
-| 1–4 설계·테스트·구현·빌드, 5의 자가 점검 | `backend-dev`에게 위임하면 backend-dev. 작은 작업은 Claude Code가 직접 |
+| 1–4 설계·테스트·구현·빌드, 5의 자가 점검 | 서버는 `backend-dev`, 화면은 `frontend-dev`에게 위임. 작은 작업은 Claude Code가 직접 |
 
-`backend-dev`는 이 커맨드를 미리 불러온 상태로 시작한다(에이전트 정의의 `skills`). 위임받으면 1–5단계를 하고 **커밋·push·PR 없이** 결과를 보고한다.
+`backend-dev`·`frontend-dev`는 이 커맨드를 미리 불러온 상태로 시작한다(에이전트 정의의 `skills`). 위임받으면 1–5단계를 하고 **커밋·push·PR 없이** 결과를 보고한다. 화면 기능이면 1–4단계 대신 아래 "화면 기능일 때" 절을 따른다.
 
 ## 0단계 — 브랜치
 
@@ -55,9 +55,16 @@ cd backend && ./gradlew build   # 실행·스킵·실패 수를 확인한다 (Do
 ```
 주석·Javadoc만 바뀌면 test가 UP-TO-DATE로 건너뛰므로 `./gradlew test --rerun`으로 다시 돌린다.
 
+## 화면 기능일 때 (frontend-dev) — 1–4단계 대신
+
+1. **기준 확인** — 위임할 때 Claude Code가 Notion 화면 목록 DB·화면설계서에서 화면 ID(SCR-n)·라우트·인수조건·"오류 메시지 표준" 문구와 대상 TC를 찾아 프롬프트에 적는다(에이전트는 Notion을 못 본다). 쓸 API가 아직 확정되지 않았으면 화면을 먼저 만들지 않는다 — API 명세 승인이 먼저다
+2. **테스트 준비** — E2E·통합 테스트는 사용자가 작성한다. frontend-dev는 테스트가 붙을 `data-testid`와 안정적인 로딩 상태를 만들고, 결과 보고에 testid 목록을 적는다. `e2e-testing` skill의 페이지 객체 구성을 염두에 둔다
+3. **구현 순서** — `src/api`(호출·요청/응답 타입) → 라우트·인증 처리 → 화면·컴포넌트 → 서버 오류 `code`별 문구 연결. 금액은 계산하지 않고 서버 응답을 표시한다
+4. **빌드 확인** — `cd frontend && npm run build && npm run lint` (타입 검사 포함). 실패한 채로 끝냈다고 보고하지 않는다
+
 ## 5단계 — 자가 리뷰
 
-- backend-dev: 에이전트 정의의 "완료 전 자가 점검" 체크리스트
+- backend-dev·frontend-dev: 각 에이전트 정의의 "완료 전 자가 점검" 체크리스트
 - Claude Code: 위임 결과를 테스트 재실행으로 확인한 뒤 `/cb-review-gate`로 절대 금지 8항목을 게이트한다. S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크)가 생기면 PR 단계 리뷰를 그쪽으로 넘긴다
 
 ## 6단계 — 커밋

@@ -53,14 +53,14 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 | S6 | 10.26–11.01 | 배포 파이프라인, 배포, 문서 마무리 |
 
 ## 서브에이전트 구성 계획
-`.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev 하나만 있고, S2 도메인 단위 테스트는 backend-dev가 겸한다.
+`.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev와 frontend-dev(S3 추가)가 있다.
 
-**작업 배정은 먼저 제안하고 컨펌받는다** (2026-09-30 사용자 요청): 할 일이 생기면 Claude Code가 "무슨 일을 → 어느 에이전트(또는 Claude Code 본인)에게 → 왜 → 쓸 커맨드·skill"을 먼저 말하고, 사용자가 컨펌한 뒤에 에이전트를 띄운다. 작업을 시작할 때 `.claude/commands/`·`.claude/skills/`를 확인해 맞는 것을 직접 쓰고, 커밋·PR 직전에는 `/cb-review-gate`를 돌린다 (2026-10-04). 에이전트에는 정의의 `skills`(미리 불러오기)와 `Skill` 도구로 연결한다 — backend-dev는 `/feature-dev` 1–5단계를 따르고 커밋·PR은 하지 않는다.
+**작업 배정은 먼저 제안하고 컨펌받는다** (2026-09-30 사용자 요청): 할 일이 생기면 Claude Code가 "무슨 일을 → 어느 에이전트(또는 Claude Code 본인)에게 → 왜 → 쓸 커맨드·skill"을 먼저 말하고, 사용자가 컨펌한 뒤에 에이전트를 띄운다. 작업을 시작할 때 `.claude/commands/`·`.claude/skills/`를 확인해 맞는 것을 직접 쓰고, 커밋·PR 직전에는 `/cb-review-gate`를 돌린다 (2026-10-04). 에이전트에는 정의의 `skills`(미리 불러오기)와 `Skill` 도구로 연결한다 — backend-dev·frontend-dev는 `/feature-dev` 1–5단계(화면은 "화면 기능일 때" 절)를 따르고 커밋·PR은 하지 않는다.
 
 | 이름 | 역할 | 필요 시점 |
 |---|---|---|
 | backend-dev | Spring Boot 도메인/API 구현 | S1부터 |
-| frontend-dev | React + Vite UI 구현 | S3부터 (CB-32) |
+| frontend-dev | React + Vite UI 구현 (금액 계산 없이 서버 응답 표시) | S3부터 (CB-32) — 추가됨 |
 | test-writer | JUnit5 + Playwright 작성·실행 | S3부터 (통합 테스트) |
 | code-reviewer | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3부터 — PR이 실제로 쌓이기 시작하면 |
 
