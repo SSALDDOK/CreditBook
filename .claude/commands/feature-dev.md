@@ -35,7 +35,7 @@ git push -u origin feature/CB-42-charge-api   # 일찍 push — Jira "브랜치 
 
 ## 2단계 — 테스트 먼저 (TDD)
 
-`springboot-tdd` skill과 `backend-dev`의 "테스트" 규칙을 따른다 (S3부터 `test-writer`가 생기면 실행·검증을 그쪽과 나눈다):
+`springboot-tdd` skill과 `backend-dev`의 "테스트" 규칙을 따른다. 도메인 단위 테스트는 backend-dev가 기능과 함께 쓰고, **통합·E2E 테스트는 사용자가 작성**한다 — 위임받은 에이전트는 그 테스트를 먼저 대신 쓰지 않는다. 사용자가 쓴 테스트의 실행·검증·개선안은 `test-writer`가 맡는다:
 - **먼저 Notion 테스트 케이스 DB에서 그 REQ의 TC를 찾고 테스트 계획서를 확인한다.** TC가 정한 레벨(단위·통합·E2E)·유형대로 쓴다. 위임할 때는 Claude Code가 TC ID·레벨·이름을 프롬프트에 적어 넘긴다(에이전트는 Notion을 못 본다). 인수조건은 요구사항 DB가 기준이다
 - domain 단위 테스트는 스프링 없이 순수 객체로, Given-When-Then + 한글 `@DisplayName`(인수조건 문장 그대로) + `@Tag("REQ-xxx")` + TC를 검증하면 `@Tag("TC-n")`
 - 경계값은 `@ParameterizedTest`로 모은다
