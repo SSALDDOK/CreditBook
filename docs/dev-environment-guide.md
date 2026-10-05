@@ -123,7 +123,7 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 | 부품 | 하는 일 |
 |---|---|
 | `starter-webmvc` | 웹 서버(Tomcat, 8080) + REST API. 컨트롤러가 이 위에서 돈다 |
-| `starter-data-jpa` | JPA/Hibernate: Java 객체 ↔ 테이블. `@Version` 낙관적 락도 여기서 나온다 |
+| `starter-data-jpa` | JPA/Hibernate: Java 객체 ↔ 테이블. `@Version` Optimistic Lock(낙관적 락)도 여기서 나온다 |
 | `starter-flyway` + `flyway-database-postgresql` | 마이그레이션 적용. 뒤의 것은 PostgreSQL 지원 모듈 |
 | `starter-validation` | 요청 DTO 입력 형식 검사(`@NotNull`, `@Positive` 등) |
 | `starter-actuator` | 상태 점검 창구 `/actuator/health`. 배포 후 스모크에 쓴다 |

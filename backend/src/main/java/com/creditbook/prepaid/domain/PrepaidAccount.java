@@ -38,7 +38,7 @@ public class PrepaidAccount {
 	@Column(name = "balance", nullable = false, precision = 12, scale = 0)
 	private BigDecimal balance;
 
-	/** 낙관적 락. 같은 계좌를 동시에 바꾸면 늦게 커밋하는 쪽이 실패한다. */
+	/** Optimistic Lock(낙관적 락). 같은 계좌를 동시에 바꾸면 늦게 커밋하는 쪽이 실패한다. */
 	@Version
 	@Column(name = "version", nullable = false)
 	private Long version;
