@@ -59,8 +59,8 @@ cd backend && ./gradlew build   # 실행·스킵·실패 수를 확인한다 (Do
 
 1. **기준 확인** — 위임할 때 Claude Code가 Notion 화면 목록 DB·화면설계서에서 화면 ID(SCR-n)·라우트·인수조건·"오류 메시지 표준" 문구와 대상 TC를 찾아 프롬프트에 적는다(에이전트는 Notion을 못 본다). 쓸 API가 아직 확정되지 않았으면 화면을 먼저 만들지 않는다 — API 명세 승인이 먼저다
 2. **테스트 준비** — E2E·통합 테스트는 사용자가 작성한다. frontend-dev는 테스트가 붙을 `data-testid`와 안정적인 로딩 상태를 만들고, 결과 보고에 testid 목록을 적는다. `e2e-testing` skill의 페이지 객체 구성을 염두에 둔다
-3. **구현 순서** — `src/api`(호출·요청/응답 타입) → 라우트·인증 처리 → 화면·컴포넌트 → 서버 오류 `code`별 문구 연결. 금액은 계산하지 않고 서버 응답을 표시한다
-4. **빌드 확인** — `cd frontend && npm run build && npm run lint` (타입 검사 포함). 실패한 채로 끝냈다고 보고하지 않는다
+3. **구현 순서** — `src/api`(호출·요청/응답 타입) → 라우트·인증 처리 → 화면·컴포넌트 → 서버 오류 `code`별 문구 연결 (`react-patterns`, 폼·모달은 `frontend-a11y`). 금액은 계산하지 않고 서버 응답을 표시한다. 새 라이브러리는 추천안으로 사용자 승인 뒤 설치한다
+4. **빌드 확인** — `cd frontend && npm run build && npm run lint` (`build`에 `tsc -b` 포함 — `vite-patterns`). 실패한 채로 끝냈다고 보고하지 않는다
 
 ## 5단계 — 자가 리뷰
 

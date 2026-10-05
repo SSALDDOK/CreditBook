@@ -13,7 +13,7 @@ CreditBook 리포의 `.claude/`에 들어 있는 도구를 언제, 어떻게 쓰
 
 **원칙** (2026-10-04): Claude Code는 작업을 시작할 때 커맨드·skill 목록을 확인하고 맞는 것을 직접 쓴다. 작업 배정을 제안할 때 "무슨 일 → 누구 → 왜 → 쓸 커맨드·skill"을 함께 적어 컨펌받는다. 커밋·PR 직전에는 `/cb-review-gate`를 기본으로 돌린다.
 
-**에이전트와 커맨드·skill**: 서브에이전트는 슬래시 커맨드를 입력할 수 없다. 대신 에이전트 정의의 `skills`에 적은 커맨드·skill은 시작할 때 내용이 미리 들어가고, `tools`에 `Skill`이 있으면 실행 중에 필요한 skill을 불러 쓴다. backend-dev는 `feature-dev`·`java-coding-standards`·`jpa-patterns`·`springboot-tdd`를, frontend-dev는 `feature-dev`·`e2e-testing`을 미리 불러오고 나머지는 필요할 때 부른다. 프론트 전용 skill(React 패턴 등)은 아직 없다 — ECC에서 가져올 때 사용자 확인 후 추가한다.
+**에이전트와 커맨드·skill**: 서브에이전트는 슬래시 커맨드를 입력할 수 없다. 대신 에이전트 정의의 `skills`에 적은 커맨드·skill은 시작할 때 내용이 미리 들어가고, `tools`에 `Skill`이 있으면 실행 중에 필요한 skill을 불러 쓴다. backend-dev는 `feature-dev`·`java-coding-standards`·`jpa-patterns`·`springboot-tdd`를, frontend-dev는 `feature-dev`·`react-patterns`·`e2e-testing`을 미리 불러오고 나머지는 필요할 때 부른다.
 
 ---
 
@@ -58,6 +58,9 @@ PR 생성 → CI 통과 확인 → 병합
 | `springboot-security` | JWT, 인가(@PreAuthorize), CORS, 레이트 리밋 | S3 인증, S5 보안 점검 |
 | `cb-security-checklist` | 배포 전 보안 체크리스트 (원칙 위주) | S5 |
 | `e2e-testing` | Playwright, 페이지 객체 모델, 불안정 테스트 대응 | S3–S4 E2E |
+| `react-patterns` | React 화면: 금액은 서버 값 그대로, API 클라이언트·`ErrorResponse` 처리, 폼, 보호 라우트 (ECC react-patterns·frontend-patterns·error-handling 재작성) | S3–S4 화면 |
+| `vite-patterns` | `vite.config.ts`, `VITE_` 환경변수 보안, `/api` 개발 프록시, 타입 검사 공백 | S3 프론트 세팅 |
+| `frontend-a11y` | 라벨·오류 연결·shadcn/ui 모달 — E2E의 `getByRole`·`getByLabel`과 직결 | S3–S4 화면 |
 | `git-workflow` | 브랜치·커밋 규칙, rebase, 충돌 해결 | 필요할 때 |
 
 요청 예:
