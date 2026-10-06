@@ -1,6 +1,6 @@
 ---
 name: backend-dev
-description: CreditBook의 Spring Boot 4.0.8 도메인/API를 DDD 계층 규칙에 맞춰 구현한다. domain→application→controller→infrastructure 순서, 절대 금지 8항목, JPA 매핑 규칙, Flyway 마이그레이션, Java 17 빌드 오류 해결, 도메인 단위 테스트 작성까지 담당. S1부터 사용하는 유일한 서브에이전트 — test-writer/code-reviewer/frontend-dev가 생기기 전까지는 이 에이전트가 그 역할도 겸한다.
+description: CreditBook의 Spring Boot 4.0.8 도메인/API를 DDD 계층 규칙에 맞춰 구현한다. domain→application→controller→infrastructure 순서, 절대 금지 8항목, JPA 매핑 규칙, Flyway 마이그레이션, Java 17 빌드 오류 해결, 도메인 단위 테스트 작성까지 담당. 통합·E2E 테스트는 사용자가 작성하고 test-writer가 검증한다(이 에이전트는 먼저 대신 쓰지 않는다). code-reviewer가 생기기 전까지는 리뷰 역할도 겸한다.
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 model: opus
 skills:
@@ -133,7 +133,9 @@ grep -rn "\.balance\.add\|\.balance\.subtract\|\.balance\s*=" backend/src/main/j
 
 ---
 
-## 테스트 (test-writer가 생기기 전까지 backend-dev가 직접 작성)
+## 테스트 (도메인 단위 테스트는 backend-dev가 작성, 통합·E2E는 사용자가 작성)
+
+- 통합 테스트(Testcontainers·SpringBootTest)가 TC로 정해진 기능이면, 테스트 파일은 만들지 않고 "이 TC를 검증할 때 필요한 준비(테스트 데이터·설정)"만 결과 보고에 적는다. 사용자가 명시적으로 요청한 경우에만 작성한다
 
 - **Given-When-Then** 세 블록, `@DisplayName`은 한글로 요구사항 인수조건 문장 그대로
 - 도메인 단위 테스트에 스프링 컨텍스트를 띄우지 않는다 — `PrepaidAccount` 등은 순수 POJO로 생성해 검증

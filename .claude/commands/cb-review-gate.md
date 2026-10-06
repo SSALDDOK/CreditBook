@@ -29,7 +29,12 @@ git diff --name-only HEAD
 
 ## 3단계 — 심층 리뷰 위임
 
-지금은 서브에이전트가 `backend-dev` 하나뿐이다. `*.java`, DDD 계층 경계, JPA 매핑, Flyway 마이그레이션 관련 변경은 `backend-dev`에게 위임해 자체 점검(파일 내 "완료 전 자가 점검" 기준)을 받는다.
+`*.java`, DDD 계층 경계, JPA 매핑, Flyway 마이그레이션 관련 변경은 `backend-dev`에게, `frontend/` 변경은 `frontend-dev`에게 위임해 자체 점검(각 정의의 "완료 전 자가 점검" 기준)을 받는다.
+
+`frontend/` 변경에는 위 8항목에 더해 아래를 하드 게이트로 본다 (frontend-dev 절대 금지와 같은 내용):
+- 화면 코드에서 잔액 산술(`balance + amount` 등)이나 금액 낙관적 갱신, `parseFloat`·`toFixed`로 금액 처리 — 2·3번 항목의 화면판
+- 토큰을 `localStorage`·`sessionStorage`에 저장, `VITE_` 환경변수에 비밀 값 — 5번 항목의 화면판
+- `dangerouslySetInnerHTML`, 고객 전화번호 원본 조합·`console.log` 출력
 
 S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되면 인증·PII·시크릿·삼켜진 예외 같은 항목은 그쪽으로 위임이 옮겨간다. 그 전까지는 아래 항목을 이 커맨드 안에서 직접 점검한다:
 - 평문 비밀번호 비교, JWT 검증 누락

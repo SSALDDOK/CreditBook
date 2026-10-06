@@ -13,7 +13,7 @@ CreditBook 리포의 `.claude/`에 들어 있는 도구를 언제, 어떻게 쓰
 
 **원칙** (2026-10-04): Claude Code는 작업을 시작할 때 커맨드·skill 목록을 확인하고 맞는 것을 직접 쓴다. 작업 배정을 제안할 때 "무슨 일 → 누구 → 왜 → 쓸 커맨드·skill"을 함께 적어 컨펌받는다. 커밋·PR 직전에는 `/cb-review-gate`를 기본으로 돌린다.
 
-**에이전트와 커맨드·skill**: 서브에이전트는 슬래시 커맨드를 입력할 수 없다. 대신 에이전트 정의의 `skills`에 적은 커맨드·skill은 시작할 때 내용이 미리 들어가고, `tools`에 `Skill`이 있으면 실행 중에 필요한 skill을 불러 쓴다. backend-dev는 `feature-dev`·`java-coding-standards`·`jpa-patterns`·`springboot-tdd`를 미리 불러오고 나머지는 필요할 때 부른다.
+**에이전트와 커맨드·skill**: 서브에이전트는 슬래시 커맨드를 입력할 수 없다. 대신 에이전트 정의의 `skills`에 적은 커맨드·skill은 시작할 때 내용이 미리 들어가고, `tools`에 `Skill`이 있으면 실행 중에 필요한 skill을 불러 쓴다. backend-dev는 `feature-dev`·`java-coding-standards`·`jpa-patterns`·`springboot-tdd`를, frontend-dev는 `feature-dev`·`react-patterns`·`e2e-testing`을, test-writer는 `springboot-tdd`·`e2e-testing`을 미리 불러오고 나머지는 필요할 때 부른다.
 
 ---
 
@@ -58,6 +58,9 @@ PR 생성 → CI 통과 확인 → 병합
 | `springboot-security` | JWT, 인가(@PreAuthorize), CORS, 레이트 리밋 | S3 인증, S5 보안 점검 |
 | `cb-security-checklist` | 배포 전 보안 체크리스트 (원칙 위주) | S5 |
 | `e2e-testing` | Playwright, 페이지 객체 모델, 불안정 테스트 대응 | S3–S4 E2E |
+| `react-patterns` | React 화면: 금액은 서버 값 그대로, API 클라이언트·`ErrorResponse` 처리, 폼, 보호 라우트 (ECC react-patterns·frontend-patterns·error-handling 재작성) | S3–S4 화면 |
+| `vite-patterns` | `vite.config.ts`, `VITE_` 환경변수 보안, `/api` 개발 프록시, 타입 검사 공백 | S3 프론트 세팅 |
+| `frontend-a11y` | 라벨·오류 연결·shadcn/ui 모달 — E2E의 `getByRole`·`getByLabel`과 직결 | S3–S4 화면 |
 | `git-workflow` | 브랜치·커밋 규칙, rebase, 충돌 해결 | 필요할 때 |
 
 요청 예:
@@ -84,8 +87,8 @@ archify 요청 예 (포트폴리오 문서용):
 | 에이전트 | 역할 | 상태 |
 |---|---|---|
 | `backend-dev` | Spring Boot 도메인/API 구현, Flyway, 도메인 테스트. test-writer·code-reviewer가 생기기 전까지 그 역할도 겸함 (모델: opus). `/feature-dev` 1–5단계를 따르고 커밋·PR은 하지 않는다 | 사용 중 |
-| `test-writer` | JUnit5 + Playwright 실행·검증·개선안 제시 (테스트 작성은 사용자) | S3 추가 예정 (통합 테스트) |
-| `frontend-dev` | React + Vite UI | S3 추가 예정 (CB-32) |
+| `test-writer` | 사용자가 쓴 JUnit5 통합·Playwright E2E를 실행·검증하고 개선안 제시 — Write·Edit 도구가 없는 리뷰형 (모델: opus). 인수조건·TC 대조, 단언 강도, 순서 의존·불안정 대기 점검, §5.1 TC 판정 근거 초안, 결함이면 버그 양식으로 보고 | 사용 중 (S3, 통합 테스트부터) |
+| `frontend-dev` | React + Vite + Tailwind + shadcn/ui 화면 구현 (모델: opus). `feature-dev`의 "화면 기능일 때" 절과 5단계를 따르고 커밋·PR은 하지 않는다. 금액 계산·업무 판단 없이 서버 응답 표시, E2E는 사용자가 작성 | 사용 중 (S3, CB-32부터) |
 | `code-reviewer` | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3 추가 예정 (PR이 쌓이기 시작하면) |
 
 - **맡길 만한 것**: "backend-dev 에이전트로 CB-8 도메인 로직과 테스트까지 통째로 해줘" — 범위가 분명하고 메인 대화를 어지럽히고 싶지 않은 작업
