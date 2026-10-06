@@ -1,6 +1,7 @@
 # 이 파일을 같은 폴더에 application-local.yml 로 복사한 뒤 값을 채운다.
 # application-local.yml 은 .gitignore 대상 — 절대 커밋하지 않는다.
-# ./gradlew bootRun 은 기본으로 local 프로필을 켜고, 작업 디렉터리(backend/)의 이 파일을 읽는다.
+# 이 파일은 Neon(실제 장부)용 local 프로필이다. ./gradlew bootRun 의 기본은 로컬 Docker DB(local-docker)이므로,
+# Neon 에 붙을 때만 SPRING_PROFILES_ACTIVE=local 을 지정한다. 작업 디렉터리(backend/)의 이 파일을 읽는다.
 spring:
   datasource:
     # Neon 콘솔 > Connection string > Pooled connection, JDBC 형식

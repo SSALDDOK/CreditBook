@@ -1,0 +1,13 @@
+# local-docker 프로필 — ./gradlew bootRun 의 기본 프로필. 리포 루트의 docker-compose.yml 로 띄운 로컬 DB 에 붙는다.
+# Neon 에 붙을 때만 SPRING_PROFILES_ACTIVE=local 을 명시한다 (application-local.yml).
+# 비밀 값이 없으므로 커밋한다. 이 PC 의 127.0.0.1 에만 열린 DB 라 비밀번호 없이(trust) 접속한다.
+# 로컬에는 PgBouncer 가 없으므로 Flyway 도 같은 주소(spring.datasource)를 쓴다.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/creditbook
+    username: creditbook
+
+management:
+  endpoint:
+    health:
+      show-details: always   # 로컬에서만 DB 연결 상태를 자세히 본다 (배포 기본값은 never)

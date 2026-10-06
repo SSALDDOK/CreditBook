@@ -1,0 +1,29 @@
+# 로컬 개발용 PostgreSQL — Neon(실제 장부)과 분리된 연습 DB.
+# ledger_entries 는 append-only 라 Neon 에 쌓인 연습 거래는 지울 수 없다. 손으로 시험할 때는 이 DB 를 쓴다.
+#
+#   docker compose up -d      켜기 (첫 bootRun 때 Flyway 가 V1 부터 적용)
+#   docker compose down       끄기 (데이터 유지)
+#   docker compose down -v    끄고 데이터까지 삭제 — 처음부터 다시
+#
+# 비밀번호 없이 접속(trust)하는 대신 포트를 127.0.0.1 에만 열어 이 PC 밖에서는 붙을 수 없게 한다.
+# 이미지는 통합 테스트(Testcontainers)와 같은 버전을 쓴다.
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: creditbook-db
+    environment:
+      POSTGRES_DB: creditbook
+      POSTGRES_USER: creditbook
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - creditbook-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U creditbook -d creditbook"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  creditbook-db-data:

@@ -2,7 +2,7 @@
 
 이 프로젝트의 도구들이 **무엇이고, 서로 어떻게 연결되고, 눈으로 어떻게 확인하는지**를 정리한 문서다. 규칙(무엇을 하면 안 되는지)은 [CLAUDE.md](../CLAUDE.md)가 기준이고, 이 문서는 그 규칙의 배경을 설명한다.
 
-기준일: 2026-09-29 (V1 Neon 적용, 로컬 Docker 설치 완료 시점)
+기준일: 2026-09-29 (V1 Neon 적용, 로컬 Docker 설치 완료 시점). 2026-10-07 로컬 Docker DB 프로필(`local-docker`) 추가
 
 ---
 
@@ -12,7 +12,10 @@
 [테스트할 때]  ./gradlew build  (또는 test)
    테스트 코드 ──▶ Docker 안 임시 PostgreSQL   매번 새로 만들고 버림 · 인터넷 불필요
 
-[앱을 실행할 때]  ./gradlew bootRun
+[앱을 실행할 때 — 기본]  docker compose up -d → ./gradlew bootRun
+   Spring Boot 앱 ──▶ 내 PC의 Docker PostgreSQL (localhost:5433)   연습 데이터 · 지우고 다시 시작 가능
+
+[Neon에 붙을 때만]  $env:SPRING_PROFILES_ACTIVE='local'; ./gradlew bootRun
    Spring Boot 앱 ──인터넷(SSL)──▶ Neon PostgreSQL   진짜 데이터 · 계속 남음
      ├ 앱(JPA):  -pooler 주소 (연결을 여럿이 나눠 쓰는 창구)
      └ Flyway:   직통 주소    (마이그레이션 전용 창구)
@@ -20,7 +23,19 @@
 
 - **Docker와 Neon은 서로 연결되지 않는다.** Docker 속 DB는 연습장이고, Neon은 실제 장부다
 - 둘을 이어 주는 것은 **같은 마이그레이션 파일**(`db/migration/V*.sql`)뿐이다. 두 DB 모두 같은 파일을 같은 순서로 적용하므로, 연습장에서 통과한 테스트가 실제 장부에서도 성립한다고 믿을 수 있다
-- 그래서 Docker를 꺼 두어도 앱은 Neon에 붙고, 인터넷이 끊겨도 테스트는 Docker로 돈다
+- 인터넷이 끊겨도 테스트와 기본 `bootRun`은 Docker로 돈다. Neon은 일부러 `local` 프로필을 지정할 때만 쓴다
+
+### 왜 기본이 Docker인가 (2026-10-07)
+`ledger_entries`는 append-only라 Neon에 들어간 연습 충전·사용은 **지울 수 없다**. 손으로 API를 시험할 일이 많아지는 S3부터는 실수로 실제 장부에 쓰지 않도록 `bootRun`의 기본 프로필을 로컬 Docker DB(`local-docker`)로 두었다. 테스트 계획서 §6의 E2E 환경('로컬 도커 스택')도 이 DB를 쓴다.
+
+| 프로필 | 설정 파일 (`backend/`) | 붙는 DB | 켜는 법 |
+|---|---|---|---|
+| `local-docker` (기본) | `application-local-docker.yml` (커밋됨, 비밀 값 없음) | `localhost:5433` Docker | 아무것도 지정하지 않음 |
+| `local` | `application-local.yml` (gitignore, 양식은 `.example`) | Neon | `$env:SPRING_PROFILES_ACTIVE='local'` — 그 터미널 창에서만 유지 |
+
+- Docker DB를 켜지 않고 기본 `bootRun`을 하면 접속 실패로 기동이 멈춘다. Neon으로 넘어가지 않는다
+- 로컬 Docker DB는 비밀번호 없이(trust) 접속한다. 대신 포트를 `127.0.0.1`에만 열어 이 PC 밖에서는 붙을 수 없다
+- `/actuator/health`의 세부 정보(DB 종류, 디스크 용량)는 두 로컬 프로필에서만 보인다. 배포 기본값(`application.yml`)은 `never`라 `{"status":"UP"}`만 나온다 — 내부 정보 노출 방지
 
 ## 2. Docker
 
@@ -45,19 +60,29 @@
 | 메뉴 | 보이는 것 |
 |---|---|
 | Images | `postgres`, `testcontainers/ryuk`. 날짜("1 year ago" 등)는 **이미지를 만든 날**이지 받은 날이 아니다 |
-| Containers | 평소엔 **비어 있는 게 정상**. `./gradlew test`를 돌리는 동안 `postgres`와 `ryuk`이 잠깐 나타났다 사라진다 |
+| Containers | `docker compose up -d` 뒤에는 `creditbook-db`가 계속 떠 있다. 그 밖에는 `./gradlew test`를 돌리는 동안 `postgres`와 `ryuk`이 잠깐 나타났다 사라진다 |
 
 - `testcontainers/ryuk`: 청소부 컨테이너. 테스트가 끝나거나 비정상 종료돼도 남은 컨테이너를 지운다
 - **Resource Saver mode**: 컨테이너가 없을 때 엔진을 잠시 멈춰 두는 절전 기능. `docker` 명령이나 테스트가 오면 알아서 깨어난다. 테스트가 기동 대기로 시간 초과 나면 Settings → Resources에서 끈다
-- 테스트할 때만 Docker Desktop이 켜져 있으면 된다
+- 테스트할 때와 기본 `bootRun`(로컬 Docker DB)을 쓸 때 Docker Desktop이 켜져 있어야 한다
+
+### 로컬 개발 DB — `docker-compose.yml` (리포 루트)
+| 하고 싶은 것 | 명령 (리포 루트에서) |
+|---|---|
+| 켜기 | `docker compose up -d` (첫 `bootRun` 때 Flyway가 V1부터 적용) |
+| 끄기 (데이터 유지) | `docker compose down` |
+| 연습 데이터 전부 지우고 처음부터 | `docker compose down -v` |
+| 안에서 SELECT 해 보기 | `docker exec -it creditbook-db psql -U creditbook -d creditbook` |
+
+이미지는 Testcontainers와 같은 `postgres:18-alpine`이다. 연습 DB이므로 `ledger_entries`가 쌓여도 `down -v`로 통째로 버리면 된다(트리거가 막는 UPDATE·DELETE로 지우지 않는다).
 
 ## 3. Flyway
 
 **DB 구조 변경(마이그레이션)을 순서대로 적용하고 기록하는 Java 라이브러리.** 따로 설치하는 프로그램이 아니라 `build.gradle`의 의존성으로 앱 안에 들어 있고, 앱이 시작될 때 DB를 쓰기 전에 먼저 실행된다.
 
-### `bootRun` 때 일어나는 일
+### `bootRun` 때 일어나는 일 (`local` 프로필 = Neon 기준. `local-docker`는 같은 흐름에서 대상만 `localhost:5433`이다)
 ```
-[내 PC]  ./gradlew bootRun
+[내 PC]  $env:SPRING_PROFILES_ACTIVE='local'; ./gradlew bootRun
    Spring Boot 앱 시작
      └ Flyway (앱 안의 라이브러리)
          ① classpath:db/migration (= src/main/resources/db/migration) 에서 V1, V2 … 목록을 읽음
@@ -79,7 +104,7 @@
 
 ### 규칙으로 이어지는 점
 - V1은 2026-09-29 Neon에 적용됐다. 스키마를 바꾸려면 `V2__설명.sql`을 **새로** 만든다
-- 새 파일을 만든 뒤 첫 `bootRun`은 Neon에 **되돌릴 수 없게** 적용된다. Testcontainers 테스트 통과 + 사용자 확인 후에 실행한다
+- 새 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 Neon에 **되돌릴 수 없게** 적용된다. Testcontainers 테스트 통과 + 사용자 확인 후에 실행한다. 기본(`local-docker`) `bootRun`은 로컬 Docker DB에만 적용되므로 먼저 거기서 확인해 볼 수 있다
 
 ## 4. Neon
 
@@ -168,8 +193,9 @@ git push origin --delete <병합된 브랜치>   # GitHub에 남아 있을 때
 |---|---|---|
 | 전체 빌드 + 테스트 | `./gradlew build` | Docker Desktop 켜짐 |
 | 테스트만 | `./gradlew test` | Docker Desktop 켜짐 |
-| 앱 실행 (Neon 접속) | `./gradlew bootRun` | 새 마이그레이션이 있으면 **먼저 사용자 확인** |
-| 앱 상태 | 브라우저에서 `http://localhost:8080/actuator/health` | 앱 실행 중 |
+| 앱 실행 (로컬 Docker DB, 기본) | `./gradlew bootRun` | 리포 루트에서 `docker compose up -d` |
+| 앱 실행 (Neon 접속) | `$env:SPRING_PROFILES_ACTIVE='local'; ./gradlew bootRun` | 새 마이그레이션이 있으면 **먼저 사용자 확인** |
+| 앱 상태 | 브라우저에서 `http://localhost:8080/actuator/health` | 앱 실행 중. 로컬에서는 `components.db`까지 보인다 |
 | Docker 동작 확인 | `docker run --rm hello-world` | Docker Desktop 켜짐 |
 
 > VS Code가 Docker 설치 전에 켜져 있었다면 터미널이 `docker` 명령을 못 찾는다. VS Code를 완전히 껐다 다시 연다.

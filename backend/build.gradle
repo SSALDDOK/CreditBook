@@ -73,7 +73,8 @@ tasks.named('check') {
 	dependsOn tasks.named('jacocoTestCoverageVerification')
 }
 
-// ./gradlew bootRun 은 기본으로 local 프로필 — backend/application-local.yml 에서 DB 접속 정보를 읽는다
+// ./gradlew bootRun 은 기본으로 local-docker 프로필 — docker-compose.yml 의 로컬 DB(backend/application-local-docker.yml).
+// Neon 에 붙을 때만 SPRING_PROFILES_ACTIVE=local 을 명시한다. 실수로 Neon 에 지울 수 없는 거래를 쌓지 않으려는 기본값이다
 tasks.named('bootRun') {
-	systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
+	systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local-docker'
 }

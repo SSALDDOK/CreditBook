@@ -232,7 +232,7 @@ com.creditbook
 ## Neon 연결
 1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
 2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
-3. Flyway는 `bootRun`마다 대기 중인 마이그레이션을 Neon에 자동 적용한다 (V1·V2 적용 완료). 따라서 **새 마이그레이션 파일을 만든 뒤의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
+3. `bootRun`의 기본 프로필은 **로컬 Docker DB(`local-docker`, 리포 루트 `docker-compose.yml`, `localhost:5433`)**다 (2026-10-07). Neon에는 `$env:SPRING_PROFILES_ACTIVE='local'`을 명시할 때만 붙는다 — 손으로 시험한 거래가 append-only 장부에 영구히 남지 않게 하려는 기본값이다. Flyway는 붙은 DB에 대기 중인 마이그레이션을 자동 적용한다 (Neon은 V1·V2 적용 완료). 따라서 **새 마이그레이션 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
 4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
