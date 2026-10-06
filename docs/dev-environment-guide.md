@@ -70,11 +70,29 @@
 | 하고 싶은 것 | 명령 (리포 루트에서) |
 |---|---|
 | 켜기 | `docker compose up -d` (첫 `bootRun` 때 Flyway가 V1부터 적용) |
-| 끄기 (데이터 유지) | `docker compose down` |
+| 잠시 끄기 (컨테이너·데이터 유지) | `docker compose stop` — 화면의 ■ Stop과 같다 |
+| 끄고 컨테이너 지우기 (데이터 유지) | `docker compose down` — 화면의 🗑 Delete와 같다 |
 | 연습 데이터 전부 지우고 처음부터 | `docker compose down -v` |
 | 안에서 SELECT 해 보기 | `docker exec -it creditbook-db psql -U creditbook -d creditbook` |
 
+DB는 두 부분으로 나뉜다. **컨테이너**(`creditbook-db`)는 DB 프로그램이 돌아가는 상자이고, **볼륨**(`creditbook_creditbook-db-data`)은 실제 데이터가 저장된 곳이다. `stop`은 상자를 멈추기만 하고, `down`은 상자를 지우되 볼륨은 남긴다. 둘 다 연습 데이터는 남고, 다시 켤 때는 `docker compose up -d`(상자가 없으면 새로 만들어 남은 볼륨을 다시 연결)를 쓴다. 볼륨까지 지우는 것은 `-v`뿐이다.
+
 이미지는 Testcontainers와 같은 `postgres:18-alpine`이다. 연습 DB이므로 `ledger_entries`가 쌓여도 `down -v`로 통째로 버리면 된다(트리거가 막는 UPDATE·DELETE로 지우지 않는다).
+
+#### 화면으로 하기 (Docker Desktop)
+명령어 대신 Docker Desktop 화면에서도 같은 일을 할 수 있다. 목록에는 폴더 이름을 딴 묶음 `creditbook`이 보이고, 펼치면 컨테이너 `creditbook-db`가 있다.
+
+| 하고 싶은 것 | 화면에서 | 명령과의 차이 |
+|---|---|---|
+| 켜져 있는지 보기 | **Containers** → `creditbook` 줄의 상태가 초록 점(Running) | — |
+| 잠시 끄기 (컨테이너·데이터 유지) | 같은 줄의 ■ **Stop** | `docker compose stop`과 같다. 컨테이너는 남겨 두고 멈추기만 한다(`down`은 컨테이너를 지운다). 데이터는 둘 다 남는다 |
+| 다시 켜기 | 같은 줄의 ▶ **Start** | Stop으로 멈춘 경우에만 된다. `down`·Delete로 컨테이너를 지웠다면 터미널에서 `docker compose up -d` |
+| 끄고 컨테이너 지우기 (데이터 유지) | 같은 줄의 🗑 **Delete** | `docker compose down`과 같다 |
+| 연습 데이터까지 지우기 | 컨테이너를 Delete한 뒤 **Volumes** → `creditbook_creditbook-db-data` → 🗑 Delete | `docker compose down -v`와 같다 |
+| 로그 보기 | `creditbook-db` 클릭 → **Logs** 탭 | DB가 안 뜰 때 원인 확인용 |
+
+- 처음 만들 때(`up -d`)는 터미널이 필요하다. 화면에는 `docker-compose.yml`을 읽어 새로 만드는 버튼이 없다
+- 컨테이너가 없거나 멈춘 상태에서 기본 `bootRun`을 하면 접속 실패로 기동이 멈춘다 — Neon으로 넘어가지 않는다
 
 ## 3. Flyway
 
