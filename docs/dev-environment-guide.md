@@ -67,8 +67,6 @@
 - 테스트할 때와 기본 `bootRun`(로컬 Docker DB)을 쓸 때 Docker Desktop이 켜져 있어야 한다
 
 ### 로컬 개발 DB — `docker-compose.yml` (리포 루트)
-리포 루트는 `CLAUDE.md`·`docker-compose.yml`이 있는 맨 바깥 폴더(`CreditBook`)다. VS Code에서 이 폴더를 열고 Terminal → New Terminal로 연 터미널은 처음부터 여기에 있다. `backend`에 들어가 있으면 `cd ..`로 올라온다.
-
 | 하고 싶은 것 | 명령 (리포 루트에서) |
 |---|---|
 | 켜기 | `docker compose up -d` (첫 `bootRun` 때 Flyway가 V1부터 적용) |
