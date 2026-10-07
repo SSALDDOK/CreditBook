@@ -243,4 +243,4 @@ com.creditbook
 - 잔액 변동: INFO — 계좌 ID·유형·금액·변동 후 잔액·실행자. 고객 이름·연락처는 남기지 않는다
 - 잔액 부족·권한 거부: WARN (정상 동작이므로 ERROR 아님)
 - 예외: ERROR, 스택트레이스는 로그에만 — 응답에는 절대 포함하지 않는다
-- 모든 로그 라인에 요청 correlation id
+- 모든 로그 라인에 요청 correlation id (CB-40): 요청·응답 헤더 `X-Request-Id`(들어온 값은 `^[A-Za-z0-9-]{1,64}$`일 때만 사용, 아니면 새 UUID), MDC 키 `requestId`, 로그 `[rid=…]`(`logging.pattern.correlation`). `RequestIdFilter`가 보안 필터보다 먼저 돈다. 다른 스레드(`@Async` 등)로 넘기는 작업을 만들면 MDC를 복사하는 `TaskDecorator`를 함께 둔다

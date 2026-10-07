@@ -18,6 +18,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+logging:
+  pattern:
+    # 모든 로그 라인에 요청 correlation id (RequestIdFilter 가 MDC requestId 에 넣는다). 요청 밖 로그는 rid= 가 빈 값.
+    # Boot 기본 콘솔·파일 패턴의 LOG_CORRELATION_PATTERN 자리에 들어가므로 나머지 형식은 기본값 그대로다
+    correlation: "[rid=%X{requestId:-}] "
+
 management:
   endpoints:
     web:
