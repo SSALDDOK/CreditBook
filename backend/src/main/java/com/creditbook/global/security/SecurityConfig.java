@@ -15,6 +15,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
@@ -24,6 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * 웹 보안 구성 (CB-42). 기본은 거부 — 아래 공개 경로 말고는 모두 로그인이 필요하다 (없는 경로도 401).
  * <ul>
  * <li>공개: POST /api/auth/login, POST /api/auth/logout, GET /actuator/health, /error</li>
+ * <li>리소스 서버 DSL 이 자동으로 여는 메타데이터 경로는 {@link ProtectedResourceMetadataBlockingFilter} 가 401 로 막는다</li>
  * <li>인증: {@value SessionCookies#NAME} 쿠키의 JWT 만 받는다 (Authorization 헤더 미사용). 서버 세션 없음(STATELESS)</li>
  * <li>401·403 은 {@link RestAuthenticationEntryPoint}·{@link RestAccessDeniedHandler} 가 ErrorResponse 형식으로 응답한다.
  * 진입점은 일반 예외 처리와 리소스 서버(토큰 오류) 두 곳에 모두 지정한다 — 한쪽만 지정하면 토큰 오류가 기본 응답(빈 본문)으로 나간다</li>
@@ -67,6 +69,8 @@ public class SecurityConfig {
 						.authenticationEntryPoint(authenticationEntryPoint)
 						.accessDeniedHandler(accessDeniedHandler)
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter)));
+		// DSL 이 자동으로 여는 메타데이터 경로를 막는다. 메타데이터 필터(인증 필터 바로 앞)보다 확실히 앞에 두려고 LogoutFilter 자리를 기준으로 한다
+		http.addFilterBefore(new ProtectedResourceMetadataBlockingFilter(authenticationEntryPoint), LogoutFilter.class);
 		if (corsProperties.isEnabled()) {
 			http.cors(cors -> cors.configurationSource(corsConfigurationSource(corsProperties)));
 		}
