@@ -99,10 +99,10 @@ DB는 두 부분으로 나뉜다. **컨테이너**(`creditbook-db`)는 DB 프로
 
 ```powershell
 docker cp backend/dev/seed-local.sql creditbook-db:/tmp/seed-local.sql
-docker exec creditbook-db psql -U creditbook -d creditbook -f /tmp/seed-local.sql
+docker exec creditbook-db psql -U creditbook -d creditbook -v ON_ERROR_STOP=1 -v owner_pw=<사장 비밀번호> -v staff_pw=<직원 비밀번호> -f /tmp/seed-local.sql
 ```
 
-개발용 아이디·비밀번호(ADMIN `owner`, STAFF `staff`)는 [backend/dev/seed-local.sql](../backend/dev/seed-local.sql) 머리 주석에 있다. **로컬 Docker DB 전용이다 — Neon에는 실행하지 않는다.**
+아이디는 ADMIN `owner`, STAFF `staff`이고, 비밀번호는 실행할 때 `<…>` 자리에 직접 정한다. 리포가 공개 저장소라 비밀번호와 해시를 파일에 두지 않는다 — DB가 pgcrypto로 그 자리에서 BCrypt 해시를 만든다. **로컬 Docker DB 전용이다 — Neon에는 실행하지 않는다.**
 
 ### 로그인 서명 키 — `CREDITBOOK_JWT_SECRET`
 로그인 토큰(JWT)의 서명 키. 앱은 이 환경변수에서만 읽고, 없거나 32바이트 미만이면 기동하지 않는다. 키 값은 파일에 쓰지 않는다(DB 비밀번호와 같은 규칙). 아래 한 줄이 48바이트 난수를 만들어 **화면에 출력하지 않고** Windows 사용자 환경변수에 바로 저장한다.
