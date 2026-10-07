@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -33,11 +34,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
+import com.creditbook.global.security.WebSecurityTestConfig;
+import com.creditbook.support.WithMockEmployee;
 
 /**
  * 고객 등록 API 의 요청·응답 형태. 서비스는 목으로 대체하고 웹 계층(검증·DTO 변환·오류 응답)만 본다.
  */
 @WebMvcTest(CustomerController.class)
+@Import(WebSecurityTestConfig.class)
+@WithMockEmployee
 @Tag("REQ-1")
 class CustomerControllerTest {
 

@@ -24,23 +24,28 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.creditbook.global.security.CurrentEmployee;
+import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.ChargeResult;
 import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.ChargePolicy;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
+import com.creditbook.support.WithMockEmployee;
 
 /**
  * 충전 API 의 요청·응답 형태. 서비스는 목으로 대체하고 웹 계층(검증·DTO 변환·오류 응답)만 본다.
  * 현재 직원은 테스트에서만 가짜로 넣는다 (운영 구현은 인증 연결 때 추가된다).
  */
 @WebMvcTest(ChargeController.class)
+@Import(WebSecurityTestConfig.class)
+@WithMockEmployee
 @Tag("REQ-5")
 class ChargeControllerTest {
 

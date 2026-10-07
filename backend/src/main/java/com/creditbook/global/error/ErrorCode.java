@@ -24,6 +24,11 @@ public enum ErrorCode {
 
 	// 401 — 인증
 	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
+	/** 로그인 실패. 아이디 없음·비밀번호 틀림·비활성 직원을 구분하지 않는다. */
+	INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
+
+	// 403 — 권한
+	FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
 
 	// 404 — 대상 없음
 	CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "고객을 찾을 수 없습니다."),
