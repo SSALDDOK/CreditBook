@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.creditbook.support.RandomJwtSecretEnvironmentPostProcessor

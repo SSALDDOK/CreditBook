@@ -24,6 +24,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -32,6 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.domain.CustomerSummary;
+import com.creditbook.global.security.WebSecurityTestConfig;
+import com.creditbook.support.WithMockEmployee;
 
 /**
  * 고객 목록·검색 API 의 요청·응답 형태 (GET /api/customers). 서비스는 목으로 대체한다.
@@ -39,6 +42,8 @@ import com.creditbook.customer.domain.CustomerSummary;
  * 연락처는 모두 가상 번호다.
  */
 @WebMvcTest(CustomerController.class)
+@Import(WebSecurityTestConfig.class)
+@WithMockEmployee
 @Tag("REQ-2")
 class CustomerSearchControllerTest {
 

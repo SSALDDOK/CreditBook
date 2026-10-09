@@ -22,23 +22,29 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.creditbook.global.security.CurrentEmployee;
+import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.UsageResult;
 import com.creditbook.prepaid.application.UsageService;
 import com.creditbook.prepaid.controller.UsageController;
 import com.creditbook.prepaid.domain.LedgerEntryType;
+import com.creditbook.support.WithMockEmployee;
 
 /**
  * 웹 계층 슬라이스에서 RequestIdFilter 가 MockMvc 체인에 들어가는지, 성공·4xx·5xx 응답 헤더와 로그 라인에 같은 id 가 실리는지 본다.
  * 사용 API 를 대표 경로로 쓰고 서비스는 목으로 대체한다. 로그 형식은 application.yml 의 {@code logging.pattern.correlation} 이다.
  */
 @WebMvcTest(UsageController.class)
+@Import(WebSecurityTestConfig.class)
+@WithMockEmployee
 @ExtendWith(OutputCaptureExtension.class)
 class RequestIdWebLayerTest {
 
@@ -135,9 +141,9 @@ class RequestIdWebLayerTest {
 
 	@Test
 	@DisplayName("인증 거절(401) 응답과 WARN 로그에 같은 id 가 실린다")
+	@WithAnonymousUser
 	void unauthenticated_response_and_warn_log_carry_same_id(CapturedOutput output) throws Exception {
-		// given
-		given(currentEmployee.id()).willReturn(null);
+		// given — 쿠키 없는 요청. 보안 필터의 진입점이 거절하므로 RequestIdFilter 가 보안 필터보다 먼저 돌아야 id 가 실린다
 
 		// when
 		MvcResult result = mockMvc.perform(useRequest(1000))
@@ -147,7 +153,7 @@ class RequestIdWebLayerTest {
 		// then
 		String requestId = result.getResponse().getHeader(RequestIdFilter.HEADER_NAME);
 		assertThat(requestId).matches(UUID_PATTERN);
-		assertThat(output.getOut().lines().filter(line -> line.contains("request rejected: unauthenticated")))
+		assertThat(output.getOut().lines().filter(line -> line.contains("authentication rejected:")))
 				.singleElement()
 				.asString()
 				.contains("WARN")

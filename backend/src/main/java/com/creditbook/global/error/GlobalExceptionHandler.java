@@ -7,12 +7,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
@@ -115,6 +117,22 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleUnauthenticated(UnauthenticatedException ex) {
 		log.warn("request rejected: unauthenticated");
 		return respond(ErrorCode.UNAUTHENTICATED, ErrorResponse.of(ErrorCode.UNAUTHENTICATED));
+	}
+
+	/** 로그인 실패. 사유는 응답에서 구분하지 않는다. WARN 로그는 서비스가 직원 ID 와 함께 남기므로 여기서는 다시 남기지 않는다. */
+	@ExceptionHandler(InvalidCredentialsException.class)
+	ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
+		return respond(ErrorCode.INVALID_CREDENTIALS, ErrorResponse.of(ErrorCode.INVALID_CREDENTIALS));
+	}
+
+	/**
+	 * 컨트롤러·서비스 안에서 난 권한 거부 (메서드 보안 등). 처리하지 않으면 아래의 Exception 처리기가 500 으로 응답한다.
+	 * 필터 단계의 거부는 RestAccessDeniedHandler 가 같은 형식으로 응답한다. 정상적인 거절이므로 WARN.
+	 */
+	@ExceptionHandler(AccessDeniedException.class)
+	ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+		log.warn("request rejected: access denied");
+		return respond(ErrorCode.FORBIDDEN, ErrorResponse.of(ErrorCode.FORBIDDEN));
 	}
 
 	/** 같은 계좌를 동시에 바꿔 @Version 검사에 걸린 경우. 정상 동작이므로 WARN. */

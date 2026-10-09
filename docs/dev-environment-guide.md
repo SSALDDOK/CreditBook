@@ -94,6 +94,27 @@ DB는 두 부분으로 나뉜다. **컨테이너**(`creditbook-db`)는 DB 프로
 - 처음 만들 때(`up -d`)는 터미널이 필요하다. 화면에는 `docker-compose.yml`을 읽어 새로 만드는 버튼이 없다
 - 컨테이너가 없거나 멈춘 상태에서 기본 `bootRun`을 하면 접속 실패로 기동이 멈춘다 — Neon으로 넘어가지 않는다
 
+#### 개발용 직원 넣기 (로그인 시험용)
+로그인하려면 `employees`에 직원이 있어야 한다. 로컬 DB에 V3까지 적용된 뒤(기본 `bootRun` 한 번) 리포 루트에서 실행한다. 여러 번 실행해도 같은 아이디는 건너뛴다. (파일을 컨테이너에 복사해 실행한다 — PowerShell 파이프(`Get-Content | docker exec`)는 한글 이름을 깨뜨릴 수 있다)
+
+```powershell
+docker cp backend/dev/seed-local.sql creditbook-db:/tmp/seed-local.sql
+docker exec creditbook-db psql -U creditbook -d creditbook -v ON_ERROR_STOP=1 -v owner_pw=<사장 비밀번호> -v staff_pw=<직원 비밀번호> -f /tmp/seed-local.sql
+```
+
+아이디는 ADMIN `owner`, STAFF `staff`이고, 비밀번호는 실행할 때 `<…>` 자리에 직접 정한다. 리포가 공개 저장소라 비밀번호와 해시를 파일에 두지 않는다 — DB가 pgcrypto로 그 자리에서 BCrypt 해시를 만든다. **로컬 Docker DB 전용이다 — Neon에는 실행하지 않는다.**
+
+### 로그인 서명 키 — `CREDITBOOK_JWT_SECRET`
+로그인 토큰(JWT)의 서명 키. 앱은 이 환경변수에서만 읽고, 없거나 32바이트 미만이면 기동하지 않는다. 키 값은 파일에 쓰지 않는다(DB 비밀번호와 같은 규칙). 아래 한 줄이 48바이트 난수를 만들어 **화면에 출력하지 않고** Windows 사용자 환경변수에 바로 저장한다.
+
+```powershell
+$b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Environment]::SetEnvironmentVariable('CREDITBOOK_JWT_SECRET', [Convert]::ToBase64String($b), 'User')
+```
+
+- 저장한 뒤 터미널·IDE를 새로 열어야 값이 보인다
+- 키를 바꾸면 이미 로그인한 세션이 모두 끊긴다(다시 로그인하면 된다)
+- 테스트·CI에는 필요 없다. 테스트는 실행할 때마다 무작위 키를 만들어 쓴다
+
 ## 3. Flyway
 
 **DB 구조 변경(마이그레이션)을 순서대로 적용하고 기록하는 Java 라이브러리.** 따로 설치하는 프로그램이 아니라 `build.gradle`의 의존성으로 앱 안에 들어 있고, 앱이 시작될 때 DB를 쓰기 전에 먼저 실행된다.
@@ -170,6 +191,7 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 | `starter-flyway` + `flyway-database-postgresql` | 마이그레이션 적용. 뒤의 것은 PostgreSQL 지원 모듈 |
 | `starter-validation` | 요청 DTO 입력 형식 검사(`@NotNull`, `@Positive` 등) |
 | `starter-actuator` | 상태 점검 창구 `/actuator/health`. 배포 후 스모크에 쓴다 |
+| `starter-security-oauth2-resource-server` | Spring Security + JWT 발급·검증(Nimbus). 로그인 쿠키의 토큰으로 요청마다 직원을 확인한다 |
 | `postgresql` (runtimeOnly) | JDBC 드라이버. JPA와 Flyway 모두 이것으로 DB에 접속한다 |
 
 **Flyway는 테이블을 만들고, JPA는 만들어진 테이블에 데이터를 읽고 쓴다.** `ddl-auto: validate`는 "JPA는 테이블을 만들거나 바꾸지 말고, 엔티티와 테이블이 맞는지 확인만 하라"는 뜻이다.
@@ -177,7 +199,7 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 ### 테스트 전용 부품
 | 부품 | 하는 일 |
 |---|---|
-| `*-test` 5개 | 기능별 테스트 도구. JUnit5, AssertJ(`assertThat`), Mockito가 딸려 온다 (Boot 4부터 기능별로 쪼개짐) |
+| `*-test` 7개 | 기능별 테스트 도구. JUnit5, AssertJ(`assertThat`), Mockito가 딸려 온다 (Boot 4부터 기능별로 쪼개짐) |
 | `spring-boot-testcontainers`, `testcontainers-*` | Docker로 임시 PostgreSQL을 띄운다 |
 | `postgresql` (testImplementation) | 제약 위반 시 어떤 제약이 막았는지 `PSQLException`에서 이름을 꺼내 검증하려고 직접 쓴다 |
 | `junit-platform-launcher` | Gradle이 JUnit5를 실행하게 해 주는 연결 부품 |
@@ -187,7 +209,6 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 - `toolchain 17`: PC에 다른 Java가 있어도 17로 빌드
 
 ### 앞으로 추가될 것
-- Spring Security + JWT 라이브러리 (S3, 인증·권한)
 - PIT 뮤테이션 테스트 (`domain` 패키지 테스트가 버그를 실제로 잡는지 검증)
 
 ## 6. PR 병합과 정리

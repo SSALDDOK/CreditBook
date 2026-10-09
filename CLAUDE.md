@@ -162,8 +162,9 @@ com.creditbook
 | `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version` — Optimistic Lock(낙관적 락) |
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
+| `revoked_tokens` (V3, CB-42) | 로그아웃한 토큰의 `jti` PK, `employee_id` FK, `ix_revoked_tokens_expires_at`(만료 지난 행 정리용). 인증 요청마다 직원 활성·역할과 함께 1쿼리로 조회. **Neon 미적용** |
 
-- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 스키마 변경은 `V3__...sql`부터 새 파일로 만든다.
+- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. V3(`revoked_tokens`, CB-42)는 로컬 Docker DB·Testcontainers에만 적용됐다. 다음 스키마 변경은 `V4__...sql`부터 새 파일로 만든다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
 - **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
