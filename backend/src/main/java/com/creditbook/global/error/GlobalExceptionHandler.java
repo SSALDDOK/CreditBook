@@ -15,12 +15,17 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.creditbook.auth.domain.InvalidCredentialsException;
+import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
+import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
+import com.creditbook.prepaid.domain.IdempotencyKeyReusedException;
 import com.creditbook.prepaid.domain.InsufficientBalanceException;
 import com.creditbook.prepaid.domain.InvalidAmountException;
+import com.creditbook.prepaid.domain.InvalidIdempotencyKeyException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 import jakarta.persistence.OptimisticLockException;
@@ -83,6 +88,21 @@ public class GlobalExceptionHandler {
 		return respond(ErrorCode.INVALID_PHONE_NUMBER, ErrorResponse.of(ErrorCode.INVALID_PHONE_NUMBER, ex.getMessage()));
 	}
 
+	@ExceptionHandler(CustomerNotFoundException.class)
+	ResponseEntity<ErrorResponse> handleCustomerNotFound(CustomerNotFoundException ex) {
+		return respond(ErrorCode.CUSTOMER_NOT_FOUND, ErrorResponse.of(ErrorCode.CUSTOMER_NOT_FOUND));
+	}
+
+	/**
+	 * 잔액이 남은 고객 비활성화 (REQ-4). 사유 문구와 함께 현재 잔액을 details 에 싣는다.
+	 * 정상적인 거절이라 WARN 로그는 서비스가 고객·계좌 ID 와 함께 남기고 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(CustomerBalanceNotZeroException.class)
+	ResponseEntity<ErrorResponse> handleCustomerBalanceNotZero(CustomerBalanceNotZeroException ex) {
+		return respond(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO, ErrorResponse.of(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO,
+				ex.getMessage(), new ErrorResponse.CustomerBalanceNotZeroDetails(ex.getBalance())));
+	}
+
 	/** 1회 충전 한도 초과. {@link InvalidAmountException} 의 하위 타입이라 코드를 따로 주려고 별도 처리기를 둔다. */
 	@ExceptionHandler(ChargeLimitExceededException.class)
 	ResponseEntity<ErrorResponse> handleChargeLimitExceeded(ChargeLimitExceededException ex) {
@@ -105,6 +125,28 @@ public class GlobalExceptionHandler {
 				new ErrorResponse.InsufficientBalanceDetails(ex.getBalance(), ex.getShortage());
 		return respond(ErrorCode.INSUFFICIENT_BALANCE,
 				ErrorResponse.of(ErrorCode.INSUFFICIENT_BALANCE, ex.getMessage(), details));
+	}
+
+	/** 요청 키 헤더가 없거나 형식이 틀림 (REQ-10). 정상적인 거절이므로 WARN. 거절된 값은 응답·로그에 남기지 않는다. */
+	@ExceptionHandler(InvalidIdempotencyKeyException.class)
+	ResponseEntity<ErrorResponse> handleInvalidIdempotencyKey(InvalidIdempotencyKeyException ex) {
+		log.warn("request rejected: invalid idempotency key");
+		return respond(ErrorCode.INVALID_IDEMPOTENCY_KEY, ErrorResponse.of(ErrorCode.INVALID_IDEMPOTENCY_KEY));
+	}
+
+	/** 요청 키를 다른 거래에 다시 씀 (REQ-10). WARN 로그는 서비스가 계좌·거래 ID 와 함께 남기므로 여기서는 다시 남기지 않는다. */
+	@ExceptionHandler(IdempotencyKeyReusedException.class)
+	ResponseEntity<ErrorResponse> handleIdempotencyKeyReused(IdempotencyKeyReusedException ex) {
+		return respond(ErrorCode.IDEMPOTENCY_KEY_REUSED, ErrorResponse.of(ErrorCode.IDEMPOTENCY_KEY_REUSED));
+	}
+
+	/**
+	 * 같은 요청 키 동시 요청에서 먼저 저장된 거래를 다시 찾지 못한 경우 (드묾). 재시도하면 재응답 규칙이 적용된다.
+	 * WARN 로그는 서비스가 남긴다.
+	 */
+	@ExceptionHandler(IdempotencyKeyConflictException.class)
+	ResponseEntity<ErrorResponse> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex) {
+		return respond(ErrorCode.CONCURRENT_MODIFICATION, ErrorResponse.of(ErrorCode.CONCURRENT_MODIFICATION));
 	}
 
 	@ExceptionHandler(PrepaidAccountNotFoundException.class)

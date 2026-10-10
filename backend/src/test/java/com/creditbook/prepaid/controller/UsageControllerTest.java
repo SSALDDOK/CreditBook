@@ -35,6 +35,7 @@ import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.UsageResult;
 import com.creditbook.prepaid.application.UsageService;
 import com.creditbook.prepaid.domain.ChargePolicy;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
@@ -57,6 +58,8 @@ class UsageControllerTest {
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
 	private static final Instant NOW = Instant.parse("2026-10-01T01:00:00Z");
 	private static final String URL = "/api/customers/" + CUSTOMER_ID + "/uses";
+	private static final String KEY_VALUE = "3f2b8c1d-key-0001";
+	private static final IdempotencyKey KEY = IdempotencyKey.of(KEY_VALUE);
 
 	@Autowired
 	MockMvc mockMvc;
@@ -74,17 +77,18 @@ class UsageControllerTest {
 
 	private static UsageResult used(long amount, long balanceAfter, String memo) {
 		return new UsageResult(ENTRY_ID, ACCOUNT_ID, CUSTOMER_ID, LedgerEntryType.USE, BigDecimal.valueOf(amount),
-				BigDecimal.valueOf(balanceAfter), memo, EMPLOYEE_ID, NOW);
+				BigDecimal.valueOf(balanceAfter), memo, EMPLOYEE_ID, NOW, false);
 	}
 
 	/** 서비스 대신 실제 도메인 규칙이 금액·잔액을 판단하게 한다. 잔액 {@code balance} 원인 계좌에서 사용한다. */
 	private void useOnRealAccountWithBalance(long balance) {
 		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW);
 		if (balance > 0) {
-			account.charge(BigDecimal.valueOf(balance), ChargePolicy.ofMaxAmount(300_000), EMPLOYEE_ID, NOW, null);
+			account.charge(BigDecimal.valueOf(balance), ChargePolicy.ofMaxAmount(300_000), EMPLOYEE_ID, NOW, null,
+					IdempotencyKey.of("setup-charge"));
 		}
-		given(usageService.use(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID))).willAnswer(invocation -> {
-			account.use(invocation.getArgument(1), EMPLOYEE_ID, NOW, invocation.getArgument(2));
+		given(usageService.use(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
+			account.use(invocation.getArgument(1), EMPLOYEE_ID, NOW, invocation.getArgument(2), KEY);
 			throw new AssertionError("도메인이 사용을 거절해야 한다");
 		});
 	}
@@ -93,11 +97,11 @@ class UsageControllerTest {
 	@DisplayName("잔액 50,000원 고객이 4,500원을 사용하면 잔액이 45,500원이 되고 USE 유형 거래가 생성된다")
 	void use_returns_201_with_location_and_use_entry() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID))
+		given(usageService.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(used(4_500, 45_500, "음료"));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"amount": 4500, "memo": "음료"}
@@ -119,11 +123,11 @@ class UsageControllerTest {
 	@DisplayName("메모 없이 사용할 수 있다")
 	void use_without_memo_is_accepted() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID))
+		given(usageService.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(used(1_000, 9_000, null));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isCreated())
@@ -135,11 +139,11 @@ class UsageControllerTest {
 	@DisplayName("잔액과 같은 금액을 사용하면 성공하고 잔액이 0원이 된다")
 	void use_whole_balance_is_accepted() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("3000"), null, EMPLOYEE_ID))
+		given(usageService.use(CUSTOMER_ID, new BigDecimal("3000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(used(3_000, 0, null));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 3000}"))
 				.andExpect(status().isCreated())
@@ -152,16 +156,16 @@ class UsageControllerTest {
 	void performer_comes_from_current_employee_not_request_body() throws Exception {
 		// given
 		UUID forged = UUID.randomUUID();
-		given(usageService.use(any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
+		given(usageService.use(any(), any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
 
 		// when
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000, \"performedBy\": \"" + forged + "\"}"))
 				.andExpect(status().isCreated());
 
 		// then
-		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID);
+		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
 	}
 
 	@Test
@@ -169,17 +173,17 @@ class UsageControllerTest {
 	@DisplayName("요청 본문에 클라이언트 시각을 넣어도 무시되고 서버 시각이 기록된다")
 	void performed_at_comes_from_server_clock_not_request_body() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
+		given(usageService.use(any(), any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
 
 		// when
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000, \"performedAt\": \"2020-01-01T00:00:00Z\"}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.performedAt").value("2026-10-01T01:00:00Z"));
 
 		// then
-		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID);
+		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
 	}
 
 	@ParameterizedTest(name = "[{index}] 잔액 {0}원, 사용 {1}원 → 부족액 {2}원")
@@ -195,7 +199,7 @@ class UsageControllerTest {
 		useOnRealAccountWithBalance(balance);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": " + amount + "}"))
 				.andExpect(status().isBadRequest())
@@ -217,7 +221,7 @@ class UsageControllerTest {
 		useOnRealAccountWithBalance(10_000);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": " + amount + "}"))
 				.andExpect(status().isBadRequest())
@@ -232,7 +236,7 @@ class UsageControllerTest {
 	@DisplayName("금액을 입력하지 않으면 400으로 거절하고 사용하지 않는다")
 	void use_rejects_missing_amount_with_400(String body) throws Exception {
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
 				.andExpect(status().isBadRequest())
@@ -240,7 +244,7 @@ class UsageControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("amount"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("금액을 입력해 주세요."));
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -250,25 +254,25 @@ class UsageControllerTest {
 		String memo = "가".repeat(201);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000, \"memo\": \"" + memo + "\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("memo"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("메모는 200자 이하여야 합니다."));
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@Test
 	@DisplayName("고객이 없으면 404로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isNotFound())
@@ -280,11 +284,11 @@ class UsageControllerTest {
 	@DisplayName("같은 계좌를 동시에 바꿔 충돌하면 409로 응답한다")
 	void concurrent_modification_is_rejected_with_409() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any()))
 				.willThrow(new ObjectOptimisticLockingFailureException(PrepaidAccount.class, ACCOUNT_ID));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isConflict())
@@ -295,12 +299,12 @@ class UsageControllerTest {
 	@DisplayName("고객 ID 형식이 올바르지 않으면 400으로 거절한다")
 	void malformed_customer_id_is_rejected_with_400() throws Exception {
 		// when / then
-		mockMvc.perform(post("/api/customers/not-a-uuid/uses")
+		mockMvc.perform(post("/api/customers/not-a-uuid/uses").header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -308,12 +312,12 @@ class UsageControllerTest {
 	@DisplayName("금액이 숫자가 아니거나 본문이 JSON 이 아니면 400으로 거절한다")
 	void malformed_body_is_rejected_with_400(String body) throws Exception {
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -323,13 +327,13 @@ class UsageControllerTest {
 		given(currentEmployee.id()).willReturn(null);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 }

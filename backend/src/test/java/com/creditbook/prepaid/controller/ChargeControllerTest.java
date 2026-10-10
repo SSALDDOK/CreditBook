@@ -34,6 +34,7 @@ import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.ChargeResult;
 import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.ChargePolicy;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
@@ -55,6 +56,8 @@ class ChargeControllerTest {
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
 	private static final Instant NOW = Instant.parse("2026-10-01T01:00:00Z");
 	private static final String URL = "/api/customers/" + CUSTOMER_ID + "/charges";
+	private static final String KEY_VALUE = "3f2b8c1d-key-0001";
+	private static final IdempotencyKey KEY = IdempotencyKey.of(KEY_VALUE);
 
 	@Autowired
 	MockMvc mockMvc;
@@ -72,18 +75,18 @@ class ChargeControllerTest {
 
 	private static ChargeResult charged(long amount, long balanceAfter, String memo) {
 		return new ChargeResult(ENTRY_ID, ACCOUNT_ID, CUSTOMER_ID, LedgerEntryType.CHARGE, BigDecimal.valueOf(amount),
-				BigDecimal.valueOf(balanceAfter), memo, EMPLOYEE_ID, NOW);
+				BigDecimal.valueOf(balanceAfter), memo, EMPLOYEE_ID, NOW, false);
 	}
 
 	@Test
 	@DisplayName("잔액 0원 고객에게 50,000원 충전을 등록하면 잔액이 50,000원이 되고 CHARGE 유형 거래가 1건 생성된다")
 	void charge_returns_201_with_location_and_charge_entry() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID))
+		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(charged(50_000, 50_000, "음료"));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"amount": 50000, "memo": "음료"}
@@ -105,11 +108,11 @@ class ChargeControllerTest {
 	@DisplayName("메모 없이 충전할 수 있다")
 	void charge_without_memo_is_accepted() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID))
+		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(charged(10_000, 10_000, null));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isCreated())
@@ -122,16 +125,16 @@ class ChargeControllerTest {
 	void performer_comes_from_current_employee_not_request_body() throws Exception {
 		// given
 		UUID forged = UUID.randomUUID();
-		given(chargeService.charge(any(), any(), any(), any())).willReturn(charged(10_000, 10_000, null));
+		given(chargeService.charge(any(), any(), any(), any(), any())).willReturn(charged(10_000, 10_000, null));
 
 		// when
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000, \"performedBy\": \"" + forged + "\"}"))
 				.andExpect(status().isCreated());
 
 		// then
-		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID);
+		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 	}
 
 	@Test
@@ -139,17 +142,17 @@ class ChargeControllerTest {
 	@DisplayName("요청 본문에 클라이언트 시각을 넣어도 무시되고 서버 시각이 기록된다")
 	void performed_at_comes_from_server_clock_not_request_body() throws Exception {
 		// given
-		given(chargeService.charge(any(), any(), any(), any())).willReturn(charged(10_000, 10_000, null));
+		given(chargeService.charge(any(), any(), any(), any(), any())).willReturn(charged(10_000, 10_000, null));
 
 		// when
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000, \"performedAt\": \"2020-01-01T00:00:00Z\"}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.performedAt").value("2026-10-01T01:00:00Z"));
 
 		// then
-		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID);
+		verify(chargeService).charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -157,7 +160,7 @@ class ChargeControllerTest {
 	@DisplayName("금액을 입력하지 않으면 400으로 거절하고 충전하지 않는다")
 	void charge_rejects_missing_amount_with_400(String body) throws Exception {
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
 				.andExpect(status().isBadRequest())
@@ -165,7 +168,7 @@ class ChargeControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("amount"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("금액을 입력해 주세요."));
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -181,13 +184,13 @@ class ChargeControllerTest {
 		// given: 서비스 대신 실제 도메인 규칙이 금액을 판단하게 한다 (한도는 application.yml 과 같은 300,000원)
 		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW);
 		ChargePolicy policy = ChargePolicy.ofMaxAmount(300_000);
-		given(chargeService.charge(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID))).willAnswer(invocation -> {
-			account.charge(invocation.getArgument(1), policy, EMPLOYEE_ID, NOW, invocation.getArgument(2));
+		given(chargeService.charge(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
+			account.charge(invocation.getArgument(1), policy, EMPLOYEE_ID, NOW, invocation.getArgument(2), KEY);
 			throw new AssertionError("도메인이 금액을 거절해야 한다");
 		});
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": " + amount + "}"))
 				.andExpect(status().isBadRequest())
@@ -201,11 +204,11 @@ class ChargeControllerTest {
 	@DisplayName("1회 충전 한도와 같은 금액은 충전할 수 있다")
 	void charge_at_limit_is_accepted() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("300000"), null, EMPLOYEE_ID))
+		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("300000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(charged(300_000, 300_000, null));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 300000}"))
 				.andExpect(status().isCreated())
@@ -219,14 +222,14 @@ class ChargeControllerTest {
 		String memo = "가".repeat(201);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000, \"memo\": \"" + memo + "\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("memo"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("메모는 200자 이하여야 합니다."));
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -234,11 +237,11 @@ class ChargeControllerTest {
 	void charge_accepts_memo_of_max_length() throws Exception {
 		// given
 		String memo = "가".repeat(200);
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), memo, EMPLOYEE_ID))
+		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), memo, EMPLOYEE_ID, KEY))
 				.willReturn(charged(10_000, 10_000, memo));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000, \"memo\": \"" + memo + "\"}"))
 				.andExpect(status().isCreated());
@@ -248,11 +251,11 @@ class ChargeControllerTest {
 	@DisplayName("고객이 없으면 404로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(chargeService.charge(any(), any(), any(), any()))
+		given(chargeService.charge(any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isNotFound())
@@ -264,12 +267,12 @@ class ChargeControllerTest {
 	@DisplayName("고객 ID 형식이 올바르지 않으면 400으로 거절한다")
 	void malformed_customer_id_is_rejected_with_400() throws Exception {
 		// when / then
-		mockMvc.perform(post("/api/customers/not-a-uuid/charges")
+		mockMvc.perform(post("/api/customers/not-a-uuid/charges").header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -277,12 +280,12 @@ class ChargeControllerTest {
 	@DisplayName("금액이 숫자가 아니거나 본문이 JSON 이 아니면 400으로 거절한다")
 	void malformed_body_is_rejected_with_400(String body) throws Exception {
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(body))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -292,13 +295,13 @@ class ChargeControllerTest {
 		given(currentEmployee.id()).willReturn(null);
 
 		// when / then
-		mockMvc.perform(post(URL)
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 }

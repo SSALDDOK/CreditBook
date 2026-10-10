@@ -66,11 +66,26 @@ public class PrepaidAccount {
 	 * 충전한다 (REQ-5). 잔액이 금액만큼 늘고 CHARGE 거래가 만들어진다.
 	 * 한도는 1회 충전 금액에만 적용된다 — 여러 번 충전해 잔액이 한도를 넘는 것은 허용한다 (REQ-6).
 	 *
+	 * @param idempotencyKey 요청 키 (REQ-10, 필수). 만들어진 거래에 그대로 저장된다
 	 * @throws ChargeLimitExceededException 금액이 1회 충전 한도를 넘을 때
 	 * @throws InvalidAmountException 금액이 null·0 이하·소수점이거나 충전 후 잔액이 NUMERIC(12,0) 범위를 넘을 때
 	 */
 	public LedgerEntry charge(BigDecimal amount, ChargePolicy policy, UUID performedBy, Instant performedAt,
-			String memo) {
+			String memo, IdempotencyKey idempotencyKey) {
+		return chargeWithKey(amount, policy, performedBy, performedAt, memo,
+				Objects.requireNonNull(idempotencyKey, "idempotencyKey"));
+	}
+
+	/**
+	 * 요청 키 없이 충전한다 (idempotency_key NULL). 같은 패키지의 테스트 준비용 — API 경로는 키를 받는
+	 * {@link #charge(BigDecimal, ChargePolicy, UUID, Instant, String, IdempotencyKey)} 만 쓴다.
+	 */
+	LedgerEntry charge(BigDecimal amount, ChargePolicy policy, UUID performedBy, Instant performedAt, String memo) {
+		return chargeWithKey(amount, policy, performedBy, performedAt, memo, null);
+	}
+
+	private LedgerEntry chargeWithKey(BigDecimal amount, ChargePolicy policy, UUID performedBy, Instant performedAt,
+			String memo, IdempotencyKey idempotencyKey) {
 		Objects.requireNonNull(policy, "policy");
 		BigDecimal value = requireValidAmount(amount);
 		if (!policy.isWithinLimit(value)) {
@@ -78,23 +93,39 @@ public class PrepaidAccount {
 		}
 		BigDecimal newBalance = requireWithinRange(this.balance.add(value));
 		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.CHARGE, value, newBalance,
-				normalizeMemo(memo), performedBy, performedAt));
+				normalizeMemo(memo), performedBy, performedAt, idempotencyKey));
 	}
 
 	/**
 	 * 사용한다 (REQ-8). 잔액이 금액만큼 줄고 USE 거래가 만들어진다. 잔액과 같은 금액까지 쓸 수 있다.
 	 *
+	 * @param idempotencyKey 요청 키 (REQ-10, 필수). 만들어진 거래에 그대로 저장된다
 	 * @throws InvalidAmountException 금액이 null·0 이하·소수점일 때
 	 * @throws InsufficientBalanceException 금액이 잔액보다 클 때. 부족 금액을 담는다 (REQ-9, 거래는 만들어지지 않는다)
 	 */
-	public LedgerEntry use(BigDecimal amount, UUID performedBy, Instant performedAt, String memo) {
+	public LedgerEntry use(BigDecimal amount, UUID performedBy, Instant performedAt, String memo,
+			IdempotencyKey idempotencyKey) {
+		return useWithKey(amount, performedBy, performedAt, memo,
+				Objects.requireNonNull(idempotencyKey, "idempotencyKey"));
+	}
+
+	/**
+	 * 요청 키 없이 사용한다 (idempotency_key NULL). 같은 패키지의 테스트 준비용 — API 경로는 키를 받는
+	 * {@link #use(BigDecimal, UUID, Instant, String, IdempotencyKey)} 만 쓴다.
+	 */
+	LedgerEntry use(BigDecimal amount, UUID performedBy, Instant performedAt, String memo) {
+		return useWithKey(amount, performedBy, performedAt, memo, null);
+	}
+
+	private LedgerEntry useWithKey(BigDecimal amount, UUID performedBy, Instant performedAt, String memo,
+			IdempotencyKey idempotencyKey) {
 		BigDecimal value = requireValidAmount(amount);
 		if (!canUse(value)) {
 			throw new InsufficientBalanceException(this.balance, value, value.subtract(this.balance));
 		}
 		BigDecimal newBalance = this.balance.subtract(value);
 		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.USE, value, newBalance,
-				normalizeMemo(memo), performedBy, performedAt));
+				normalizeMemo(memo), performedBy, performedAt, idempotencyKey));
 	}
 
 	/**
@@ -125,6 +156,11 @@ public class PrepaidAccount {
 	/** 이 금액을 지금 사용할 수 있는가 (잔액 이하인가). */
 	public boolean canUse(BigDecimal amount) {
 		return amount != null && this.balance.compareTo(amount) >= 0;
+	}
+
+	/** 잔액이 정확히 0원인가. 고객 비활성화(REQ-4)는 이 판단으로만 허용된다. */
+	public boolean hasZeroBalance() {
+		return this.balance.signum() == 0;
 	}
 
 	/** 반제 공통 규칙: 같은 계좌, 유형 대응(반제 행은 다시 반제 불가), 원본 1건당 반제 1건. */
@@ -190,11 +226,8 @@ public class PrepaidAccount {
 	}
 
 	private static String normalizeMemo(String memo) {
-		if (memo == null || memo.isBlank()) {
-			return null;
-		}
-		String trimmed = memo.strip();
-		if (trimmed.length() > LedgerEntry.MEMO_MAX_LENGTH) {
+		String trimmed = LedgerEntry.normalizeMemo(memo);
+		if (trimmed != null && trimmed.length() > LedgerEntry.MEMO_MAX_LENGTH) {
 			throw new IllegalArgumentException("메모는 " + LedgerEntry.MEMO_MAX_LENGTH + "자 이하여야 합니다.");
 		}
 		return trimmed;

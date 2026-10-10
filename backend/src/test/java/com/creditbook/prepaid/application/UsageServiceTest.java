@@ -25,9 +25,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import com.creditbook.prepaid.domain.ChargePolicy;
 import com.creditbook.prepaid.domain.InsufficientBalanceException;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.InvalidAmountException;
 import com.creditbook.prepaid.domain.LedgerEntry;
 import com.creditbook.prepaid.domain.LedgerEntryRepository;
@@ -48,6 +50,7 @@ class UsageServiceTest {
 	private static final Instant OPENED_AT = NOW.minusSeconds(3600);
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
+	private static final IdempotencyKey KEY = IdempotencyKey.of("3f2b8c1d-key-0001");
 	/** 준비용 충전 한도 — 시험에 필요한 잔액을 한 번에 만든다. */
 	private static final ChargePolicy SETUP_POLICY = ChargePolicy.ofMaxAmount(300_000);
 
@@ -57,18 +60,25 @@ class UsageServiceTest {
 	@Mock
 	LedgerEntryRepository ledgerEntryRepository;
 
+	/** 트랜잭션 경계는 목으로 대신한다 — 실제 롤백·유니크 위반은 PostgreSQL 에서 확인한다. */
+	@Mock
+	PlatformTransactionManager transactionManager;
+
 	UsageService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new UsageService(prepaidAccountRepository, ledgerEntryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+		service = new UsageService(
+				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	/** 잔액이 {@code balance} 원인 계좌. 공개 API(open → charge)로만 만든다. */
 	private PrepaidAccount accountWithBalance(long balance) {
 		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, OPENED_AT);
 		if (balance > 0) {
-			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, OPENED_AT, null);
+			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, OPENED_AT, null,
+					IdempotencyKey.of("setup-charge"));
 		}
 		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
 		return account;
@@ -82,7 +92,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(50_000);
 
 		// when
-		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID);
+		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -92,7 +102,7 @@ class UsageServiceTest {
 		assertThat(entry.getAccountId()).isEqualTo(account.getId());
 		assertThat(entry.getAmount()).isEqualByComparingTo("4500");
 		assertThat(entry.getBalanceAfter()).isEqualByComparingTo("45500");
-		assertThat(entry.getIdempotencyKey()).isNull();
+		assertThat(entry.getIdempotencyKey()).isEqualTo(KEY.value());
 		assertThat(account.getBalance()).isEqualByComparingTo("45500");
 
 		assertThat(result.entryId()).isEqualTo(entry.getId());
@@ -112,7 +122,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 
 		// when
-		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID);
+		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -132,7 +142,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(3_000);
 
 		// when / then
-		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal("5000"), null, EMPLOYEE_ID))
+		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal("5000"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(InsufficientBalanceException.class, e -> {
 					assertThat(e.getBalance()).isEqualByComparingTo("3000");
 					assertThat(e.getShortage()).isEqualByComparingTo("2000");
@@ -156,13 +166,13 @@ class UsageServiceTest {
 
 		// when / then
 		if (accepted) {
-			UsageResult result = service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID);
+			UsageResult result = service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY);
 			assertThat(result.balanceAfter()).isEqualByComparingTo(BigDecimal.valueOf(balance - amount));
 			assertThat(account.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(balance - amount));
 			verify(ledgerEntryRepository).add(any());
 		}
 		else {
-			assertThatThrownBy(() -> service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID))
+			assertThatThrownBy(() -> service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
 					.isInstanceOfSatisfying(InsufficientBalanceException.class,
 							e -> assertThat(e.getShortage()).isEqualByComparingTo(BigDecimal.valueOf(shortage)));
 			verify(ledgerEntryRepository, never()).add(any());
@@ -179,7 +189,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 
 		// when / then
-		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID))
+		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidAmountException.class)
 				.isNotInstanceOf(InsufficientBalanceException.class);
 		verify(ledgerEntryRepository, never()).add(any());
@@ -195,9 +205,32 @@ class UsageServiceTest {
 		given(prepaidAccountRepository.findByCustomerId(unknownCustomer)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.use(unknownCustomer, new BigDecimal("1000"), null, EMPLOYEE_ID))
+		assertThatThrownBy(() -> service.use(unknownCustomer, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
 		verify(ledgerEntryRepository, never()).add(any());
+	}
+
+	@Test
+	@Tag("REQ-10")
+	@DisplayName("같은 요청 키로 같은 사용을 다시 요청하면 다시 빼지 않고 처음 거래를 재응답으로 돌려준다")
+	void use_with_same_key_replays_first_entry() {
+		// given
+		PrepaidAccount account = accountWithBalance(10_000);
+		UsageResult first = service.use(CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
+		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
+		verify(ledgerEntryRepository).add(entryCaptor.capture());
+		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
+
+		// when
+		UsageResult again = service.use(CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
+
+		// then
+		assertThat(first.replayed()).isFalse();
+		assertThat(again.replayed()).isTrue();
+		assertThat(again.entryId()).isEqualTo(first.entryId());
+		assertThat(again.balanceAfter()).isEqualByComparingTo("6000");
+		assertThat(account.getBalance()).isEqualByComparingTo("6000");
+		verify(ledgerEntryRepository).add(any());
 	}
 
 }

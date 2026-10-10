@@ -45,14 +45,14 @@ class ChargeControllerWithoutEmployeeTest {
 		String url = "/api/customers/" + UUID.randomUUID() + "/charges";
 
 		// when / then
-		mockMvc.perform(post(url)
+		mockMvc.perform(post(url).header(IdempotencyHeaders.IDEMPOTENCY_KEY, "key-0001")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
 				.andExpect(jsonPath("$.fieldErrors").isEmpty());
-		verify(chargeService, never()).charge(any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
 	}
 
 }

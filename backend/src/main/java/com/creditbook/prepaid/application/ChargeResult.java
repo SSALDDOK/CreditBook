@@ -12,6 +12,8 @@ import com.creditbook.prepaid.domain.LedgerEntryType;
  *
  * @param entryId 만들어진 CHARGE 거래의 ID
  * @param balanceAfter 충전 후 잔액 (= 계좌의 현재 잔액)
+ * @param replayed 같은 요청 키로 다시 온 요청이라 새 거래 없이 먼저 만든 거래를 돌려주면 true (REQ-10).
+ *        이때 balanceAfter 등은 저장된 원 거래의 값이다
  */
 public record ChargeResult(
 		UUID entryId,
@@ -22,11 +24,14 @@ public record ChargeResult(
 		BigDecimal balanceAfter,
 		String memo,
 		UUID performedBy,
-		Instant performedAt) {
+		Instant performedAt,
+		boolean replayed) {
 
-	static ChargeResult of(UUID customerId, LedgerEntry entry) {
+	static ChargeResult of(UUID customerId, LedgerWriteOutcome outcome) {
+		LedgerEntry entry = outcome.entry();
 		return new ChargeResult(entry.getId(), entry.getAccountId(), customerId, entry.getType(), entry.getAmount(),
-				entry.getBalanceAfter(), entry.getMemo(), entry.getPerformedBy(), entry.getPerformedAt());
+				entry.getBalanceAfter(), entry.getMemo(), entry.getPerformedBy(), entry.getPerformedAt(),
+				outcome.replayed());
 	}
 
 }
