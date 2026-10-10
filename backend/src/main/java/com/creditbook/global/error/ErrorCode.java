@@ -44,6 +44,10 @@ public enum ErrorCode {
 	/** 이미 쓰인 요청 키로 다른 거래(고객·유형·금액·메모 중 하나라도 다름)를 요청. */
 	IDEMPOTENCY_KEY_REUSED(HttpStatus.UNPROCESSABLE_CONTENT, "같은 요청 키로 다른 거래를 요청했습니다. 새로 시도해 주세요."),
 
+	// 409 — 현재 상태와 충돌
+	/** 잔액이 남은 고객 비활성화 (REQ-4). 현재 잔액은 응답의 details 에 실린다. */
+	CUSTOMER_BALANCE_NOT_ZERO(HttpStatus.CONFLICT, "잔액이 0원인 고객만 비활성화할 수 있습니다."),
+
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
 
