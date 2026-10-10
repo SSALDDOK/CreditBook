@@ -25,6 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * 웹 보안 구성 (CB-42). 기본은 거부 — 아래 공개 경로 말고는 모두 로그인이 필요하다 (없는 경로도 401).
  * <ul>
  * <li>공개: POST /api/auth/login, POST /api/auth/logout, GET /actuator/health, /error</li>
+ * <li>ADMIN 전용: {@link #ADMIN_ENDPOINTS} (REQ-16). STAFF 가 부르면 403</li>
  * <li>리소스 서버 DSL 이 자동으로 여는 메타데이터 경로는 {@link ProtectedResourceMetadataBlockingFilter} 가 401 로 막는다</li>
  * <li>인증: {@value SessionCookies#NAME} 쿠키의 JWT 만 받는다 (Authorization 헤더 미사용). 서버 세션 없음(STATELESS)</li>
  * <li>401·403 은 {@link RestAuthenticationEntryPoint}·{@link RestAccessDeniedHandler} 가 ErrorResponse 형식으로 응답한다.
@@ -32,7 +33,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * </ul>
  * <p>
  * <b>CSRF 보호를 끄는 근거</b>: 세션 쿠키가 SameSite=Strict 라 다른 사이트에서 시작한 요청에는 실리지 않고, 프런트는 같은 출처(프록시)로
- * 배포하며, 상태를 바꾸는 API 는 JSON 본문(@RequestBody, application/json)만 받는다 — 폼 전송으로는 만들 수 없는 요청이다.
+ * 배포하며, 상태를 바꾸는 API 는 JSON 본문(@RequestBody, application/json)을 받거나 PATCH 다 — 폼 전송(GET·POST 만 가능)으로는
+ * 만들 수 없는 요청이다.
  * 켜 두면 CSRF 토큰이 없는 로그인 POST 부터 403 이 된다.
  */
 @Configuration(proxyBeanMethods = false)
@@ -47,6 +49,10 @@ public class SecurityConfig {
 			pathPattern(HttpMethod.GET, "/actuator/health"),
 			pathPattern("/error"));
 
+	/** 사장(ADMIN)만 부를 수 있는 경로 (REQ-16). 그 밖의 로그인 필요 경로는 ADMIN·STAFF 모두 쓴다. */
+	static final RequestMatcher ADMIN_ENDPOINTS = new OrRequestMatcher(
+			pathPattern(HttpMethod.PATCH, "/api/customers/{id}/deactivate"));
+
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, EmployeeJwtAuthenticationConverter authenticationConverter,
 			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler,
@@ -60,6 +66,7 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+						.requestMatchers(ADMIN_ENDPOINTS).hasRole("ADMIN")
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(authenticationEntryPoint)
@@ -92,7 +99,7 @@ public class SecurityConfig {
 	private static UrlBasedCorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(properties.allowedOrigins());
-		configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+		configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
 		configuration.setAllowedHeaders(List.of("Content-Type", "Idempotency-Key"));
 		configuration.setAllowCredentials(true);
 		configuration.setMaxAge(3600L);

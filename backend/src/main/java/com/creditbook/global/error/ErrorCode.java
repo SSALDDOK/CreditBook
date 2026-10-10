@@ -38,6 +38,10 @@ public enum ErrorCode {
 	METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."),
 	UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
 
+	// 409 — 현재 상태와 충돌
+	/** 잔액이 남은 고객 비활성화 (REQ-4). 현재 잔액은 응답의 details 에 실린다. */
+	CUSTOMER_BALANCE_NOT_ZERO(HttpStatus.CONFLICT, "잔액이 0원인 고객만 비활성화할 수 있습니다."),
+
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
 

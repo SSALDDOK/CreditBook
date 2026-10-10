@@ -15,6 +15,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.creditbook.auth.domain.InvalidCredentialsException;
+import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
@@ -81,6 +83,21 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidPhoneNumberException.class)
 	ResponseEntity<ErrorResponse> handleInvalidPhoneNumber(InvalidPhoneNumberException ex) {
 		return respond(ErrorCode.INVALID_PHONE_NUMBER, ErrorResponse.of(ErrorCode.INVALID_PHONE_NUMBER, ex.getMessage()));
+	}
+
+	@ExceptionHandler(CustomerNotFoundException.class)
+	ResponseEntity<ErrorResponse> handleCustomerNotFound(CustomerNotFoundException ex) {
+		return respond(ErrorCode.CUSTOMER_NOT_FOUND, ErrorResponse.of(ErrorCode.CUSTOMER_NOT_FOUND));
+	}
+
+	/**
+	 * 잔액이 남은 고객 비활성화 (REQ-4). 사유 문구와 함께 현재 잔액을 details 에 싣는다.
+	 * 정상적인 거절이라 WARN 로그는 서비스가 고객·계좌 ID 와 함께 남기고 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(CustomerBalanceNotZeroException.class)
+	ResponseEntity<ErrorResponse> handleCustomerBalanceNotZero(CustomerBalanceNotZeroException ex) {
+		return respond(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO, ErrorResponse.of(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO,
+				ex.getMessage(), new ErrorResponse.CustomerBalanceNotZeroDetails(ex.getBalance())));
 	}
 
 	/** 1회 충전 한도 초과. {@link InvalidAmountException} 의 하위 타입이라 코드를 따로 주려고 별도 처리기를 둔다. */

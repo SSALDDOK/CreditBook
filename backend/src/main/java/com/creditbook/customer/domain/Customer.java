@@ -5,6 +5,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import com.creditbook.prepaid.domain.PrepaidAccount;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -71,6 +73,35 @@ public class Customer {
 	 */
 	public static Customer register(String name, String phone, Instant registeredAt) {
 		return new Customer(name, phone, registeredAt);
+	}
+
+	/**
+	 * 고객을 비활성화한다 (REQ-4). 잔액이 0원인 고객만 비활성화할 수 있다 — 잔액 판단은 계좌가 한다.
+	 * 기본 목록에서 빠지지만 거래 이력은 남는다 (삭제하지 않는다).
+	 * <p>
+	 * 이미 비활성이면 아무것도 바꾸지 않는다 (멱등 — 상태·변경 시각 그대로).
+	 * <p>
+	 * 계좌 잔액이 이 판단 뒤에 바뀌지 않는다는 보장은 호출자(서비스)가 같은 트랜잭션에서 계좌 version 으로 잡는다.
+	 *
+	 * @param account 이 고객의 선결제 계좌
+	 * @param deactivatedAt 비활성화 시각 (서버 시각)
+	 * @throws CustomerBalanceNotZeroException 활성 고객인데 잔액이 0원이 아닐 때. 상태를 바꾸지 않는다
+	 * @throws IllegalArgumentException 다른 고객의 계좌일 때 (호출자 버그)
+	 */
+	public void deactivate(PrepaidAccount account, Instant deactivatedAt) {
+		Objects.requireNonNull(account, "account");
+		Objects.requireNonNull(deactivatedAt, "deactivatedAt");
+		if (!this.id.equals(account.getCustomerId())) {
+			throw new IllegalArgumentException("account 는 이 고객의 계좌여야 한다");
+		}
+		if (!this.active) {
+			return;
+		}
+		if (!account.hasZeroBalance()) {
+			throw new CustomerBalanceNotZeroException(this.id, account.getBalance());
+		}
+		this.active = false;
+		this.updatedAt = deactivatedAt;
 	}
 
 	private static String requireValidName(String name) {
