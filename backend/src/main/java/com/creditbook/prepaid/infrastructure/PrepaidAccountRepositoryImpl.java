@@ -40,4 +40,9 @@ class PrepaidAccountRepositoryImpl implements PrepaidAccountRepository {
 		return jpaRepository.findByCustomerId(customerId);
 	}
 
+	@Override
+	public Optional<PrepaidAccount> findByCustomerIdAndIncrementVersion(UUID customerId) {
+		return jpaRepository.findForVersionIncrementByCustomerId(customerId);
+	}
+
 }

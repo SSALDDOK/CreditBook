@@ -127,6 +127,11 @@ public class PrepaidAccount {
 		return amount != null && this.balance.compareTo(amount) >= 0;
 	}
 
+	/** 잔액이 정확히 0원인가. 고객 비활성화(REQ-4)는 이 판단으로만 허용된다. */
+	public boolean hasZeroBalance() {
+		return this.balance.signum() == 0;
+	}
+
 	/** 반제 공통 규칙: 같은 계좌, 유형 대응(반제 행은 다시 반제 불가), 원본 1건당 반제 1건. */
 	private void requireReversible(LedgerEntry target, LedgerEntryType reversalType,
 			Optional<LedgerEntry> existingCancel) {

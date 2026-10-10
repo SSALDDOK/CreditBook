@@ -31,6 +31,14 @@ public record ErrorResponse(
 	public record InsufficientBalanceDetails(BigDecimal balance, BigDecimal shortage) {
 	}
 
+	/**
+	 * 잔액이 남은 고객 비활성화(CUSTOMER_BALANCE_NOT_ZERO)의 부가 정보. 화면이 남은 잔액을 안내할 수 있게 한다.
+	 *
+	 * @param balance 요청 시점의 현재 잔액 (원)
+	 */
+	public record CustomerBalanceNotZeroDetails(BigDecimal balance) {
+	}
+
 	public static ErrorResponse of(ErrorCode errorCode) {
 		return new ErrorResponse(errorCode.name(), errorCode.defaultMessage(), List.of(), null);
 	}
