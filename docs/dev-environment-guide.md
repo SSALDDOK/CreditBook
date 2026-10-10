@@ -1,8 +1,8 @@
-# 개발 환경 이해 — Docker · Flyway · Neon · 의존성 · 병합
+# 개발 환경 이해 — Docker · Flyway · Neon · 의존성 · 프론트 · 병합
 
 이 프로젝트의 도구들이 **무엇이고, 서로 어떻게 연결되고, 눈으로 어떻게 확인하는지**를 정리한 문서다. 규칙(무엇을 하면 안 되는지)은 [CLAUDE.md](../CLAUDE.md)가 기준이고, 이 문서는 그 규칙의 배경을 설명한다.
 
-기준일: 2026-09-29 (V1 Neon 적용, 로컬 Docker 설치 완료 시점). 2026-10-07 로컬 Docker DB 프로필(`local-docker`) 추가
+기준일: 2026-09-29 (V1 Neon 적용, 로컬 Docker 설치 완료 시점). 2026-10-07 로컬 Docker DB 프로필(`local-docker`) 추가. 2026-10-11 프론트(Node.js) 절 추가
 
 ---
 
@@ -211,7 +211,28 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 ### 앞으로 추가될 것
 - PIT 뮤테이션 테스트 (`domain` 패키지 테스트가 버그를 실제로 잡는지 검증)
 
-## 6. PR 병합과 정리
+## 6. 프론트 (`frontend/`, Node.js)
+
+- 필요한 것: **Node.js 22 최신**(22.13 이상). CI도 Node 22로 빌드한다
+- **Node 22.12는 쓰지 않는다** — 이 리포처럼 경로에 한글이 있으면 `npm run dev`·`build`가 시작하자마자 비정상 종료된다(종료 코드 -1073741819). 22 최신에서는 정상 (2026-10-11 확인)
+- 버전 확인: `node -v`
+
+### Node 업그레이드 (설치 프로그램으로 깔려 있을 때 — `C:\Program Files\nodejs`)
+1. https://nodejs.org/en/about/previous-releases 에서 Node.js 22 줄의 최신 버전 → Windows Installer(.msi) 64-bit 를 받는다
+2. 실행해서 기본 옵션 그대로 설치한다 (기존 버전을 덮어쓴다)
+3. VS Code를 완전히 껐다 다시 연다 (새 경로를 다시 읽게)
+4. `node -v` 로 22.13 이상인지 확인
+
+### 실행
+```powershell
+cd frontend
+npm ci          # 처음 한 번, 또는 package-lock.json 이 바뀌었을 때
+npm run dev     # http://localhost:5173
+```
+- 개발 서버는 기본으로 **목 데이터**(가짜 고객)를 보여 준다. 운영 빌드(`npm run build`)는 기본이 실제 API다. 바꾸는 법은 `frontend/README.md`
+- 개발 서버는 `/api` 요청을 `http://localhost:8080`(bootRun)으로 넘긴다
+
+## 7. PR 병합과 정리
 
 - GitHub에서 **Create a merge commit** → Confirm merge로 병합한다. 병합 방식은 merge commit만 쓴다 (squash·rebase 금지)
 - CI(`backend build & test`)가 통과하지 않으면 `main` 보호 규칙 때문에 병합 버튼이 막힌다
@@ -226,7 +247,7 @@ git branch -d <병합된 브랜치>
 git push origin --delete <병합된 브랜치>   # GitHub에 남아 있을 때
 ```
 
-## 7. 자주 쓰는 명령
+## 8. 자주 쓰는 명령
 
 | 하고 싶은 것 | 명령 (`backend/`에서) | 전제 |
 |---|---|---|
@@ -236,5 +257,6 @@ git push origin --delete <병합된 브랜치>   # GitHub에 남아 있을 때
 | 앱 실행 (Neon 접속) | `$env:SPRING_PROFILES_ACTIVE='local'; ./gradlew bootRun` | 새 마이그레이션이 있으면 **먼저 사용자 확인** |
 | 앱 상태 | 브라우저에서 `http://localhost:8080/actuator/health` | 앱 실행 중. 로컬에서는 `components.db`까지 보인다 |
 | Docker 동작 확인 | `docker run --rm hello-world` | Docker Desktop 켜짐 |
+| 화면 실행 (`frontend/`에서) | `npm run dev` | Node 22 최신, 처음엔 `npm ci` |
 
 > VS Code가 Docker 설치 전에 켜져 있었다면 터미널이 `docker` 명령을 못 찾는다. VS Code를 완전히 껐다 다시 연다.
