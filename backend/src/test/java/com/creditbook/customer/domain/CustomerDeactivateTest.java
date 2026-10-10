@@ -14,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.creditbook.prepaid.domain.ChargePolicy;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 
 /**
@@ -36,7 +37,8 @@ class CustomerDeactivateTest {
 	private static PrepaidAccount accountOf(Customer customer, long balance) {
 		PrepaidAccount account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
 		if (balance > 0) {
-			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, REGISTERED_AT, null);
+			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, REGISTERED_AT, null,
+					IdempotencyKey.of("setup-charge"));
 		}
 		return account;
 	}
@@ -63,7 +65,7 @@ class CustomerDeactivateTest {
 		// given
 		Customer customer = newCustomer();
 		PrepaidAccount account = accountOf(customer, 5_000);
-		account.use(BigDecimal.valueOf(5_000), EMPLOYEE_ID, REGISTERED_AT, null);
+		account.use(BigDecimal.valueOf(5_000), EMPLOYEE_ID, REGISTERED_AT, null, IdempotencyKey.of("setup-use"));
 
 		// when
 		customer.deactivate(account, NOW);

@@ -11,6 +11,8 @@ public enum ErrorCode {
 	// 400 — 요청 형식
 	INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값을 확인해 주세요."),
 	MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "요청 본문을 읽을 수 없습니다."),
+	/** 요청 키(Idempotency-Key) 헤더가 없거나 형식(영문·숫자·하이픈 1–64자)이 틀림 (REQ-10). 거절된 값은 되돌리지 않는다. */
+	INVALID_IDEMPOTENCY_KEY(HttpStatus.BAD_REQUEST, "요청 키(Idempotency-Key)를 확인해 주세요."),
 
 	// 400 — 고객 도메인 규칙
 	INVALID_CUSTOMER_NAME(HttpStatus.BAD_REQUEST, "이름을 확인해 주세요."),
@@ -37,6 +39,10 @@ public enum ErrorCode {
 	NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
 	METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."),
 	UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
+
+	// 422 — 요청 키 재사용 (REQ-10)
+	/** 이미 쓰인 요청 키로 다른 거래(고객·유형·금액·메모 중 하나라도 다름)를 요청. */
+	IDEMPOTENCY_KEY_REUSED(HttpStatus.UNPROCESSABLE_CONTENT, "같은 요청 키로 다른 거래를 요청했습니다. 새로 시도해 주세요."),
 
 	// 409 — 현재 상태와 충돌
 	/** 잔액이 남은 고객 비활성화 (REQ-4). 현재 잔액은 응답의 details 에 실린다. */

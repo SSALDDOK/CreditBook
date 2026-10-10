@@ -34,6 +34,7 @@ import com.creditbook.global.security.CurrentEmployee;
 import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.UsageResult;
 import com.creditbook.prepaid.application.UsageService;
+import com.creditbook.prepaid.controller.IdempotencyHeaders;
 import com.creditbook.prepaid.controller.UsageController;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.support.WithMockEmployee;
@@ -63,14 +64,14 @@ class RequestIdWebLayerTest {
 	CurrentEmployee currentEmployee;
 
 	private static MockHttpServletRequestBuilder useRequest(long amount) {
-		return post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"amount\": " + amount + "}");
+		return post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, "rid-test-key").contentType(MediaType.APPLICATION_JSON).content("{\"amount\": " + amount + "}");
 	}
 
 	private void givenSuccessfulUse() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
-		given(usageService.use(any(), any(), any(), any())).willReturn(new UsageResult(UUID.randomUUID(),
+		given(usageService.use(any(), any(), any(), any(), any())).willReturn(new UsageResult(UUID.randomUUID(),
 				UUID.randomUUID(), CUSTOMER_ID, LedgerEntryType.USE, new BigDecimal("1000"), new BigDecimal("9000"),
-				null, EMPLOYEE_ID, Instant.parse("2026-10-07T01:00:00Z")));
+				null, EMPLOYEE_ID, Instant.parse("2026-10-07T01:00:00Z"), false));
 	}
 
 	@Test
@@ -165,7 +166,7 @@ class RequestIdWebLayerTest {
 	void unexpected_error_logs_id_and_hides_internals(CapturedOutput output) throws Exception {
 		// given
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
-		given(usageService.use(any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any()))
 				.willThrow(new IllegalStateException("internal-detail-should-not-leak"));
 
 		// when

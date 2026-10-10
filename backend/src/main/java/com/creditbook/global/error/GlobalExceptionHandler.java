@@ -21,8 +21,11 @@ import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
+import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
+import com.creditbook.prepaid.domain.IdempotencyKeyReusedException;
 import com.creditbook.prepaid.domain.InsufficientBalanceException;
 import com.creditbook.prepaid.domain.InvalidAmountException;
+import com.creditbook.prepaid.domain.InvalidIdempotencyKeyException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 import jakarta.persistence.OptimisticLockException;
@@ -122,6 +125,28 @@ public class GlobalExceptionHandler {
 				new ErrorResponse.InsufficientBalanceDetails(ex.getBalance(), ex.getShortage());
 		return respond(ErrorCode.INSUFFICIENT_BALANCE,
 				ErrorResponse.of(ErrorCode.INSUFFICIENT_BALANCE, ex.getMessage(), details));
+	}
+
+	/** 요청 키 헤더가 없거나 형식이 틀림 (REQ-10). 정상적인 거절이므로 WARN. 거절된 값은 응답·로그에 남기지 않는다. */
+	@ExceptionHandler(InvalidIdempotencyKeyException.class)
+	ResponseEntity<ErrorResponse> handleInvalidIdempotencyKey(InvalidIdempotencyKeyException ex) {
+		log.warn("request rejected: invalid idempotency key");
+		return respond(ErrorCode.INVALID_IDEMPOTENCY_KEY, ErrorResponse.of(ErrorCode.INVALID_IDEMPOTENCY_KEY));
+	}
+
+	/** 요청 키를 다른 거래에 다시 씀 (REQ-10). WARN 로그는 서비스가 계좌·거래 ID 와 함께 남기므로 여기서는 다시 남기지 않는다. */
+	@ExceptionHandler(IdempotencyKeyReusedException.class)
+	ResponseEntity<ErrorResponse> handleIdempotencyKeyReused(IdempotencyKeyReusedException ex) {
+		return respond(ErrorCode.IDEMPOTENCY_KEY_REUSED, ErrorResponse.of(ErrorCode.IDEMPOTENCY_KEY_REUSED));
+	}
+
+	/**
+	 * 같은 요청 키 동시 요청에서 먼저 저장된 거래를 다시 찾지 못한 경우 (드묾). 재시도하면 재응답 규칙이 적용된다.
+	 * WARN 로그는 서비스가 남긴다.
+	 */
+	@ExceptionHandler(IdempotencyKeyConflictException.class)
+	ResponseEntity<ErrorResponse> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex) {
+		return respond(ErrorCode.CONCURRENT_MODIFICATION, ErrorResponse.of(ErrorCode.CONCURRENT_MODIFICATION));
 	}
 
 	@ExceptionHandler(PrepaidAccountNotFoundException.class)

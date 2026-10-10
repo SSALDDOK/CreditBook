@@ -79,7 +79,7 @@ public class LedgerEntry {
 	}
 
 	private LedgerEntry(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String memo, UUID reversesId, UUID performedBy, Instant performedAt) {
+			String memo, UUID reversesId, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
 		this.id = UUID.randomUUID();
 		this.accountId = Objects.requireNonNull(accountId, "accountId");
 		this.type = Objects.requireNonNull(type, "type");
@@ -90,27 +90,65 @@ public class LedgerEntry {
 		this.reversesId = reversesId;
 		this.performedBy = Objects.requireNonNull(performedBy, "performedBy");
 		this.performedAt = Objects.requireNonNull(performedAt, "performedAt");
+		this.idempotencyKey = idempotencyKey == null ? null : idempotencyKey.value();
 		// ck_ledger_entries_reverses 와 같은 규칙: 반제 유형만 reverses_id 를 가진다
 		if (type.isReversal() != (reversesId != null)) {
 			throw new IllegalArgumentException("반제 유형만 reverses_id 를 가진다: " + type);
 		}
 	}
 
-	/** 원 거래(CHARGE·USE)를 만든다. {@link PrepaidAccount} 에서만 호출한다. */
+	/**
+	 * 원 거래(CHARGE·USE)를 만든다. {@link PrepaidAccount} 에서만 호출한다.
+	 *
+	 * @param idempotencyKey 요청 키 (없으면 null — idempotency_key 를 NULL 로 저장)
+	 */
 	static LedgerEntry original(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String memo, UUID performedBy, Instant performedAt) {
-		return new LedgerEntry(accountId, type, amount, balanceAfter, memo, null, performedBy, performedAt);
+			String memo, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
+		return new LedgerEntry(accountId, type, amount, balanceAfter, memo, null, performedBy, performedAt,
+				idempotencyKey);
 	}
 
 	/** 반제 거래(CHARGE_CANCEL·USE_CANCEL)를 만든다. {@link PrepaidAccount} 에서만 호출한다. */
 	static LedgerEntry reversal(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
 			String reason, UUID reversesId, UUID performedBy, Instant performedAt) {
 		return new LedgerEntry(accountId, type, amount, balanceAfter, reason,
-				Objects.requireNonNull(reversesId, "reversesId"), performedBy, performedAt);
+				Objects.requireNonNull(reversesId, "reversesId"), performedBy, performedAt, null);
+	}
+
+	/**
+	 * 메모·사유를 저장 형태로 맞춘다 — 앞뒤 공백 제거, null·공백뿐이면 null. 길이 검사는 하지 않는다
+	 * (저장할 때는 {@link PrepaidAccount} 가 길이를 검사하고, 요청 비교 때는 다르기만 하면 되므로).
+	 */
+	static String normalizeMemo(String memo) {
+		if (memo == null || memo.isBlank()) {
+			return null;
+		}
+		return memo.strip();
 	}
 
 	public boolean isReversal() {
 		return type.isReversal();
+	}
+
+	/**
+	 * 같은 요청 키로 다시 온 요청이 이 거래를 만든 요청과 같은가 (REQ-10).
+	 * 계좌(= 고객, 고객 1명당 계좌 1개)·유형·금액·메모가 모두 같아야 같다. 반제 요청은 금액 대신 대상 거래를 비교한다.
+	 * 금액은 값으로 비교한다 (10000 과 10000.0 은 같다).
+	 *
+	 * @param accountId 이번 요청 고객의 계좌 ID. 계좌가 없는 고객이면 null — 이 거래의 계좌와 같을 수 없으므로 다른 요청이다
+	 * @param request 이번 요청의 비교 기준
+	 */
+	public boolean isSameRequest(UUID accountId, IdempotentRequest request) {
+		Objects.requireNonNull(request, "request");
+		return this.accountId.equals(accountId)
+				&& this.type == request.type()
+				&& (type.isReversal() || isSameAmount(request.amount()))
+				&& Objects.equals(this.reversesId, request.reversesId())
+				&& Objects.equals(this.memo, request.memo());
+	}
+
+	private boolean isSameAmount(BigDecimal requested) {
+		return requested != null && this.amount.compareTo(requested) == 0;
 	}
 
 	public UUID getId() {

@@ -45,14 +45,14 @@ class UsageControllerWithoutEmployeeTest {
 		String url = "/api/customers/" + UUID.randomUUID() + "/uses";
 
 		// when / then
-		mockMvc.perform(post(url)
+		mockMvc.perform(post(url).header(IdempotencyHeaders.IDEMPOTENCY_KEY, "key-0001")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
 				.andExpect(jsonPath("$.fieldErrors").isEmpty());
-		verify(usageService, never()).use(any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 }

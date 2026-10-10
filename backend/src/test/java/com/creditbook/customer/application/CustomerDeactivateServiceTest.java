@@ -27,6 +27,7 @@ import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.ChargePolicy;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountRepository;
@@ -60,7 +61,7 @@ class CustomerDeactivateServiceTest {
 		PrepaidAccount account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
 		if (balance > 0) {
 			account.charge(BigDecimal.valueOf(balance), ChargePolicy.ofMaxAmount(300_000), ADMIN_ID, REGISTERED_AT,
-					null);
+					null, IdempotencyKey.of("setup-charge"));
 		}
 		return account;
 	}
