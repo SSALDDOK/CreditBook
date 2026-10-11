@@ -284,8 +284,11 @@ class AuthControllerTest {
 		given(employeeRepository.findAuthStatus(any(), any()))
 				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
 		String value = tokenService.issue(EMPLOYEE_ID).value();
-		char last = value.charAt(value.length() - 1);
-		String tampered = value.substring(0, value.length() - 1) + (last == 'A' ? 'B' : 'A');
+		// 서명의 첫 글자를 바꾼다. 마지막 글자는 base64url 패딩 비트만 바뀌어 서명 바이트가 그대로일 수 있다
+		int signatureStart = value.lastIndexOf('.') + 1;
+		char first = value.charAt(signatureStart);
+		String tampered = value.substring(0, signatureStart) + (first == 'A' ? 'B' : 'A')
+				+ value.substring(signatureStart + 1);
 
 		// when / then
 		mockMvc.perform(get("/api/auth/session").cookie(new Cookie("CB_SESSION", tampered)))
