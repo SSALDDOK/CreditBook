@@ -125,10 +125,12 @@ class JwtTokenServiceTest {
 	@Test
 	@DisplayName("서명을 바꾼 토큰은 거절한다")
 	void tampered_signature_is_rejected() {
-		// given
+		// given — 서명 첫 글자를 바꾼다 (마지막 글자는 패딩 비트만 바뀌어 서명이 그대로일 수 있다)
 		String value = tokenService.issue(EMPLOYEE_ID).value();
-		char last = value.charAt(value.length() - 1);
-		String tampered = value.substring(0, value.length() - 1) + (last == 'A' ? 'B' : 'A');
+		int signatureStart = value.lastIndexOf('.') + 1;
+		char first = value.charAt(signatureStart);
+		String tampered = value.substring(0, signatureStart) + (first == 'A' ? 'B' : 'A')
+				+ value.substring(signatureStart + 1);
 
 		// when / then
 		assertThat(tokenService.verify(tampered)).isEmpty();
