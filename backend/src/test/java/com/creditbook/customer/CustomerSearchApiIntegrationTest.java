@@ -1,5 +1,6 @@
 package com.creditbook.customer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,8 @@ import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.WithMockEmployee;
+
+import jakarta.persistence.EntityManager;
 
 
 @AutoConfigureMockMvc
@@ -40,6 +44,12 @@ class CustomerSearchApiIntegrationTest {
     @Autowired
     CustomerService customerService;
 
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    EntityManager entityManager;
+
     @Test
     @DisplayName("이름 일부 검색 시 해당 고객만 잔액과 함께 반환") 
     @Tag("TC-29")
@@ -52,7 +62,7 @@ class CustomerSearchApiIntegrationTest {
         customerService.register("박땅TC29", "01000000006");
 		//  when 이름 일부("고객") 검색 시
         mockMvc.perform(get("/api/customers").param("q", "고객TC29"))
-	    //  then 200, 총 검색 개수, 이름 확인, 잔액 확인
+	    //  then 200, totalElements 2, content 이름 = 고객TC29포함, 계좌 0원
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(2))
         .andExpect(jsonPath("$.content[*].name", everyItem(containsString("고객TC29"))))
@@ -70,7 +80,7 @@ class CustomerSearchApiIntegrationTest {
         customerService.register("박고객", "01033334444");
         //  when 전화번호 뒷자리 검색 시
         mockMvc.perform(get("/api/customers").param("q", "7979"))
-        //  then 200, 총 검색 개수, 이름 확인, 잔액 확인, 연락처 마스킹 확인
+        //  then 200, totalElements 1, content name = 김고객, 계좌 0원, maskedPhone
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(1))
         .andExpect(jsonPath("$.content[0].name").value("김고객"))
@@ -111,11 +121,22 @@ class CustomerSearchApiIntegrationTest {
         .andExpect(jsonPath("$.content").isEmpty());
     }
 
-    // @Test
+    @Test
     @DisplayName("모든 고객에게 선결제 계좌가 1개씩 존재") 
     @Tag("TC-38")
     void every_customer_has_exactly_one_prepaid_account() throws Exception{
-        
+        //  given 고객 등록
+        customerService.register("김고객", "01011117979");
+        customerService.register("이고객", "01022223333");
+        customerService.register("박고객", "01033334444");
+        //  when 계좌가 1개가 아닌 고객 수를 DB에서 센다
+        entityManager.flush(); //JPA메모리 -> DB로 보내기
+        Integer brokenCustomers = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM customers c
+                WHERE (SELECT count(*) FROM prepaid_accounts a WHERE a.customer_id = c.id) <> 1
+                """, Integer.class);
+        //then 0명이어야 한다
+        assertThat(brokenCustomers).isEqualTo(0);
     }
 
     // @Test
