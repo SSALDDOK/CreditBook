@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -50,7 +52,7 @@ class CustomerSearchApiIntegrationTest {
         customerService.register("박땅TC29", "01000000006");
 		//  when 이름 일부("고객") 검색 시
         mockMvc.perform(get("/api/customers").param("q", "고객TC29"))
-	    //  then 200OK, 총 검색 개수, 이름 확인, 잔액 확인
+	    //  then 200, 총 검색 개수, 이름 확인, 잔액 확인
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(2))
         .andExpect(jsonPath("$.content[*].name", everyItem(containsString("고객TC29"))))
@@ -68,7 +70,7 @@ class CustomerSearchApiIntegrationTest {
         customerService.register("박고객", "01033334444");
         //  when 전화번호 뒷자리 검색 시
         mockMvc.perform(get("/api/customers").param("q", "7979"))
-        //  then 200OK, 총 검색 개수, 이름 확인, 잔액 확인, 연락처 마스킹 확인
+        //  then 200, 총 검색 개수, 이름 확인, 잔액 확인, 연락처 마스킹 확인
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(1))
         .andExpect(jsonPath("$.content[0].name").value("김고객"))
@@ -90,11 +92,23 @@ class CustomerSearchApiIntegrationTest {
         
     }
 
-    // @Test
+    @ParameterizedTest(name = "검색어 [{0}]")
+    @ValueSource(strings = { "%", "_", "100%" })
     @DisplayName("검색어에 특수문자(%, _) 포함 — 오류 없이 안전 처리") 
     @Tag("TC-37")
-    void search_with_like_wildcards_matches_literally_without_error() throws Exception{
-        
+    void search_with_like_wildcards_matches_literally_without_error(String keyword) throws Exception{
+        // given — 고객 5명 (이름에 %·_ 없음)
+        customerService.register("김고객TC37", "01012345678");
+        customerService.register("고객TC37김", "01012341234");
+        customerService.register("김땅TC37", "01000000008");
+        customerService.register("이땅TC37", "01000000007");
+        customerService.register("박땅TC37", "01000000006");
+        // when — param("q", keyword)
+        mockMvc.perform(get("/api/customers").param("q", keyword))
+        // then — 200, totalElements 0, content 비어 있음
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.totalElements").value(0))
+        .andExpect(jsonPath("$.content").isEmpty());
     }
 
     // @Test
