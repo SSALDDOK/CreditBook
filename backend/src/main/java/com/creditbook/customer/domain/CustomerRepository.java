@@ -18,9 +18,10 @@ public interface CustomerRepository {
 	Optional<Customer> findById(UUID id);
 
 	/**
-	 * 활성 고객을 잔액과 함께 검색한다 (REQ-2). 비활성 고객은 목록에서 빠진다 (REQ-4).
+	 * 고객을 잔액과 함께 검색한다 (REQ-2). 기본은 활성 고객만이고 비활성 고객은 목록·검색·건수에서 빠진다 (REQ-4).
+	 * {@code includeInactive} 가 true 면 비활성 고객도 함께 담는다 (REQ-33).
 	 * 정렬은 최근 등록순(등록 시각 내림차순, 같으면 id 내림차순)으로 고정이며 {@code pageable} 의 정렬은 쓰지 않는다.
 	 */
-	Page<CustomerSummary> searchActive(CustomerSearchKeyword keyword, Pageable pageable);
+	Page<CustomerSummary> search(CustomerSearchKeyword keyword, boolean includeInactive, Pageable pageable);
 
 }

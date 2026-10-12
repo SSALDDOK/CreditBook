@@ -27,7 +27,7 @@ import com.creditbook.customer.domain.CustomerSearchKeyword;
 import com.creditbook.customer.domain.CustomerSummary;
 
 /**
- * 검색어 → 쿼리 선택과 LIKE 패턴 생성. 쿼리 자체(조인·정렬·비활성 제외)는 DB 가 있어야 검증되므로 S3 통합 테스트에서 본다.
+ * 검색어·비활성 포함 여부 → 쿼리 선택과 LIKE 패턴 생성. 쿼리 자체(조인·정렬·비활성 제외)는 DB 가 있어야 검증되므로 통합 테스트에서 본다.
  */
 @ExtendWith(MockitoExtension.class)
 @Tag("REQ-2")
@@ -53,7 +53,7 @@ class CustomerRepositoryImplTest {
 		given(jpaRepository.findActiveSummaries(any())).willReturn(page);
 
 		// when
-		Page<CustomerSummary> result = repository.searchActive(CustomerSearchKeyword.parse(null), PageRequest.of(0, 20));
+		Page<CustomerSummary> result = repository.search(CustomerSearchKeyword.parse(null), false, PageRequest.of(0, 20));
 
 		// then
 		assertThat(result).isSameAs(page);
@@ -74,7 +74,7 @@ class CustomerRepositoryImplTest {
 		given(jpaRepository.findActiveSummariesByNameLike(anyString(), any())).willReturn(page);
 
 		// when
-		repository.searchActive(CustomerSearchKeyword.parse(query), PageRequest.of(0, 20));
+		repository.search(CustomerSearchKeyword.parse(query), false, PageRequest.of(0, 20));
 
 		// then
 		verify(jpaRepository).findActiveSummariesByNameLike(eq(expectedPattern), any());
@@ -87,7 +87,7 @@ class CustomerRepositoryImplTest {
 		given(jpaRepository.findActiveSummariesByPhoneLike(anyString(), any())).willReturn(page);
 
 		// when
-		repository.searchActive(CustomerSearchKeyword.parse("56-78"), PageRequest.of(0, 20));
+		repository.search(CustomerSearchKeyword.parse("56-78"), false, PageRequest.of(0, 20));
 
 		// then
 		verify(jpaRepository).findActiveSummariesByPhoneLike(eq("%5678"), any());
@@ -101,7 +101,7 @@ class CustomerRepositoryImplTest {
 		Pageable sorted = PageRequest.of(2, 50, Sort.by("name"));
 
 		// when
-		repository.searchActive(CustomerSearchKeyword.parse(""), sorted);
+		repository.search(CustomerSearchKeyword.parse(""), false, sorted);
 
 		// then
 		ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
@@ -109,6 +109,54 @@ class CustomerRepositoryImplTest {
 		assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
 		assertThat(captor.getValue().getPageSize()).isEqualTo(50);
 		assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("비활성 포함이면 검색어가 없을 때 활성 조건 없는 전체 목록 쿼리를 쓴다")
+	void include_inactive_without_keyword_uses_all_query() {
+		// given
+		given(jpaRepository.findAllSummaries(any())).willReturn(page);
+
+		// when
+		Page<CustomerSummary> result = repository.search(CustomerSearchKeyword.parse(null), true, PageRequest.of(0, 20));
+
+		// then
+		assertThat(result).isSameAs(page);
+		verify(jpaRepository, never()).findActiveSummaries(any());
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("비활성 포함이면 이름 검색도 같은 이스케이프 패턴으로 활성 조건 없는 쿼리를 쓴다")
+	void include_inactive_name_keyword_uses_all_query_with_same_pattern() {
+		// given
+		given(jpaRepository.findAllSummariesByNameLike(anyString(), any())).willReturn(page);
+
+		// when
+		repository.search(CustomerSearchKeyword.parse("50%"), true, PageRequest.of(0, 20));
+
+		// then
+		verify(jpaRepository).findAllSummariesByNameLike(eq("%50!%%"), any());
+		verify(jpaRepository, never()).findActiveSummariesByNameLike(anyString(), any());
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("비활성 포함이면 연락처 검색도 같은 끝자리 패턴으로 활성 조건 없는 쿼리를 쓴다")
+	void include_inactive_phone_keyword_uses_all_query_with_same_pattern() {
+		// given
+		given(jpaRepository.findAllSummariesByPhoneLike(anyString(), any())).willReturn(page);
+
+		// when
+		repository.search(CustomerSearchKeyword.parse("56-78"), true, PageRequest.of(0, 20));
+
+		// then
+		verify(jpaRepository).findAllSummariesByPhoneLike(eq("%5678"), any());
+		verify(jpaRepository, never()).findActiveSummariesByPhoneLike(anyString(), any());
 	}
 
 }

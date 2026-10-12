@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -27,6 +28,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.creditbook.customer.domain.Customer;
+import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
 import com.creditbook.prepaid.domain.ChargePolicy;
 import com.creditbook.prepaid.domain.IdempotencyKey;
@@ -58,6 +61,10 @@ class ChargeServiceTest {
 	@Mock
 	LedgerEntryRepository ledgerEntryRepository;
 
+	/** 활성 고객을 돌려준다. 비활성 고객 재활성화·사용 거부는 별도 테스트(REQ-33)가 본다. */
+	@Mock
+	CustomerRepository customerRepository;
+
 	/** 트랜잭션 경계는 목으로 대신한다 — 실제 롤백·유니크 위반은 PostgreSQL 에서 확인한다. */
 	@Mock
 	PlatformTransactionManager transactionManager;
@@ -68,14 +75,17 @@ class ChargeServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		// 계좌가 없는 경우처럼 고객 조회까지 가지 않는 테스트도 있어 lenient 로 둔다
+		lenient().when(customerRepository.findById(CUSTOMER_ID))
+				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", NOW.minusSeconds(7_200))));
 		account = PrepaidAccount.open(CUSTOMER_ID, NOW.minusSeconds(3600));
 		service = newService(POLICY);
 	}
 
 	private ChargeService newService(ChargePolicy policy) {
 		return new ChargeService(
-				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager), policy,
-				Clock.fixed(NOW, ZoneOffset.UTC));
+				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
+				customerRepository, policy, Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test

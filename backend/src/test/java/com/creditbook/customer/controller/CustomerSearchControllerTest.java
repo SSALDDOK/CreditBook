@@ -3,6 +3,7 @@ package com.creditbook.customer.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -51,10 +52,13 @@ class CustomerSearchControllerTest {
 
 	private static final CustomerSummary KIM = new CustomerSummary(
 			UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c"), "김단골", "01000005678", new BigDecimal("15000"),
-			NOW);
+			NOW, true);
 	private static final CustomerSummary LEE = new CustomerSummary(
 			UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"), "이단골", "0200001234", BigDecimal.ZERO,
-			NOW.minusSeconds(60));
+			NOW.minusSeconds(60), true);
+	private static final CustomerSummary PARK_INACTIVE = new CustomerSummary(
+			UUID.fromString("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b"), "박휴면", "01000009012", BigDecimal.ZERO,
+			NOW.minusSeconds(120), false);
 
 	@Autowired
 	MockMvc mockMvc;
@@ -70,7 +74,7 @@ class CustomerSearchControllerTest {
 	@DisplayName("Given 고객이 30명 등록된 상태에서 When 이름 일부, 전화번호 뒷자리를 검색하면 Then 해당 고객만 잔액과 함께 목록에 표시된다")
 	void search_returns_matching_customers_with_balance() throws Exception {
 		// given: 30명 중 검색어에 맞는 1명만 서비스가 돌려준다
-		given(customerService.search("5678", 0, 20)).willReturn(pageOf(List.of(KIM), 0, 20, 1));
+		given(customerService.search("5678", false, 0, 20)).willReturn(pageOf(List.of(KIM), 0, 20, 1));
 
 		// when / then
 		mockMvc.perform(get("/api/customers").param("q", "5678"))
@@ -88,7 +92,7 @@ class CustomerSearchControllerTest {
 	@DisplayName("검색어 없이 조회하면 첫 페이지를 20명 단위로 돌려주고 페이지 정보를 함께 담는다")
 	void list_without_query_uses_default_page_and_returns_page_info() throws Exception {
 		// given
-		given(customerService.search(null, 0, 20)).willReturn(pageOf(List.of(KIM, LEE), 0, 20, 30));
+		given(customerService.search(null, false, 0, 20)).willReturn(pageOf(List.of(KIM, LEE), 0, 20, 30));
 
 		// when / then
 		mockMvc.perform(get("/api/customers"))
@@ -104,14 +108,14 @@ class CustomerSearchControllerTest {
 				// Spring Data Page 를 그대로 직렬화하지 않는다
 				.andExpect(jsonPath("$.pageable").doesNotExist())
 				.andExpect(jsonPath("$.sort").doesNotExist());
-		verify(customerService).search(null, 0, 20);
+		verify(customerService).search(null, false, 0, 20);
 	}
 
 	@Test
 	@DisplayName("요청한 페이지 번호와 크기로 조회한다")
 	void page_and_size_are_passed_to_service() throws Exception {
 		// given
-		given(customerService.search("김", 1, 10)).willReturn(pageOf(List.of(LEE), 1, 10, 11));
+		given(customerService.search("김", false, 1, 10)).willReturn(pageOf(List.of(LEE), 1, 10, 11));
 
 		// when / then
 		mockMvc.perform(get("/api/customers").param("q", "김").param("page", "1").param("size", "10"))
@@ -120,7 +124,7 @@ class CustomerSearchControllerTest {
 				.andExpect(jsonPath("$.size").value(10))
 				.andExpect(jsonPath("$.totalPages").value(2))
 				.andExpect(jsonPath("$.hasNext").value(false));
-		verify(customerService).search("김", 1, 10);
+		verify(customerService).search("김", false, 1, 10);
 	}
 
 	@Test
@@ -128,7 +132,7 @@ class CustomerSearchControllerTest {
 	@DisplayName("목록 응답에는 연락처 원문이 어디에도 없고 가운데 자리를 가린 연락처만 있다")
 	void list_response_never_contains_raw_phone() throws Exception {
 		// given
-		given(customerService.search(null, 0, 20)).willReturn(pageOf(List.of(KIM, LEE), 0, 20, 2));
+		given(customerService.search(null, false, 0, 20)).willReturn(pageOf(List.of(KIM, LEE), 0, 20, 2));
 
 		// when / then
 		mockMvc.perform(get("/api/customers"))
@@ -156,7 +160,7 @@ class CustomerSearchControllerTest {
 				.andExpect(jsonPath("$.fieldErrors[0].message").isNotEmpty())
 				// 거절된 값(검색어는 개인정보일 수 있음)을 응답에 되돌려 보내지 않는다
 				.andExpect(content().string(not(containsString(value))));
-		verify(customerService, never()).search(any(), anyInt(), anyInt());
+		verify(customerService, never()).search(any(), anyBoolean(), anyInt(), anyInt());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}={1}")
@@ -168,7 +172,85 @@ class CustomerSearchControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value(name));
-		verify(customerService, never()).search(any(), anyInt(), anyInt());
+		verify(customerService, never()).search(any(), anyBoolean(), anyInt(), anyInt());
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("기본 목록에도 각 고객의 활성 여부가 항상 담긴다")
+	void default_list_items_always_contain_active_flag() throws Exception {
+		// given
+		given(customerService.search(null, false, 0, 20)).willReturn(pageOf(List.of(KIM, LEE), 0, 20, 2));
+
+		// when / then
+		mockMvc.perform(get("/api/customers"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].active").value(true))
+				.andExpect(jsonPath("$.content[1].active").value(true));
+		verify(customerService).search(null, false, 0, 20);
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("비활성 포함을 켜면 비활성 고객도 목록·건수에 담기고 비활성으로 표시되며 연락처는 똑같이 가려진다")
+	void include_inactive_lists_inactive_customers_marked_inactive_and_masked() throws Exception {
+		// given
+		given(customerService.search(null, true, 0, 20)).willReturn(pageOf(List.of(KIM, PARK_INACTIVE), 0, 20, 2));
+
+		// when / then
+		mockMvc.perform(get("/api/customers").param("includeInactive", "true"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElements").value(2))
+				.andExpect(jsonPath("$.content[0].active").value(true))
+				.andExpect(jsonPath("$.content[1].name").value("박휴면"))
+				.andExpect(jsonPath("$.content[1].active").value(false))
+				.andExpect(jsonPath("$.content[1].maskedPhone").value("010-****-9012"))
+				.andExpect(jsonPath("$.content[1].phone").doesNotExist())
+				.andExpect(content().string(not(containsString("01000009012"))));
+		verify(customerService).search(null, true, 0, 20);
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@DisplayName("비활성 포함은 검색어·페이지와 함께 쓸 수 있다")
+	void include_inactive_combines_with_query_and_page() throws Exception {
+		// given
+		given(customerService.search("휴면", true, 1, 10)).willReturn(pageOf(List.of(PARK_INACTIVE), 1, 10, 11));
+
+		// when / then
+		mockMvc.perform(get("/api/customers").param("q", "휴면").param("includeInactive", "true")
+				.param("page", "1").param("size", "10"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].active").value(false));
+		verify(customerService).search("휴면", true, 1, 10);
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@WithMockEmployee(role = "ADMIN")
+	@DisplayName("ADMIN 도 비활성 포함 목록을 조회할 수 있다")
+	void admin_can_list_with_include_inactive() throws Exception {
+		// given
+		given(customerService.search(null, true, 0, 20)).willReturn(pageOf(List.of(PARK_INACTIVE), 0, 20, 1));
+
+		// when / then
+		mockMvc.perform(get("/api/customers").param("includeInactive", "true"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].active").value(false));
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@DisplayName("비활성 포함 값이 true/false 가 아니면 400 INVALID_INPUT 으로 거절한다")
+	void non_boolean_include_inactive_is_rejected_with_400() throws Exception {
+		// when / then
+		mockMvc.perform(get("/api/customers").param("includeInactive", "abc"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("includeInactive"));
+		verify(customerService, never()).search(any(), anyBoolean(), anyInt(), anyInt());
 	}
 
 }

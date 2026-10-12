@@ -9,11 +9,13 @@ import java.util.UUID;
  *
  * @param phone 저장된 원문(숫자 정규형). 응답으로 내보낼 때는 반드시 {@link PhoneNumberMasker} 를 거친다
  * @param balance prepaid_accounts.balance (원 단위 정수)
+ * @param active 활성 고객이면 true. 비활성 포함 목록(REQ-33, includeInactive)에서 비활성 고객을 구분한다
  */
 public record CustomerSummary(
 		UUID id,
 		String name,
 		String phone,
 		BigDecimal balance,
-		Instant createdAt) {
+		Instant createdAt,
+		boolean active) {
 }
