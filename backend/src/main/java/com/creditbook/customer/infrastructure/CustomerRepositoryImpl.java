@@ -49,15 +49,25 @@ class CustomerRepositoryImpl implements CustomerRepository {
 	}
 
 	@Override
-	public Page<CustomerSummary> searchActive(CustomerSearchKeyword keyword, Pageable pageable) {
+	public Page<CustomerSummary> search(CustomerSearchKeyword keyword, boolean includeInactive, Pageable pageable) {
 		// 정렬은 쿼리에 고정돼 있다 — 호출자가 넘긴 정렬이 ORDER BY 에 덧붙지 않도록 떼어 낸다
 		Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
 		return switch (keyword.type()) {
-			case NONE -> jpaRepository.findActiveSummaries(unsorted);
-			case NAME -> jpaRepository.findActiveSummariesByNameLike(
-					"%" + escapeLike(keyword.value().toLowerCase(Locale.ROOT)) + "%", unsorted);
-			case PHONE_SUFFIX -> jpaRepository.findActiveSummariesByPhoneLike(
-					"%" + escapeLike(keyword.value()), unsorted);
+			case NONE -> includeInactive
+					? jpaRepository.findAllSummaries(unsorted)
+					: jpaRepository.findActiveSummaries(unsorted);
+			case NAME -> {
+				String pattern = "%" + escapeLike(keyword.value().toLowerCase(Locale.ROOT)) + "%";
+				yield includeInactive
+						? jpaRepository.findAllSummariesByNameLike(pattern, unsorted)
+						: jpaRepository.findActiveSummariesByNameLike(pattern, unsorted);
+			}
+			case PHONE_SUFFIX -> {
+				String pattern = "%" + escapeLike(keyword.value());
+				yield includeInactive
+						? jpaRepository.findAllSummariesByPhoneLike(pattern, unsorted)
+						: jpaRepository.findActiveSummariesByPhoneLike(pattern, unsorted);
+			}
 		};
 	}
 

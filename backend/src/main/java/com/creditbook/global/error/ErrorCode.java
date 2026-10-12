@@ -52,6 +52,8 @@ public enum ErrorCode {
 	CUSTOMER_BALANCE_NOT_ZERO(HttpStatus.CONFLICT, "잔액이 0원인 고객만 비활성화할 수 있습니다."),
 	/** 이미 취소된 거래를 다시 취소 (원본 1건당 반제 1건). 먼저 만들어진 취소 거래 ID 는 응답의 details 에 실린다. */
 	ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 거래입니다."),
+	/** 비활성 고객에게 사용(USE) 요청 (REQ-33). 충전하면 다시 활성화된다. 장부·잔액은 바뀌지 않는다. */
+	CUSTOMER_INACTIVE(HttpStatus.CONFLICT, "비활성 고객입니다. 충전하면 다시 활성화됩니다."),
 
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),

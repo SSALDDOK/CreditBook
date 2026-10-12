@@ -16,6 +16,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerInactiveException;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
@@ -105,6 +106,15 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleCustomerBalanceNotZero(CustomerBalanceNotZeroException ex) {
 		return respond(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO, ErrorResponse.of(ErrorCode.CUSTOMER_BALANCE_NOT_ZERO,
 				ex.getMessage(), new ErrorResponse.CustomerBalanceNotZeroDetails(ex.getBalance())));
+	}
+
+	/**
+	 * 비활성 고객에게 사용 요청 (REQ-33). 정상적인 거절이라 WARN 로그는 서비스가 고객·계좌 ID 와 함께 남기고
+	 * 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(CustomerInactiveException.class)
+	ResponseEntity<ErrorResponse> handleCustomerInactive(CustomerInactiveException ex) {
+		return respond(ErrorCode.CUSTOMER_INACTIVE, ErrorResponse.of(ErrorCode.CUSTOMER_INACTIVE, ex.getMessage()));
 	}
 
 	/** 1회 충전 한도 초과. {@link InvalidAmountException} 의 하위 타입이라 코드를 따로 주려고 별도 처리기를 둔다. */

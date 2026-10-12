@@ -30,6 +30,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.creditbook.customer.domain.CustomerInactiveException;
 import com.creditbook.global.security.CurrentEmployee;
 import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.UsageResult;
@@ -278,6 +279,24 @@ class UsageControllerTest {
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("CUSTOMER_NOT_FOUND"))
 				.andExpect(jsonPath("$.message").value("고객을 찾을 수 없습니다."));
+	}
+
+	@Test
+	@Tag("REQ-33")
+	@DisplayName("비활성 고객에게 사용을 요청하면 409 CUSTOMER_INACTIVE 로 거절하고 충전하면 다시 활성화된다고 안내한다")
+	void inactive_customer_is_rejected_with_409() throws Exception {
+		// given
+		given(usageService.use(any(), any(), any(), any(), any()))
+				.willThrow(new CustomerInactiveException(CUSTOMER_ID));
+
+		// when / then
+		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\": 1000}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("CUSTOMER_INACTIVE"))
+				.andExpect(jsonPath("$.message").value("비활성 고객입니다. 충전하면 다시 활성화됩니다."))
+				.andExpect(header().doesNotExist(IdempotencyHeaders.IDEMPOTENT_REPLAYED));
 	}
 
 	@Test
