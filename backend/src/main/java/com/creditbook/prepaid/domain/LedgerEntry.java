@@ -108,11 +108,15 @@ public class LedgerEntry {
 				idempotencyKey);
 	}
 
-	/** 반제 거래(CHARGE_CANCEL·USE_CANCEL)를 만든다. {@link PrepaidAccount} 에서만 호출한다. */
+	/**
+	 * 반제 거래(CHARGE_CANCEL·USE_CANCEL)를 만든다. {@link PrepaidAccount} 에서만 호출한다.
+	 *
+	 * @param idempotencyKey 요청 키 (없으면 null — idempotency_key 를 NULL 로 저장)
+	 */
 	static LedgerEntry reversal(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String reason, UUID reversesId, UUID performedBy, Instant performedAt) {
+			String reason, UUID reversesId, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
 		return new LedgerEntry(accountId, type, amount, balanceAfter, reason,
-				Objects.requireNonNull(reversesId, "reversesId"), performedBy, performedAt, null);
+				Objects.requireNonNull(reversesId, "reversesId"), performedBy, performedAt, idempotencyKey);
 	}
 
 	/**

@@ -20,12 +20,16 @@ import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
+import com.creditbook.prepaid.domain.AlreadyCancelledException;
+import com.creditbook.prepaid.domain.CancelReasonRequiredException;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
 import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
 import com.creditbook.prepaid.domain.IdempotencyKeyReusedException;
 import com.creditbook.prepaid.domain.InsufficientBalanceException;
 import com.creditbook.prepaid.domain.InvalidAmountException;
+import com.creditbook.prepaid.domain.InvalidCancelTargetException;
 import com.creditbook.prepaid.domain.InvalidIdempotencyKeyException;
+import com.creditbook.prepaid.domain.LedgerEntryNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 import jakarta.persistence.OptimisticLockException;
@@ -125,6 +129,40 @@ public class GlobalExceptionHandler {
 				new ErrorResponse.InsufficientBalanceDetails(ex.getBalance(), ex.getShortage());
 		return respond(ErrorCode.INSUFFICIENT_BALANCE,
 				ErrorResponse.of(ErrorCode.INSUFFICIENT_BALANCE, ex.getMessage(), details));
+	}
+
+	/**
+	 * 취소 사유 없음 (REQ-34). 요청 DTO 검증(@NotBlank)이 먼저 막으므로 여기까지 오는 것은 방어선이다.
+	 * 입력 오류와 같은 코드로 응답하고 문구는 도메인 문구를 싣는다.
+	 */
+	@ExceptionHandler(CancelReasonRequiredException.class)
+	ResponseEntity<ErrorResponse> handleCancelReasonRequired(CancelReasonRequiredException ex) {
+		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT, ex.getMessage()));
+	}
+
+	/**
+	 * 취소할 수 없는 거래 (다른 고객의 거래, 유형 불일치, 반제 거래). 사유는 도메인 문구를 그대로 싣는다.
+	 * WARN 로그는 서비스가 계좌·거래 ID 와 함께 남기므로 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(InvalidCancelTargetException.class)
+	ResponseEntity<ErrorResponse> handleInvalidCancelTarget(InvalidCancelTargetException ex) {
+		return respond(ErrorCode.INVALID_CANCEL_TARGET,
+				ErrorResponse.of(ErrorCode.INVALID_CANCEL_TARGET, ex.getMessage()));
+	}
+
+	/**
+	 * 이미 취소된 거래. 먼저 만들어진 취소 거래 ID 를 details 에 싣는다.
+	 * WARN 로그는 서비스가 남기므로 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(AlreadyCancelledException.class)
+	ResponseEntity<ErrorResponse> handleAlreadyCancelled(AlreadyCancelledException ex) {
+		return respond(ErrorCode.ALREADY_CANCELLED, ErrorResponse.of(ErrorCode.ALREADY_CANCELLED, ex.getMessage(),
+				new ErrorResponse.AlreadyCancelledDetails(ex.getCancelEntryId())));
+	}
+
+	@ExceptionHandler(LedgerEntryNotFoundException.class)
+	ResponseEntity<ErrorResponse> handleLedgerEntryNotFound(LedgerEntryNotFoundException ex) {
+		return respond(ErrorCode.LEDGER_ENTRY_NOT_FOUND, ErrorResponse.of(ErrorCode.LEDGER_ENTRY_NOT_FOUND));
 	}
 
 	/** 요청 키 헤더가 없거나 형식이 틀림 (REQ-10). 정상적인 거절이므로 WARN. 거절된 값은 응답·로그에 남기지 않는다. */

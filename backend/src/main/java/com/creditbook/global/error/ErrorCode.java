@@ -23,6 +23,8 @@ public enum ErrorCode {
 	CHARGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "1회 충전 한도를 넘었습니다."),
 	/** 잔액보다 큰 금액 사용 (REQ-9). 현재 잔액·부족액은 응답의 details 에 실린다. */
 	INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "잔액이 부족합니다."),
+	/** 취소할 수 없는 거래 — 다른 고객의 거래, 유형이 맞지 않는 거래, 반제 거래 (REQ-34). 사유는 message 에 실린다. */
+	INVALID_CANCEL_TARGET(HttpStatus.BAD_REQUEST, "취소할 수 없는 거래입니다."),
 
 	// 401 — 인증
 	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
@@ -34,6 +36,7 @@ public enum ErrorCode {
 
 	// 404 — 대상 없음
 	CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "고객을 찾을 수 없습니다."),
+	LEDGER_ENTRY_NOT_FOUND(HttpStatus.NOT_FOUND, "거래를 찾을 수 없습니다."),
 
 	// 4xx — Spring MVC 가 판단하는 요청 오류
 	NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
@@ -47,6 +50,8 @@ public enum ErrorCode {
 	// 409 — 현재 상태와 충돌
 	/** 잔액이 남은 고객 비활성화 (REQ-4). 현재 잔액은 응답의 details 에 실린다. */
 	CUSTOMER_BALANCE_NOT_ZERO(HttpStatus.CONFLICT, "잔액이 0원인 고객만 비활성화할 수 있습니다."),
+	/** 이미 취소된 거래를 다시 취소 (원본 1건당 반제 1건). 먼저 만들어진 취소 거래 ID 는 응답의 details 에 실린다. */
+	ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 거래입니다."),
 
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),

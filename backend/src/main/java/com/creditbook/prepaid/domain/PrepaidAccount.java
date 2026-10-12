@@ -142,15 +142,31 @@ public class PrepaidAccount {
 	 * @throws InvalidCancelTargetException target 이 다른 계좌의 거래이거나 USE 가 아닐 때 (반제 행 포함)
 	 * @throws AlreadyCancelledException target 이 이미 취소됐을 때
 	 * @throws CancelReasonRequiredException 사유가 null·공백일 때
+	 * @param idempotencyKey 요청 키 (REQ-10, 필수). 만들어진 반제 거래에 그대로 저장된다
 	 * @throws IllegalArgumentException existingCancel 이 target 을 반제한 거래가 아닐 때 (호출자 버그)
 	 */
 	public LedgerEntry cancelUse(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
+		return cancelUseWithKey(target, existingCancel, reason, performedBy, performedAt,
+				Objects.requireNonNull(idempotencyKey, "idempotencyKey"));
+	}
+
+	/**
+	 * 요청 키 없이 사용 건을 취소한다 (idempotency_key NULL). 같은 패키지의 테스트 준비용 — API 경로는 키를 받는
+	 * {@link #cancelUse(LedgerEntry, Optional, String, UUID, Instant, IdempotencyKey)} 만 쓴다.
+	 */
+	LedgerEntry cancelUse(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
 			UUID performedBy, Instant performedAt) {
+		return cancelUseWithKey(target, existingCancel, reason, performedBy, performedAt, null);
+	}
+
+	private LedgerEntry cancelUseWithKey(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
 		requireReversible(target, LedgerEntryType.USE_CANCEL, existingCancel);
 		String normalizedReason = requireReason(reason);
 		BigDecimal newBalance = requireWithinRange(this.balance.add(target.getAmount()));
 		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.USE_CANCEL, target.getAmount(), newBalance,
-				normalizedReason, target.getId(), performedBy, performedAt));
+				normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
 	}
 
 	/** 이 금액을 지금 사용할 수 있는가 (잔액 이하인가). */
@@ -183,7 +199,7 @@ public class PrepaidAccount {
 			if (!target.getId().equals(cancel.getReversesId())) {
 				throw new IllegalArgumentException("existingCancel 은 target 을 반제한 거래여야 한다");
 			}
-			throw new AlreadyCancelledException(target.getId(), cancel.getId());
+			throw new AlreadyCancelledException(target.getId(), target.getType(), cancel.getId());
 		}
 	}
 

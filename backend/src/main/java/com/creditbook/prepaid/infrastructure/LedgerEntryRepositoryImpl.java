@@ -1,6 +1,7 @@
 package com.creditbook.prepaid.infrastructure;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.stereotype.Repository;
@@ -52,6 +53,19 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 	public Optional<LedgerEntry> findByIdempotencyKey(IdempotencyKey key) {
 		return em.createQuery("select e from LedgerEntry e where e.idempotencyKey = :key", LedgerEntry.class)
 				.setParameter("key", key.value())
+				.getResultStream()
+				.findFirst();
+	}
+
+	@Override
+	public Optional<LedgerEntry> findById(UUID id) {
+		return Optional.ofNullable(em.find(LedgerEntry.class, id));
+	}
+
+	@Override
+	public Optional<LedgerEntry> findByReversesId(UUID originalId) {
+		return em.createQuery("select e from LedgerEntry e where e.reversesId = :originalId", LedgerEntry.class)
+				.setParameter("originalId", originalId)
 				.getResultStream()
 				.findFirst();
 	}
