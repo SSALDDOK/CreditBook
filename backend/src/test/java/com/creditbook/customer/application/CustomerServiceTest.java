@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -133,16 +134,16 @@ class CustomerServiceTest {
 			String expectedValue) {
 		// given: 저장소는 검색어에 맞는 고객만 잔액과 함께 돌려준다 (30명 중 조건 걸러내기는 쿼리가 한다 — S3 통합 테스트)
 		CustomerSummary matched = new CustomerSummary(UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c"), "김단골",
-				"01000005678", new BigDecimal("15000"), NOW);
-		given(customerRepository.searchActive(any(), any()))
+				"01000005678", new BigDecimal("15000"), NOW, true);
+		given(customerRepository.search(any(), eq(false), any()))
 				.willReturn(new PageImpl<>(List.of(matched), PageRequest.of(0, 20), 1));
 
 		// when
-		Page<CustomerSummary> result = service.search(query, 0, 20);
+		Page<CustomerSummary> result = service.search(query, false, 0, 20);
 
 		// then
 		ArgumentCaptor<CustomerSearchKeyword> keywordCaptor = ArgumentCaptor.forClass(CustomerSearchKeyword.class);
-		verify(customerRepository).searchActive(keywordCaptor.capture(), any());
+		verify(customerRepository).search(keywordCaptor.capture(), eq(false), any());
 		assertThat(keywordCaptor.getValue().type()).isEqualTo(expectedType);
 		assertThat(keywordCaptor.getValue().value()).isEqualTo(expectedValue);
 
@@ -155,17 +156,37 @@ class CustomerServiceTest {
 	@DisplayName("검색어가 없으면 전체 목록을 요청한 페이지 번호와 크기로 조회한다")
 	void search_without_query_requests_all_with_page() {
 		// given
-		given(customerRepository.searchActive(any(), any())).willReturn(Page.empty());
+		given(customerRepository.search(any(), eq(false), any())).willReturn(Page.empty());
 
 		// when
-		service.search(null, 3, 50);
+		service.search(null, false, 3, 50);
 
 		// then
 		ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
-		verify(customerRepository).searchActive(eq(CustomerSearchKeyword.parse(null)),
+		verify(customerRepository).search(eq(CustomerSearchKeyword.parse(null)), eq(false),
 				pageCaptor.capture());
 		assertThat(pageCaptor.getValue().getPageNumber()).isEqualTo(3);
 		assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(50);
+	}
+
+	@ParameterizedTest(name = "[{index}] includeInactive={0}")
+	@ValueSource(booleans = { true, false })
+	@Tag("REQ-33")
+	@Tag("REQ-4")
+	@DisplayName("비활성 포함 여부를 저장소 검색 조건으로 그대로 넘긴다")
+	void search_passes_include_inactive_to_repository(boolean includeInactive) {
+		// given
+		CustomerSummary inactive = new CustomerSummary(UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"), "이휴면",
+				"01000001234", BigDecimal.ZERO, NOW, false);
+		given(customerRepository.search(any(), eq(includeInactive), any()))
+				.willReturn(new PageImpl<>(List.of(inactive), PageRequest.of(0, 20), 1));
+
+		// when
+		Page<CustomerSummary> result = service.search("휴면", includeInactive, 0, 20);
+
+		// then
+		verify(customerRepository).search(eq(CustomerSearchKeyword.parse("휴면")), eq(includeInactive), any());
+		assertThat(result.getContent()).containsExactly(inactive);
 	}
 
 }

@@ -2,13 +2,18 @@ package com.creditbook.prepaid.application;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.creditbook.customer.domain.Customer;
+import com.creditbook.customer.domain.CustomerNotFoundException;
+import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.ChargePolicy;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.IdempotentRequest;
@@ -18,11 +23,11 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 /**
- * 충전 유스케이스 (REQ-5, REQ-10). 금액 검증·한도·잔액 계산은 {@link PrepaidAccount} 가 하고,
- * 요청 키 처리와 트랜잭션 경계는 {@link IdempotentLedgerWriter} 가 잡는다.
+ * 충전 유스케이스 (REQ-5, REQ-10, REQ-33). 금액 검증·한도·잔액 계산은 {@link PrepaidAccount}, 재활성화는 {@link Customer} 가
+ * 하고, 요청 키 처리와 트랜잭션 경계는 {@link IdempotentLedgerWriter} 가 잡는다.
  * <p>
- * 계좌의 잔액 변경(dirty checking 으로 UPDATE, @Version 증가)과 CHARGE 거래 추가가 한 트랜잭션에서 함께 반영되거나
- * 함께 취소된다. 같은 계좌에 동시에 충전·사용하면 늦게 커밋하는 쪽이 Optimistic Lock(낙관적 락) 충돌로 실패한다.
+ * 계좌의 잔액 변경(dirty checking 으로 UPDATE, @Version 증가)과 CHARGE 거래 추가, 비활성 고객의 재활성화가 한 트랜잭션에서
+ * 함께 반영되거나 함께 취소된다. 같은 계좌에 동시에 충전·사용하면 늦게 커밋하는 쪽이 Optimistic Lock(낙관적 락) 충돌로 실패한다.
  */
 @Service
 public class ChargeService {
@@ -30,18 +35,23 @@ public class ChargeService {
 	private static final Logger log = LoggerFactory.getLogger(ChargeService.class);
 
 	private final IdempotentLedgerWriter ledgerWriter;
+	private final CustomerRepository customerRepository;
 	private final ChargePolicy chargePolicy;
 	private final Clock clock;
 
-	ChargeService(IdempotentLedgerWriter ledgerWriter, ChargePolicy chargePolicy, Clock clock) {
+	ChargeService(IdempotentLedgerWriter ledgerWriter, CustomerRepository customerRepository, ChargePolicy chargePolicy,
+			Clock clock) {
 		this.ledgerWriter = ledgerWriter;
+		this.customerRepository = customerRepository;
 		this.chargePolicy = chargePolicy;
 		this.clock = clock;
 	}
 
 	/**
 	 * 고객의 선결제 계좌에 충전한다 (REQ-5). 시각은 서버 시각이다 (REQ-20).
-	 * 같은 요청 키로 같은 요청이 다시 오면 새로 충전하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10).
+	 * 비활성 고객이면 충전과 같은 트랜잭션에서 다시 활성화한다 (REQ-33).
+	 * 같은 요청 키로 같은 요청이 다시 오면 새로 충전하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10) —
+	 * 이때는 재활성화도 다시 하지 않는다.
 	 *
 	 * @param customerId 충전할 고객
 	 * @param amount 충전 금액 (형식·범위·1회 한도 검증은 도메인이 한다)
@@ -58,9 +68,11 @@ public class ChargeService {
 		Objects.requireNonNull(performedBy, "performedBy");
 		Objects.requireNonNull(idempotencyKey, "idempotencyKey");
 		IdempotentRequest request = IdempotentRequest.original(LedgerEntryType.CHARGE, amount, memo);
+		// 재활성화 여부는 커밋된 뒤에만 로그로 남긴다 — 커밋 전에 남기면 롤백된 재활성화가 로그에 남는다
+		AtomicBoolean reactivated = new AtomicBoolean(false);
 
 		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
-				account -> account.charge(amount, chargePolicy, performedBy, clock.instant(), memo, idempotencyKey));
+				account -> chargeAndReactivate(account, amount, memo, performedBy, idempotencyKey, reactivated));
 
 		if (!outcome.replayed()) {
 			LedgerEntry entry = outcome.entry();
@@ -68,8 +80,25 @@ public class ChargeService {
 			log.info("balance changed: accountId={}, type={}, amount={}, balanceAfter={}, performedBy={}",
 					entry.getAccountId(), entry.getType(), entry.getAmount().toPlainString(),
 					entry.getBalanceAfter().toPlainString(), performedBy);
+			if (reactivated.get()) {
+				log.info("customer reactivated by charge: customerId={}, accountId={}, performedBy={}",
+						customerId, entry.getAccountId(), performedBy);
+			}
 		}
 		return ChargeResult.of(customerId, outcome);
+	}
+
+	/**
+	 * 쓰기 트랜잭션 안에서 불린다. 충전이 도메인 규칙에 걸리면 고객 상태는 건드리지 않는다 (충전 먼저, 재활성화는 그 뒤).
+	 */
+	private LedgerEntry chargeAndReactivate(PrepaidAccount account, BigDecimal amount, String memo, UUID performedBy,
+			IdempotencyKey idempotencyKey, AtomicBoolean reactivated) {
+		Instant now = clock.instant();
+		LedgerEntry entry = account.charge(amount, chargePolicy, performedBy, now, memo, idempotencyKey);
+		Customer customer = customerRepository.findById(account.getCustomerId())
+				.orElseThrow(() -> new CustomerNotFoundException(account.getCustomerId()));
+		reactivated.set(customer.reactivate(now));
+		return entry;
 	}
 
 }

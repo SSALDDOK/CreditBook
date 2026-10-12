@@ -104,6 +104,35 @@ public class Customer {
 		this.updatedAt = deactivatedAt;
 	}
 
+	/**
+	 * 비활성 고객을 다시 활성화한다 (REQ-33). 비활성 고객에게 충전하면 충전과 같은 트랜잭션에서 호출된다.
+	 * 이미 활성이면 아무것도 바꾸지 않는다 (멱등 — 상태·변경 시각 그대로).
+	 *
+	 * @param reactivatedAt 재활성화 시각 (서버 시각)
+	 * @return 이번 호출로 비활성에서 활성으로 바뀌었으면 true, 이미 활성이었으면 false
+	 */
+	public boolean reactivate(Instant reactivatedAt) {
+		Objects.requireNonNull(reactivatedAt, "reactivatedAt");
+		if (this.active) {
+			return false;
+		}
+		this.active = true;
+		this.updatedAt = reactivatedAt;
+		return true;
+	}
+
+	/**
+	 * 이 고객이 선결제 잔액을 사용(USE)할 수 있는지 확인한다 (REQ-33). 비활성 고객은 사용할 수 없다 — 충전하면 다시 활성화된다.
+	 * 잔액은 보지 않는다 (잔액 부족 판단은 계좌가 한다).
+	 *
+	 * @throws CustomerInactiveException 비활성 고객일 때
+	 */
+	public void ensureCanUse() {
+		if (!this.active) {
+			throw new CustomerInactiveException(this.id);
+		}
+	}
+
 	private static String requireValidName(String name) {
 		if (name == null || name.isBlank()) {
 			throw new InvalidCustomerNameException("이름을 입력해 주세요.");

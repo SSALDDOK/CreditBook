@@ -62,9 +62,12 @@ public class CustomerController {
 	}
 
 	/**
-	 * 고객 목록·검색 (REQ-2). 활성 고객만, 잔액과 함께, 최근 등록순으로 돌려준다. 연락처는 가려서 내보낸다.
+	 * 고객 목록·검색 (REQ-2). 잔액과 함께, 최근 등록순으로 돌려준다. 연락처는 가려서 내보낸다.
+	 * 기본은 활성 고객만이고, {@code includeInactive=true} 면 비활성 고객도 목록·검색·건수에 담는다 (REQ-33).
+	 * 각 항목의 {@code active} 로 활성 여부를 알린다.
 	 *
 	 * @param q 검색어 (선택). 숫자만(하이픈·공백 허용)이면 연락처 뒷자리, 그 밖은 이름 일부. 없거나 공백이면 전체
+	 * @param includeInactive 비활성 고객 포함 여부 (기본 false). true/false 가 아니면 400 INVALID_INPUT
 	 * @param page 0부터 시작하는 페이지 번호 (기본 0)
 	 * @param size 페이지 크기 (기본 20, 최대 100)
 	 */
@@ -72,12 +75,13 @@ public class CustomerController {
 	public CustomerListResponse search(
 			@RequestParam(name = "q", required = false)
 			@Size(max = MAX_QUERY_LENGTH, message = "검색어는 {max}자 이하여야 합니다.") String q,
+			@RequestParam(name = "includeInactive", defaultValue = "false") boolean includeInactive,
 			@RequestParam(name = "page", defaultValue = "0")
 			@Min(value = 0, message = "페이지 번호는 0 이상이어야 합니다.") int page,
 			@RequestParam(name = "size", defaultValue = DEFAULT_PAGE_SIZE)
 			@Min(value = 1, message = "페이지 크기는 {value} 이상이어야 합니다.")
 			@Max(value = MAX_PAGE_SIZE, message = "페이지 크기는 {value} 이하여야 합니다.") int size) {
-		return CustomerListResponse.from(customerService.search(q, page, size));
+		return CustomerListResponse.from(customerService.search(q, includeInactive, page, size));
 	}
 
 	/**
