@@ -1,14 +1,19 @@
 package com.creditbook.prepaid.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.creditbook.customer.domain.Customer;
+import com.creditbook.customer.domain.CustomerNotFoundException;
+import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.AlreadyCancelledException;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.IdempotentRequest;
@@ -21,10 +26,12 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 /**
- * 취소 유스케이스 — 사용 취소 (REQ-34, REQ-10). 대상 검증(같은 계좌·유형 대응·반제 행 재반제 금지·이미 취소)과
- * 잔액 계산은 {@link PrepaidAccount#cancelUse} 가 하고, 요청 키 처리와 트랜잭션 경계는 {@link IdempotentLedgerWriter} 가 잡는다.
+ * 취소 유스케이스 — 사용 취소 (REQ-34, REQ-10, REQ-33). 대상 검증(같은 계좌·유형 대응·반제 행 재반제 금지·이미 취소)과
+ * 잔액 계산은 {@link PrepaidAccount#cancelUse}, 재활성화는 {@link Customer} 가 하고, 요청 키 처리와 트랜잭션 경계는
+ * {@link IdempotentLedgerWriter} 가 잡는다.
  * <p>
  * 대상 거래와 기존 반제 거래 조회는 계좌 잔액 변경·반제 거래 추가와 같은 쓰기 트랜잭션 안에서 한다.
+ * 사용 취소는 잔액을 늘리므로, 비활성 고객이면 같은 트랜잭션에서 다시 활성화한다 (충전과 같은 규칙).
  * 원 거래는 바꾸지 않고 USE_CANCEL 반제 거래를 추가만 한다 (append-only).
  */
 @Service
@@ -34,17 +41,22 @@ public class CancelService {
 
 	private final IdempotentLedgerWriter ledgerWriter;
 	private final LedgerEntryRepository ledgerEntryRepository;
+	private final CustomerRepository customerRepository;
 	private final Clock clock;
 
-	CancelService(IdempotentLedgerWriter ledgerWriter, LedgerEntryRepository ledgerEntryRepository, Clock clock) {
+	CancelService(IdempotentLedgerWriter ledgerWriter, LedgerEntryRepository ledgerEntryRepository,
+			CustomerRepository customerRepository, Clock clock) {
 		this.ledgerWriter = ledgerWriter;
 		this.ledgerEntryRepository = ledgerEntryRepository;
+		this.customerRepository = customerRepository;
 		this.clock = clock;
 	}
 
 	/**
 	 * 사용 건을 전액 취소한다 (REQ-34). 기한은 없고 사유는 필수다. 시각은 서버 시각이다 (REQ-20).
-	 * 같은 요청 키로 같은 요청(고객·대상 거래·사유)이 다시 오면 다시 취소하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10).
+	 * 비활성 고객이면 취소와 같은 트랜잭션에서 다시 활성화한다 (REQ-33).
+	 * 같은 요청 키로 같은 요청(고객·대상 거래·사유)이 다시 오면 다시 취소하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10) —
+	 * 이때는 재활성화도 다시 하지 않는다.
 	 *
 	 * @param customerId 취소할 사용 건의 고객
 	 * @param useEntryId 취소할 사용 거래 ID
@@ -65,9 +77,12 @@ public class CancelService {
 		Objects.requireNonNull(performedBy, "performedBy");
 		Objects.requireNonNull(idempotencyKey, "idempotencyKey");
 		IdempotentRequest request = IdempotentRequest.reversal(LedgerEntryType.USE_CANCEL, useEntryId, reason);
+		// 재활성화 여부는 커밋된 뒤에만 로그로 남긴다 — 커밋 전에 남기면 롤백된 재활성화가 로그에 남는다
+		AtomicBoolean reactivated = new AtomicBoolean(false);
 
 		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
-				account -> cancelUseOrWarn(account, useEntryId, reason, performedBy, idempotencyKey));
+				account -> cancelUseAndReactivate(account, useEntryId, reason, performedBy, idempotencyKey,
+						reactivated));
 
 		if (!outcome.replayed()) {
 			LedgerEntry entry = outcome.entry();
@@ -75,17 +90,34 @@ public class CancelService {
 			log.info("balance changed: accountId={}, type={}, amount={}, balanceAfter={}, performedBy={}, reversesId={}",
 					entry.getAccountId(), entry.getType(), entry.getAmount().toPlainString(),
 					entry.getBalanceAfter().toPlainString(), performedBy, entry.getReversesId());
+			if (reactivated.get()) {
+				log.info("customer reactivated by use cancel: customerId={}, accountId={}, performedBy={}",
+						customerId, entry.getAccountId(), performedBy);
+			}
 		}
 		return UseCancelResult.of(customerId, outcome);
 	}
 
+	/**
+	 * 쓰기 트랜잭션 안에서 불린다. 취소가 도메인 규칙에 걸리면 고객 상태는 건드리지 않는다 (취소 먼저, 재활성화는 그 뒤).
+	 */
+	private LedgerEntry cancelUseAndReactivate(PrepaidAccount account, UUID useEntryId, String reason,
+			UUID performedBy, IdempotencyKey idempotencyKey, AtomicBoolean reactivated) {
+		Instant now = clock.instant();
+		LedgerEntry entry = cancelUseOrWarn(account, useEntryId, reason, performedBy, now, idempotencyKey);
+		Customer customer = customerRepository.findById(account.getCustomerId())
+				.orElseThrow(() -> new CustomerNotFoundException(account.getCustomerId()));
+		reactivated.set(customer.reactivate(now));
+		return entry;
+	}
+
 	private LedgerEntry cancelUseOrWarn(PrepaidAccount account, UUID useEntryId, String reason, UUID performedBy,
-			IdempotencyKey idempotencyKey) {
+			Instant now, IdempotencyKey idempotencyKey) {
 		LedgerEntry target = ledgerEntryRepository.findById(useEntryId)
 				.orElseThrow(() -> new LedgerEntryNotFoundException(useEntryId));
 		Optional<LedgerEntry> existingCancel = ledgerEntryRepository.findByReversesId(useEntryId);
 		try {
-			return account.cancelUse(target, existingCancel, reason, performedBy, clock.instant(), idempotencyKey);
+			return account.cancelUse(target, existingCancel, reason, performedBy, now, idempotencyKey);
 		}
 		catch (AlreadyCancelledException ex) {
 			// 정상적인 거절이므로 WARN (운영 점검 가이드 §6). 고객 이름·연락처·사유는 남기지 않는다

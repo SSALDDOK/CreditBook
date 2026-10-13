@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -29,6 +30,8 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.creditbook.customer.domain.Customer;
+import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.AlreadyCancelledException;
 import com.creditbook.prepaid.domain.CancelReasonRequiredException;
 import com.creditbook.prepaid.domain.ChargePolicy;
@@ -67,6 +70,9 @@ class CancelServiceTest {
 	@Mock
 	LedgerEntryRepository ledgerEntryRepository;
 
+	@Mock
+	CustomerRepository customerRepository;
+
 	/** 트랜잭션 경계는 목으로 대신한다 — 실제 롤백·유니크 위반은 PostgreSQL 에서 확인한다. */
 	@Mock
 	PlatformTransactionManager transactionManager;
@@ -75,9 +81,12 @@ class CancelServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		// 취소가 거절돼 고객 조회까지 가지 않는 테스트도 있어 lenient 로 둔다. 재활성화는 UseCancelReactivationServiceTest 가 본다
+		lenient().when(customerRepository.findById(CUSTOMER_ID))
+				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", USED_AT)));
 		service = new CancelService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
-				ledgerEntryRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	/** 잔액이 {@code balance} 원인 계좌. 공개 API(open → charge)로만 만들고 저장소가 이 고객의 계좌로 돌려준다. */
