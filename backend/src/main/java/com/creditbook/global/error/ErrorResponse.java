@@ -2,6 +2,7 @@ package com.creditbook.global.error;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -37,6 +38,14 @@ public record ErrorResponse(
 	 * @param balance 요청 시점의 현재 잔액 (원)
 	 */
 	public record CustomerBalanceNotZeroDetails(BigDecimal balance) {
+	}
+
+	/**
+	 * 이미 취소된 거래(ALREADY_CANCELLED)의 부가 정보. 화면이 먼저 만들어진 취소 거래를 안내할 수 있게 한다.
+	 *
+	 * @param cancelEntryId 먼저 만들어진 취소(반제) 거래의 ID
+	 */
+	public record AlreadyCancelledDetails(UUID cancelEntryId) {
 	}
 
 	public static ErrorResponse of(ErrorCode errorCode) {

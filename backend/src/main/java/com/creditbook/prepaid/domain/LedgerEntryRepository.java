@@ -1,6 +1,7 @@
 package com.creditbook.prepaid.domain;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 원장 거래 저장소. 구현은 infrastructure 에 있다.
@@ -21,5 +22,15 @@ public interface LedgerEntryRepository {
 
 	/** 요청 키로 저장된 거래를 찾는다 (키는 전역에서 유일하다). */
 	Optional<LedgerEntry> findByIdempotencyKey(IdempotencyKey key);
+
+	/** 거래 ID 로 거래를 찾는다. */
+	Optional<LedgerEntry> findById(UUID id);
+
+	/**
+	 * {@code reverses_id = originalId} 인 반제 거래를 찾는다. ux_ledger_entries_reverses 때문에 많아야 1건이다.
+	 *
+	 * @param originalId 반제 대상이 된 원 거래의 ID
+	 */
+	Optional<LedgerEntry> findByReversesId(UUID originalId);
 
 }

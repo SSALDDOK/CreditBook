@@ -142,8 +142,57 @@ class PrepaidAccountCancelUseTest {
 				.isInstanceOfSatisfying(AlreadyCancelledException.class, e -> {
 					assertThat(e.getTargetId()).isEqualTo(use.getId());
 					assertThat(e.getCancelEntryId()).isEqualTo(firstCancel.getId());
-				});
+				})
+				.hasMessage("이미 취소된 사용 건입니다.");
 		assertThat(account.getBalance()).isEqualByComparingTo("10000");
+	}
+
+	@Test
+	@DisplayName("취소 사유는 200자까지 저장된다")
+	void cancel_use_accepts_reason_of_max_length() {
+		// given
+		PrepaidAccount account = accountWithBalance(10_000);
+		LedgerEntry use = account.use(won(3_000), EMPLOYEE_ID, NOW, null);
+		String reason = "가".repeat(LedgerEntry.MEMO_MAX_LENGTH);
+
+		// when
+		LedgerEntry cancel = account.cancelUse(use, Optional.empty(), reason, EMPLOYEE_ID, NOW);
+
+		// then
+		assertThat(cancel.getMemo()).isEqualTo(reason);
+		assertThat(account.getBalance()).isEqualByComparingTo("10000");
+	}
+
+	@Test
+	@Tag("REQ-10")
+	@DisplayName("사용 취소 거래에는 요청 키가 그대로 저장된다")
+	void cancel_use_stores_idempotency_key() {
+		// given
+		PrepaidAccount account = accountWithBalance(10_000);
+		LedgerEntry use = account.use(won(3_000), EMPLOYEE_ID, NOW, null);
+		IdempotencyKey key = IdempotencyKey.of("cancel-key-0001");
+
+		// when
+		LedgerEntry cancel = account.cancelUse(use, Optional.empty(), REASON, EMPLOYEE_ID, NOW, key);
+
+		// then
+		assertThat(cancel.getIdempotencyKey()).isEqualTo(key.value());
+		assertThat(cancel.getType()).isEqualTo(LedgerEntryType.USE_CANCEL);
+		assertThat(account.getBalance()).isEqualByComparingTo("10000");
+	}
+
+	@Test
+	@Tag("REQ-10")
+	@DisplayName("API 경로의 사용 취소는 요청 키 없이 호출할 수 없고 잔액도 바뀌지 않는다")
+	void public_cancel_use_requires_key() {
+		// given
+		PrepaidAccount account = accountWithBalance(10_000);
+		LedgerEntry use = account.use(won(3_000), EMPLOYEE_ID, NOW, null);
+
+		// when / then
+		assertThatThrownBy(() -> account.cancelUse(use, Optional.empty(), REASON, EMPLOYEE_ID, NOW, null))
+				.isInstanceOf(NullPointerException.class);
+		assertThat(account.getBalance()).isEqualByComparingTo("7000");
 	}
 
 	@Test
