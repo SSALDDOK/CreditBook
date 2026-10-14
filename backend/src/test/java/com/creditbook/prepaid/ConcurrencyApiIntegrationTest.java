@@ -196,9 +196,8 @@ public class ConcurrencyApiIntegrationTest {
                     continue;
                 String code = JSON.readTree(r.getResponse().getContentAsString(StandardCharsets.UTF_8)).get("code")
                         .asString();
-                // 겹치면 409 낙관적 락, 이미 취소됐으면 409 ALREADY_CANCELLED — 그 외(500 등)는 실패
-                assertThat(r.getResponse().getStatus() + " " + code)
-                        .isIn("409 CONCURRENT_MODIFICATION", "409 ALREADY_CANCELLED");
+                // 겹쳐도 다시 판정해서 '이미 취소됨'으로 거절돼야 함 — 그 외(500, 낙관적 락 409 등)는 실패
+                assertThat(r.getResponse().getStatus() + " " + code).isEqualTo("409 ALREADY_CANCELLED");
             }
             // 장부: 잔액 5,000원으로 한 번만 복구, 취소 1건, 잔액 = 거래 합계
             assertThat(balanceOf(customer.accountId())).isEqualByComparingTo("5000");
