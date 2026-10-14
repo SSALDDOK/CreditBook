@@ -137,6 +137,81 @@ public class ConcurrencyApiIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("같은 사용 건에 취소 2건이 동시에 오면 1건만 반영되고 잔액은 한 번만 복구된다")
+    @Tag("REQ-34")
+    void concurrent_cancels_of_same_use_apply_only_once() throws Exception {
+        // given — 직원 로그인, 고유한 고객 등록, 5,000원 충전 (모두 커밋됨)
+        Cookie session = loginAsNewStaff();
+        String suffix = UUID.randomUUID().toString().substring(0, 4); // 매번 다른 4글자
+        RegisteredCustomer customer = customerService.register("REQ34" + suffix,
+                "010" + String.format("%04d", new Random().nextInt(10000)) + "5050");
+        // 충전 API 호출 — 키는 UUID
+        mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("{\"amount\": 5000}"))
+                .andExpect(status().isCreated());
+
+        String useBody = mockMvc.perform(withSession(post("/api/customers/{id}/uses", customer.customerId()), session)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .content("{\"amount\": 3000}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String useId = idOf(useBody);
+        assertThat(balanceOf(customer.accountId())).isEqualByComparingTo("2000");
+        // when — 같은 사용 건에 취소 2건을 동시에
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch ready = new CountDownLatch(2); // 두 일꾼이 출발선에 섰는지
+
+        try {
+            List<Future<MvcResult>> futures = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                futures.add(executor.submit(() -> {
+                    ready.countDown(); // 출발선에 섰다
+                    start.await(); // 둘 다 여기서 기다렸다가 동시에 출발
+                    return mockMvc
+                            .perform(withSession(post("/api/customers/{customerId}/uses/{useEntryId}/cancel",
+                                    customer.customerId(), useId), session)
+                                    .header("Idempotency-Key", UUID.randomUUID().toString())
+                                    .content("{\"reason\": \"동시 취소 테스트\"}"))
+                            .andReturn(); // 상태+본문 통째로 (검사는 메인에서)
+                }));
+            }
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue(); // 둘 다 섰는지 확인하고 쏜다
+            start.countDown();
+
+            List<MvcResult> results = new ArrayList<>();
+            for (Future<MvcResult> f : futures) {
+                results.add(f.get(10, TimeUnit.SECONDS));
+            }
+
+            // then — 메인 스레드에서만 단언
+            // 201은 정확히 1건, 나머지는 409
+            List<Integer> statuses = results.stream().map(r -> r.getResponse().getStatus()).toList();
+            assertThat(statuses).containsOnlyOnce(201);
+            for (MvcResult r : results) {
+                if (r.getResponse().getStatus() == 201)
+                    continue;
+                String code = JSON.readTree(r.getResponse().getContentAsString(StandardCharsets.UTF_8)).get("code")
+                        .asString();
+                // 겹치면 409 낙관적 락, 이미 취소됐으면 409 ALREADY_CANCELLED — 그 외(500 등)는 실패
+                assertThat(r.getResponse().getStatus() + " " + code)
+                        .isIn("409 CONCURRENT_MODIFICATION", "409 ALREADY_CANCELLED");
+            }
+            // 장부: 잔액 5,000원으로 한 번만 복구, 취소 1건, 잔액 = 거래 합계
+            assertThat(balanceOf(customer.accountId())).isEqualByComparingTo("5000");
+            assertThat(countEntries(customer.accountId(), "USE_CANCEL")).isEqualTo(1);
+            BigDecimal ledgerSum = jdbcTemplate.queryForObject(
+                    "SELECT sum(signed_amount) FROM ledger_entries WHERE account_id = ?", BigDecimal.class,
+                    customer.accountId());
+            assertThat(balanceOf(customer.accountId())).isEqualByComparingTo(ledgerSum);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     // 직원은 트랜잭션 안에서 만들어야 커밋된다
     private Cookie loginAsNewStaff() {
         Employee employee = transactionTemplate.execute(status -> {
