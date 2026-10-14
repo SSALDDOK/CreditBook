@@ -32,6 +32,8 @@ import com.creditbook.prepaid.domain.InvalidCancelTargetException;
 import com.creditbook.prepaid.domain.InvalidIdempotencyKeyException;
 import com.creditbook.prepaid.domain.LedgerEntryNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
+import com.creditbook.prepaid.domain.PrepaidDomainException;
+import com.creditbook.prepaid.domain.ReversalConflictException;
 
 import jakarta.persistence.OptimisticLockException;
 
@@ -192,8 +194,8 @@ public class GlobalExceptionHandler {
 	 * 같은 요청 키 동시 요청에서 먼저 저장된 거래를 다시 찾지 못한 경우 (드묾). 재시도하면 재응답 규칙이 적용된다.
 	 * WARN 로그는 서비스가 남긴다.
 	 */
-	@ExceptionHandler(IdempotencyKeyConflictException.class)
-	ResponseEntity<ErrorResponse> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex) {
+	@ExceptionHandler({ IdempotencyKeyConflictException.class, ReversalConflictException.class })
+	ResponseEntity<ErrorResponse> handleLedgerWriteConflict(PrepaidDomainException ex) {
 		return respond(ErrorCode.CONCURRENT_MODIFICATION, ErrorResponse.of(ErrorCode.CONCURRENT_MODIFICATION));
 	}
 

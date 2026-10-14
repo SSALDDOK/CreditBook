@@ -44,6 +44,7 @@ import com.creditbook.prepaid.domain.LedgerEntryNotFoundException;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
+import com.creditbook.prepaid.domain.ReversalConflictException;
 import com.creditbook.support.WithMockEmployee;
 
 /**
@@ -301,6 +302,19 @@ class CancelControllerTest {
 		// given
 		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
 				.willThrow(new ObjectOptimisticLockingFailureException(PrepaidAccount.class, ACCOUNT_ID));
+
+		// when / then
+		mockMvc.perform(cancelRequest(BODY))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
+	}
+
+	@Test
+	@DisplayName("같은 사용 건 동시 취소가 다시 판정해도 겹치면 500이 아니라 409 CONCURRENT_MODIFICATION 으로 응답한다")
+	void repeated_reversal_conflict_is_rejected_with_409() throws Exception {
+		// given
+		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+				.willThrow(new ReversalConflictException(new RuntimeException("duplicate key")));
 
 		// when / then
 		mockMvc.perform(cancelRequest(BODY))

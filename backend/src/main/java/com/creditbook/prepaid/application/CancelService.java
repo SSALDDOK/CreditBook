@@ -103,6 +103,7 @@ public class CancelService {
 	 */
 	private LedgerEntry cancelUseAndReactivate(PrepaidAccount account, UUID useEntryId, String reason,
 			UUID performedBy, IdempotencyKey idempotencyKey, AtomicBoolean reactivated) {
+		reactivated.set(false); // 반제 충돌로 다시 판정할 때 앞 시도(롤백됨)의 값이 남지 않게
 		Instant now = clock.instant();
 		LedgerEntry entry = cancelUseOrWarn(account, useEntryId, reason, performedBy, now, idempotencyKey);
 		Customer customer = customerRepository.findById(account.getCustomerId())

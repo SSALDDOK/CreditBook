@@ -21,6 +21,7 @@ import com.creditbook.prepaid.domain.LedgerEntryRepository;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountRepository;
+import com.creditbook.prepaid.domain.ReversalConflictException;
 
 /**
  * 요청 키(Idempotency-Key)로 거래를 한 번만 만든다 (REQ-10). 충전·사용(이후 사용 취소)이 같은 순서를 쓴다.
@@ -30,9 +31,12 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
  * <li>저장이 ux_ledger_entries_idem 에 걸리면(같은 키 동시 요청) 쓰기 트랜잭션은 롤백된다. 실패한 트랜잭션에서는 더 조회할 수
  * 없으므로 <b>새 읽기 전용 트랜잭션(REQUIRES_NEW)</b>에서 먼저 저장된 거래를 찾아 1과 같은 규칙으로 응답한다.
  * 그래도 없으면(드묾) 충돌 예외를 그대로 올려 409 로 응답한다</li>
+ * <li>저장이 ux_ledger_entries_reverses 에 걸리면(같은 원본 동시 반제, 요청 키는 서로 다름) 1·2를 새 트랜잭션에서
+ * 한 번만 다시 한다. 먼저 커밋된 반제가 보이므로 도메인이 이미 취소됨으로 거절한다. 또 걸리면 충돌 예외를 올려 409 로 응답한다</li>
  * </ol>
  * 트랜잭션을 {@code @Transactional} 대신 {@link TransactionTemplate} 으로 잡는 이유: 롤백이 끝난 뒤(트랜잭션 바깥)에서
- * 위반을 잡아 새 트랜잭션을 여는 흐름을 한 메서드 안에서 보이게 하려고. 세션 단위 잠금(advisory lock)은 쓰지 않는다 (Neon pooler).
+ * 위반을 잡아 새 트랜잭션을 여는 흐름을 한 메서드 안에서 보이게 하려고. <b>바깥 트랜잭션 없이 호출해야 한다</b> — 바깥 트랜잭션에
+ * 합류하면 위반으로 중단된 트랜잭션 안에서 재조회·재판정을 하게 되어 2·3이 동작하지 않는다. 세션 단위 잠금(advisory lock)은 쓰지 않는다 (Neon pooler).
  */
 @Component
 class IdempotentLedgerWriter {
@@ -63,6 +67,7 @@ class IdempotentLedgerWriter {
 	 * @throws PrepaidAccountNotFoundException 키가 처음이고 고객의 계좌가 없을 때
 	 * @throws IdempotencyKeyReusedException 키가 이미 다른 요청에 쓰였을 때
 	 * @throws IdempotencyKeyConflictException 같은 키 동시 요청에서 먼저 저장된 거래를 찾지 못했을 때
+	 * @throws ReversalConflictException 같은 원본 동시 반제에서 다시 판정해도 또 반제가 겹쳤을 때 (드묾)
 	 */
 	LedgerWriteOutcome write(UUID customerId, IdempotencyKey key, IdempotentRequest request,
 			Function<PrepaidAccount, LedgerEntry> operation) {
@@ -70,6 +75,19 @@ class IdempotentLedgerWriter {
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(request, "request");
 		Objects.requireNonNull(operation, "operation");
+		try {
+			return writeOrReplay(customerId, key, request, operation);
+		}
+		catch (ReversalConflictException conflict) {
+			// 같은 원본을 다른 요청이 먼저 반제하고 커밋했다. 쓰기 트랜잭션은 이미 롤백됐으므로 새 쓰기 트랜잭션에서
+			// 한 번 더 판정한다 — 먼저 커밋된 반제를 본 도메인이 '이미 취소됨'으로 거절한다
+			log.info("reversal conflict: retrying once to re-validate, keyPrefix={}", key.logPrefix());
+			return writeOrReplay(customerId, key, request, operation);
+		}
+	}
+
+	private LedgerWriteOutcome writeOrReplay(UUID customerId, IdempotencyKey key, IdempotentRequest request,
+			Function<PrepaidAccount, LedgerEntry> operation) {
 		try {
 			return writeTransaction.execute(status -> replayOrWrite(customerId, key, request, operation));
 		}
