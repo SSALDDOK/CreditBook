@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { Sidebar } from './Sidebar'
 
-type AppLayoutProps = { title: string; children: ReactNode }
+/** title 은 문자열 또는 경로 표시(예: 고객 › 상세) */
+type AppLayoutProps = { title: ReactNode; children: ReactNode }
 
 export function AppLayout({ title, children }: AppLayoutProps) {
   return (

@@ -1,22 +1,30 @@
 import { Search } from 'lucide-react'
 import { useId, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
 import { toUserMessage } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatMonthDay, formatWon } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { InactiveBadge } from './InactiveBadge'
 import { useCustomerList, useDebouncedValue } from './useCustomerList'
 
-/** SCR-3 고객 목록. 잔액·연락처는 서버 응답 값을 그대로 표시한다. */
+/**
+ * SCR-3 고객 목록. 잔액·연락처는 서버 응답 값을 그대로 표시한다.
+ * '비활성 포함'은 보기 필터다 — 켜면 includeInactive=true 로 조회할 뿐 고객 상태를 바꾸지 않는다(STAFF·ADMIN 모두).
+ */
 export function CustomerListPage() {
   const searchId = useId()
+  const includeInactiveId = useId()
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [includeInactive, setIncludeInactive] = useState(false)
   const [page, setPage] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query.trim(), 300)
 
-  const state = useCustomerList(debouncedQuery, page, reloadKey)
+  const state = useCustomerList(debouncedQuery, page, reloadKey, includeInactive)
   const data = state.status === 'error' ? undefined : state.data
   const loading = state.status === 'loading'
   const listState = state.status === 'loading' ? 'loading' : state.status === 'error' ? 'error' : 'ready'
@@ -51,6 +59,22 @@ export function CustomerListPage() {
             data-testid="customer-search-input"
             className="h-12 rounded-xl bg-background pl-12 text-base md:text-base"
           />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            id={includeInactiveId}
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(e) => {
+              setIncludeInactive(e.target.checked)
+              setPage(0)
+            }}
+            data-testid="customer-include-inactive"
+            className="size-5 accent-primary"
+          />
+          <label htmlFor={includeInactiveId} className="text-base text-muted-foreground">
+            비활성 포함
+          </label>
         </div>
         {/* 고객 등록 화면(SCR-4)은 다음 스프린트 — 자리만 둔다 */}
         <Button
@@ -107,9 +131,32 @@ export function CustomerListPage() {
             </TableHeader>
             <TableBody>
               {data?.content.map((customer) => (
-                <TableRow key={customer.id} data-testid="customer-row" data-customer-id={customer.id}>
-                  <TableCell className="h-16 px-8 font-semibold" data-testid="customer-name">
-                    {customer.name}
+                <TableRow
+                  key={customer.id}
+                  data-testid="customer-row"
+                  data-customer-id={customer.id}
+                  data-active={customer.active}
+                  // 행 어디를 눌러도 상세로 간다(마우스 편의). 키보드·보조기기는 이름 링크로 간다
+                  onClick={(e) => {
+                    if (e.target instanceof Element && e.target.closest('a')) return
+                    navigate(`/customers/${customer.id}`)
+                  }}
+                  className="cursor-pointer"
+                >
+                  <TableCell className="h-16 px-8 font-semibold">
+                    <span className="flex items-center gap-3">
+                      <Link
+                        to={`/customers/${customer.id}`}
+                        data-testid="customer-name"
+                        className={cn(
+                          'rounded outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50',
+                          !customer.active && 'text-muted-foreground',
+                        )}
+                      >
+                        {customer.name}
+                      </Link>
+                      {!customer.active && <InactiveBadge testId="customer-inactive-badge" />}
+                    </span>
                   </TableCell>
                   <TableCell className="px-4 text-muted-foreground tabular-nums" data-testid="customer-phone">
                     {customer.maskedPhone}
@@ -126,6 +173,11 @@ export function CustomerListPage() {
                 <TableRow>
                   <TableCell colSpan={4} className="h-32 text-center text-muted-foreground" data-testid="customer-empty">
                     {debouncedQuery ? '검색 결과가 없습니다.' : '등록된 고객이 없습니다.'}
+                    {debouncedQuery && !includeInactive && (
+                      <p className="mt-3 text-sm" data-testid="customer-include-inactive-hint">
+                        비활성 고객까지 찾으려면 '비활성 포함'을 켜세요
+                      </p>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
