@@ -10,6 +10,7 @@ import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
 import com.creditbook.prepaid.domain.LedgerEntry;
 import com.creditbook.prepaid.domain.LedgerEntryRepository;
+import com.creditbook.prepaid.domain.ReversalConflictException;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -27,13 +28,17 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 	/** V1__init.sql 의 부분 유니크 인덱스 — idempotency_key 가 NOT NULL 일 때 전역 유일. */
 	static final String IDEMPOTENCY_KEY_INDEX = "ux_ledger_entries_idem";
 
+	/** V1__init.sql 의 부분 유니크 인덱스 — 원본 1건당 반제 1건. */
+	static final String REVERSES_INDEX = "ux_ledger_entries_reverses";
+
 	@PersistenceContext
 	private EntityManager em;
 
 	/**
-	 * persist 후 바로 flush 한다 — 제약 위반이 커밋 시점이 아니라 여기서 드러나야 같은 키 동시 요청을 구분할 수 있다.
+	 * persist 후 바로 flush 한다 — 제약 위반이 커밋 시점이 아니라 여기서 드러나야 같은 키·같은 원본 동시 요청을 구분할 수 있다.
 	 * (Hibernate 는 flush 때 INSERT 를 UPDATE 보다 먼저 보내므로, 같은 트랜잭션의 계좌 잔액 UPDATE 보다 거래 INSERT 가 먼저 판정된다.)
-	 * ux_ledger_entries_idem 위반만 {@link IdempotencyKeyConflictException} 으로 바꾸고, 다른 예외는 그대로 다시 던진다.
+	 * ux_ledger_entries_idem 위반은 {@link IdempotencyKeyConflictException}, ux_ledger_entries_reverses 위반은
+	 * {@link ReversalConflictException} 으로 바꾸고, 다른 예외는 그대로 다시 던진다.
 	 */
 	@Override
 	public void add(LedgerEntry entry) {
@@ -42,8 +47,12 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 			em.flush();
 		}
 		catch (PersistenceException ex) {
-			if (isIdempotencyKeyViolation(ex)) {
+			String constraint = violatedConstraint(ex);
+			if (IDEMPOTENCY_KEY_INDEX.equals(constraint)) {
 				throw new IdempotencyKeyConflictException(ex);
+			}
+			if (REVERSES_INDEX.equals(constraint)) {
+				throw new ReversalConflictException(ex);
 			}
 			throw ex;
 		}
@@ -70,14 +79,14 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 				.findFirst();
 	}
 
-	/** 원인 사슬에서 Hibernate 가 판별한 제약 이름이 ux_ledger_entries_idem 인지 본다. */
-	static boolean isIdempotencyKeyViolation(Throwable ex) {
+	/** 원인 사슬에서 Hibernate 가 판별한 제약 이름. 제약 위반이 아니면 null. */
+	static String violatedConstraint(Throwable ex) {
 		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
 			if (cause instanceof ConstraintViolationException violation) {
-				return IDEMPOTENCY_KEY_INDEX.equals(violation.getConstraintName());
+				return violation.getConstraintName();
 			}
 		}
-		return false;
+		return null;
 	}
 
 }

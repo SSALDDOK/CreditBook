@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 
+import com.creditbook.prepaid.domain.AlreadyCancelledException;
 import com.creditbook.prepaid.domain.ChargePolicy;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
@@ -41,6 +43,7 @@ import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountRepository;
+import com.creditbook.prepaid.domain.ReversalConflictException;
 
 /**
  * 요청 키 처리 순서 (REQ-10). 저장소와 트랜잭션 관리자는 목으로 대신한다.
@@ -280,6 +283,59 @@ class IdempotentLedgerWriterTest {
 				chargeOperation(10_000, "음료")))
 				.isSameAs(conflict);
 		verify(ledgerEntryRepository, times(2)).findByIdempotencyKey(KEY);
+	}
+
+	/** 계좌에 10,000원 충전 후 3,000원 사용한 USE 거래 (취소 대상). */
+	private LedgerEntry storedUse() {
+		account.charge(BigDecimal.valueOf(10_000), POLICY, EMPLOYEE_ID, NOW, null, IdempotencyKey.of("charge-0001"));
+		return account.use(BigDecimal.valueOf(3_000), EMPLOYEE_ID, NOW, null, IdempotencyKey.of("use-0001"));
+	}
+
+	@Test
+	@Tag("REQ-34")
+	@DisplayName("같은 사용 건 동시 취소로 저장이 반제 중복 위반이 되면 새 쓰기 트랜잭션에서 다시 판정해 이미 취소됨으로 거절한다")
+	void reversal_violation_retries_once_and_rejects_as_already_cancelled() {
+		// given: 이 요청이 판정할 때는 취소가 없었지만, 저장 직전에 다른 요청이 같은 사용 건을 먼저 취소하고 커밋했다
+		// (목이라 두 시도에 같은 계좌 객체를 준다 — 재시도가 계좌를 새로 읽는 것은 통합 테스트가 확인한다)
+		LedgerEntry use = storedUse();
+		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		List<LedgerEntry> committedCancels = new ArrayList<>();
+		Function<PrepaidAccount, LedgerEntry> cancel = target -> {
+			LedgerEntry made = target.cancelUse(use, committedCancels.stream().findFirst(), "동시 취소", EMPLOYEE_ID,
+					NOW, KEY);
+			committedCancels.add(made); // 다시 판정할 때는 먼저 커밋된 취소가 보인다
+			return made;
+		};
+		willThrow(new ReversalConflictException(new RuntimeException("duplicate key")))
+				.given(ledgerEntryRepository).add(any());
+
+		// when / then
+		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY,
+				IdempotentRequest.reversal(LedgerEntryType.USE_CANCEL, use.getId(), "동시 취소"), cancel))
+				.isInstanceOf(AlreadyCancelledException.class);
+		verify(ledgerEntryRepository, times(1)).add(any());
+		ArgumentCaptor<TransactionDefinition> definitions = ArgumentCaptor.forClass(TransactionDefinition.class);
+		verify(transactionManager, times(2)).getTransaction(definitions.capture());
+		assertThat(definitions.getAllValues()).allSatisfy(definition -> assertThat(definition.isReadOnly()).isFalse());
+	}
+
+	@Test
+	@Tag("REQ-34")
+	@DisplayName("다시 판정해도 반제 중복 위반이 또 나면 한 번만 재시도하고 충돌로 거절한다")
+	void repeated_reversal_violation_is_conflict() {
+		// given
+		LedgerEntry use = storedUse();
+		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		Function<PrepaidAccount, LedgerEntry> cancel = target -> target.cancelUse(use, Optional.empty(), "동시 취소",
+				EMPLOYEE_ID, NOW, KEY);
+		willThrow(new ReversalConflictException(new RuntimeException("duplicate key")))
+				.given(ledgerEntryRepository).add(any());
+
+		// when / then
+		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY,
+				IdempotentRequest.reversal(LedgerEntryType.USE_CANCEL, use.getId(), "동시 취소"), cancel))
+				.isInstanceOf(ReversalConflictException.class);
+		verify(ledgerEntryRepository, times(2)).add(any());
 	}
 
 }

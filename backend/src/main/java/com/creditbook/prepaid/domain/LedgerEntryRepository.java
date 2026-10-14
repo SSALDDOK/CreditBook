@@ -16,7 +16,8 @@ public interface LedgerEntryRepository {
 	 * 제약 위반이 커밋 때가 아니라 이 호출에서 드러나도록 바로 DB 에 반영한다.
 	 *
 	 * @throws IdempotencyKeyConflictException 같은 요청 키의 거래가 이미 저장돼 ux_ledger_entries_idem 에 걸렸을 때.
-	 *         다른 제약 위반은 이 예외로 바꾸지 않는다
+	 * @throws ReversalConflictException 같은 원본의 반제 거래가 이미 저장돼 ux_ledger_entries_reverses 에 걸렸을 때.
+	 *         다른 제약 위반은 이 두 예외로 바꾸지 않는다
 	 */
 	void add(LedgerEntry entry);
 
