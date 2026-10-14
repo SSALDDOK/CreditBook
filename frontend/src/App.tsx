@@ -1,14 +1,42 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { AuthProvider } from '@/features/auth/AuthProvider'
+import { LoginPage } from '@/features/auth/LoginPage'
 import { CustomerListPage } from '@/features/customers/CustomerListPage'
+import { RequireAuth } from '@/routes/RequireAuth'
+import { DEFAULT_AFTER_LOGIN, LOGIN_PATH } from '@/routes/redirect'
 
-// 라우터는 로그인 화면·보호 라우트와 함께 들어온다. 지금은 고객 목록(SCR-3) 한 화면만 있다.
+/**
+ * 라우트 표 (react-router v7, declarative 모드)
+ * - /login       SCR-1 로그인 (공개)
+ * - /customers   SCR-3 고객 목록 (로그인 필요)
+ * - 그 밖(/ 포함) → /customers 로 replace. 404 화면은 공통 오류 화면 이슈에서 만든다
+ *
+ * 로그인이 필요한 화면은 RequireAuth 레이아웃 라우트의 자식으로 둔다.
+ * 다음 화면은 여기에 자식 Route 를 더하면 된다(예: path="/customers/:customerId").
+ */
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppLayout title="고객">
-        <CustomerListPage />
-      </AppLayout>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path={LOGIN_PATH} element={<LoginPage />} />
+            <Route element={<RequireAuth />}>
+              <Route
+                path="/customers"
+                element={
+                  <AppLayout title="고객">
+                    <CustomerListPage />
+                  </AppLayout>
+                }
+              />
+            </Route>
+            <Route path="*" element={<Navigate to={DEFAULT_AFTER_LOGIN} replace />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   )
 }
