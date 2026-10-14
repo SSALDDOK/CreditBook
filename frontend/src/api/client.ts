@@ -38,7 +38,31 @@ function isErrorResponse(body: unknown): body is ErrorResponse {
   )
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+// 보호 API 가 401 을 주면(세션 만료·로그아웃된 토큰) 부를 함수. 인증 상태를 가진 AuthProvider 가 등록한다.
+// 401 처리를 화면마다 쓰지 않고 이 한 곳으로 모은다.
+let unauthorizedHandler: (() => void) | null = null
+
+/** 401 처리 함수를 등록하고, 해제 함수를 돌려준다. */
+export function setUnauthorizedHandler(handler: () => void): () => void {
+  unauthorizedHandler = handler
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = null
+  }
+}
+
+export type ApiRequestOptions = {
+  /**
+   * false 면 401 을 받아도 로그인 화면으로 보내지 않고 오류만 던진다.
+   * 로그인(401 = 자격증명 오류)·세션 확인(401 = 아직 로그인 안 함)처럼 401 이 정상 응답인 호출에 쓴다.
+   */
+  redirectOnUnauthorized?: boolean
+}
+
+export async function apiRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  { redirectOnUnauthorized = true }: ApiRequestOptions = {},
+): Promise<T> {
   // 인증은 서버가 내려 주는 httpOnly 쿠키로 한다. 화면은 토큰을 읽거나 저장하지 않는다.
   const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}${path}`, {
     ...init,
@@ -47,6 +71,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   })
   if (res.ok) {
     return (res.status === 204 ? undefined : await res.json()) as T
+  }
+
+  if (res.status === 401 && redirectOnUnauthorized) {
+    unauthorizedHandler?.()
   }
 
   const body: unknown = await res.json().catch(() => null)

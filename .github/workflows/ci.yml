@@ -69,3 +69,171 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  # E2E (Playwright, chromium headless). 실제 백엔드 + 일회용 PostgreSQL 에 붙어 돈다.
+  # 브랜치 보호 필수 검사가 아니다(필수 여부는 따로 정한다).
+  #
+  # 비밀 값(DB 비밀번호·JWT 서명 키·직원 비밀번호)은 리포·워크플로에 두지 않고 실행마다 새로 만든다. 격리 원칙:
+  # - 서드파티 코드가 도는 단계(Gradle 빌드, npm ci, 브라우저 설치, 화면 빌드·preview 기동)는 모두 비밀 값을 만들기 "전"에 끝낸다
+  # - 비밀 값은 GITHUB_ENV·job env 에 넣지 않는다. $RUNNER_TEMP 아래 권한 700 디렉터리의 파일로만 두고, 필요한 단계가 그 안에서만 읽는다
+  # - 백엔드·DB 컨테이너에는 환경변수·명령행 인자가 아니라 파일로 넘긴다(다른 프로세스가 /proc/<pid>/environ·ps·docker inspect 로 볼 수 없게)
+  # - 다 쓴 파일은 바로 지우고, 마지막에 디렉터리째 지운다
+  e2e:
+    name: e2e (playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- 1. 서드파티 코드가 도는 준비 단계 (비밀 값 없음) ----
+      - uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build backend jar
+        working-directory: backend
+        run: ./gradlew bootJar --no-daemon
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # 운영 빌드(실제 API) + vite preview(http://localhost:4173, /api → localhost:8080). 비밀 값이 생기기 전에 띄운다
+      - name: Build and start frontend preview
+        working-directory: frontend
+        env:
+          VITE_USE_MOCK: 'false'
+        run: |
+          npm run build
+          nohup npm run preview -- --port 4173 --strictPort > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://localhost:4173/ && exit 0
+            sleep 1
+          done
+          echo "preview 가 뜨지 않았습니다" >&2
+          cat "$RUNNER_TEMP/preview.log"
+          exit 1
+
+      # ---- 2. 비밀 값 생성 (파일로만, 로그에서 가림) ----
+      # backend/ 아래 파일 이름은 Spring 속성 이름이다 — 백엔드가 configtree 로 읽는다
+      - name: Generate per-run secrets
+        run: |
+          umask 077
+          dir="$RUNNER_TEMP/e2e-secrets"
+          mkdir -p "$dir/backend"
+          chmod 700 "$dir"
+          openssl rand -hex 24 > "$dir/db-password"
+          openssl rand -hex 32 > "$dir/backend/creditbook.auth.jwt-secret"
+          openssl rand -hex 16 > "$dir/admin-password"
+          openssl rand -hex 16 > "$dir/staff-password"
+          cp "$dir/db-password" "$dir/backend/spring.datasource.password"
+          for f in db-password backend/creditbook.auth.jwt-secret admin-password staff-password; do
+            echo "::add-mask::$(cat "$dir/$f")"
+          done
+          # DB 컨테이너 안의 postgres 사용자(uid 70)가 읽도록 이 파일만 644. 상위 디렉터리가 700 이라 이 러너의 다른 사용자는 못 들어온다
+          chmod 644 "$dir/db-password"
+
+      # ---- 3. 비밀 값이 필요한 단계 — 각자 필요한 파일만 읽는다 ----
+      # docker-compose.yml 과 같은 이미지·DB 이름·사용자·포트. 비밀번호는 POSTGRES_PASSWORD_FILE 로 넘겨 컨테이너 환경변수에 값이 남지 않게 한다
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name creditbook-db \
+            -e POSTGRES_DB=creditbook -e POSTGRES_USER=creditbook \
+            -e POSTGRES_PASSWORD_FILE=/run/secrets/db-password \
+            -v "$RUNNER_TEMP/e2e-secrets/db-password:/run/secrets/db-password:ro" \
+            -p 127.0.0.1:5433:5432 postgres:18-alpine
+          # 초기화용 임시 서버는 TCP 를 열지 않으므로 -h 127.0.0.1 로 물어야 초기화가 끝난 뒤의 준비 상태를 본다
+          for i in $(seq 1 30); do
+            docker exec creditbook-db pg_isready -h 127.0.0.1 -U creditbook -d creditbook >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL 이 준비되지 않았습니다" >&2
+          docker logs creditbook-db
+          exit 1
+
+      # bootRun 기본값과 같은 local-docker 프로필(backend/application-local-docker.yml — localhost:5433)로 띄운다. 기동 때 Flyway 가 마이그레이션을 적용한다.
+      # DB 비밀번호·JWT 서명 키는 configtree(파일 이름 = 속성 이름)로 읽어 프로세스 환경변수·명령행에 값이 없다.
+      # 기동이 끝나면 값은 메모리에만 있으므로 파일을 지운다
+      - name: Start backend
+        working-directory: backend
+        env:
+          SPRING_PROFILES_ACTIVE: local-docker
+        run: |
+          secrets="$RUNNER_TEMP/e2e-secrets/backend/"
+          jar="$(ls build/libs/*.jar | grep -v -- '-plain.jar$' | head -n 1)"
+          nohup java -jar "$jar" "--spring.config.import=configtree:$secrets" > "$RUNNER_TEMP/backend.log" 2>&1 &
+          up=false
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/actuator/health 2>/dev/null | grep -q '"status":"UP"'; then
+              up=true
+              break
+            fi
+            sleep 2
+          done
+          rm -rf "$secrets"
+          if [ "$up" != true ]; then
+            echo "백엔드가 기동하지 않았습니다" >&2
+            tail -n 200 "$RUNNER_TEMP/backend.log"
+            exit 1
+          fi
+
+      # 직원 시드(owner=ADMIN, staff=STAFF). 비밀번호는 명령행 인자가 아니라 표준입력의 psql \set 으로 넘긴다(ps 에 보이지 않게).
+      # DB 가 BCrypt 해시로 바꿔 저장한다
+      - name: Seed employees
+        run: |
+          dir="$RUNNER_TEMP/e2e-secrets"
+          {
+            printf '\set owner_pw %s\n' "$(cat "$dir/admin-password")"
+            printf '\set staff_pw %s\n' "$(cat "$dir/staff-password")"
+            cat backend/dev/seed-local.sql
+          } | docker exec -i creditbook-db psql -U creditbook -d creditbook -v ON_ERROR_STOP=1 -q -f -
+          # DB 비밀번호 파일은 컨테이너 초기화에만 쓰였다
+          rm -f "$dir/db-password"
+
+      # 직원 비밀번호는 이 단계의 playwright 프로세스 환경에만 넣는다. 화면(preview)은 이미 떠 있으므로 webServer 를 쓰지 않는다(E2E_BASE_URL).
+      # 테스트가 아직 없을 때도 통과하도록 --pass-with-no-tests
+      - name: Run E2E
+        working-directory: frontend
+        run: |
+          dir="$RUNNER_TEMP/e2e-secrets"
+          E2E_BASE_URL=http://localhost:4173 \
+          E2E_ADMIN_LOGIN_ID=owner E2E_STAFF_LOGIN_ID=staff \
+          E2E_ADMIN_PASSWORD="$(cat "$dir/admin-password")" \
+          E2E_STAFF_PASSWORD="$(cat "$dir/staff-password")" \
+            npx playwright test --pass-with-no-tests
+
+      - name: Remove secrets
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/e2e-secrets"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+
+      # 백엔드 로그에는 비밀 값을 출력하는 설정이 없다(AuthProperties·LoginRequest 는 값을 가리고, actuator 는 health 만 연다)
+      - name: Upload backend log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-backend-log
+          path: ${{ runner.temp }}/backend.log
+          retention-days: 14
