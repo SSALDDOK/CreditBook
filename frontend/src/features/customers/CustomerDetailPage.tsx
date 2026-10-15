@@ -1,8 +1,11 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/features/auth/AuthContext'
+import { ChargeDialog } from '@/features/charge/ChargeDialog'
+import { clearLedgerDraft, loadLedgerDraft, type LedgerDraft } from '@/features/ledger-input/draftStorage'
 import { LedgerEntryRow } from '@/features/ledger/LedgerEntryRow'
 import { formatEntryTime, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -15,8 +18,11 @@ import { useCustomerDetail } from './useCustomerDetail'
  */
 export function CustomerDetailPage() {
   const { customerId = '' } = useParams()
-  // 충전·사용 모달(CB-36·37)이 생기면 성공 뒤 refetch 를 불러 잔액·최근 거래를 서버에서 다시 받는다
+  // 충전 모달이 성공하면 refetch 로 잔액·최근 거래를 서버에서 다시 받는다(화면에서 잔액을 고치지 않는다)
   const { state, refetch } = useCustomerDetail(customerId)
+  const { state: auth } = useAuth()
+  // 보호 라우트 안이라 항상 로그인 상태다. 입력 복구(REQ-17) 저장값을 직원별로 찾는 데 쓴다
+  const employeeId = auth.status === 'authenticated' ? auth.session.employeeId : ''
 
   const notFound = state.status === 'error' && state.error instanceof ApiError && state.error.code === 'CUSTOMER_NOT_FOUND'
   const viewState =
@@ -48,7 +54,13 @@ export function CustomerDetailPage() {
           </div>
         </div>
       ) : state.data ? (
-        <CustomerDetailView customer={state.data} loading={state.status === 'loading'} />
+        <CustomerDetailView
+          key={state.data.id}
+          customer={state.data}
+          loading={state.status === 'loading'}
+          employeeId={employeeId}
+          onRefetch={refetch}
+        />
       ) : (
         <p role="status" className="p-8 text-muted-foreground" data-testid="customer-detail-loading">
           불러오는 중…
@@ -58,7 +70,29 @@ export function CustomerDetailPage() {
   )
 }
 
-function CustomerDetailView({ customer, loading }: { customer: CustomerDetailResponse; loading: boolean }) {
+function CustomerDetailView({
+  customer,
+  loading,
+  employeeId,
+  onRefetch,
+}: {
+  customer: CustomerDetailResponse
+  loading: boolean
+  employeeId: string
+  onRefetch: () => void
+}) {
+  // 재로그인 후 이 고객 상세로 돌아오면, 401 직전에 저장한 충전 입력이 있을 때 충전 모달을 입력 화면으로 다시 연다(자동 전송 없음)
+  const [restoredDraft, setRestoredDraft] = useState<LedgerDraft | null>(() =>
+    employeeId ? loadLedgerDraft(employeeId, customer.id, 'charge') : null,
+  )
+  const [chargeOpen, setChargeOpen] = useState(restoredDraft !== null)
+
+  function closeCharge() {
+    // [취소]·성공 때 복구용 저장값을 지운다. 다시 열면 빈 입력부터 시작한다
+    clearLedgerDraft(employeeId, customer.id, 'charge')
+    setRestoredDraft(null)
+    setChargeOpen(false)
+  }
   const noticeId = useId()
   const useHintId = useId()
   const recentHeadingId = useId()
@@ -116,10 +150,12 @@ function CustomerDetailView({ customer, loading }: { customer: CustomerDetailRes
 
         <div className="flex flex-col items-end gap-2">
           <div className="flex gap-4">
-            {/* 충전 모달(CB-36)·사용 화면(CB-37) 전까지는 누르면 아무 동작도 하지 않는다 */}
+            {/* [충전]은 충전 모달(SCR-6)을 연다. [사용]은 사용 모달(SCR-7) 전까지 누르면 아무 동작도 하지 않는다 */}
             <Button
               type="button"
               variant="outline"
+              onClick={() => setChargeOpen(true)}
+              aria-haspopup="dialog"
               className="h-14 rounded-xl border-white bg-white px-10 text-lg font-bold text-sidebar hover:bg-white/90"
               data-testid="customer-charge-button"
             >
@@ -142,6 +178,19 @@ function CustomerDetailView({ customer, loading }: { customer: CustomerDetailRes
           )}
         </div>
       </section>
+
+      <ChargeDialog
+        open={chargeOpen}
+        customer={customer}
+        employeeId={employeeId}
+        restoredDraft={restoredDraft}
+        onCancel={closeCharge}
+        onCharged={() => {
+          closeCharge()
+          onRefetch() // 처리 뒤 잔액·최근 거래·활성 여부(비활성 고객은 충전 시 재활성화)는 서버에서 다시 받는다
+        }}
+        onConflict={onRefetch}
+      />
 
       <section aria-labelledby={recentHeadingId} className="rounded-2xl border bg-background px-8 pt-4 pb-2">
         <div className="flex items-center justify-between">

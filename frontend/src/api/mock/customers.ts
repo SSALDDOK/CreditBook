@@ -17,6 +17,7 @@ import type {
 // - 오지훈  …051  비활성, 잔액 0원 → 안내 배너·'비활성' 배지 (목록에서는 '비활성 포함'을 켜야 보인다)
 // - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래 빈 안내
 // 그 밖의 고객은 최근 거래 없이(recentEntries: []) 상세를 돌려준다.
+// 충전 목(mock/charges.ts)이 성공하면 recordMockCharge 가 이 목록을 바꾼다 — 상세를 다시 불러오면 바뀐 잔액·거래가 보인다.
 // 형식이 UUID 가 아닌 id 는 400 INVALID_INPUT, 없는 UUID 는 404 CUSTOMER_NOT_FOUND.
 
 type MockCustomer = CustomerResponse & { recentEntries: RecentLedgerEntryResponse[] }
@@ -160,4 +161,36 @@ export function getMockCustomer(customerId: string, signal?: AbortSignal): Promi
     }
     return { ...found }
   }, signal)
+}
+
+/**
+ * 충전 목이 성공했을 때 "서버 쪽" 장부를 흉내 낸다 — 잔액을 바꾸고, 최근 거래 맨 앞에 CHARGE 를 넣고,
+ * 비활성 고객은 다시 활성화한다(REQ-33).
+ * 여기는 가짜 서버(PrepaidAccount 역할)라서 잔액을 더한다. 화면 코드는 이 값을 계산하지 않고 응답·재조회 값만 쓴다.
+ */
+export function recordMockCharge(
+  customerId: string,
+  amount: number,
+  memo: string | null,
+): { entryId: string; balanceAfter: number; performedAt: string } {
+  const found = MOCK_CUSTOMERS.find((c) => c.id === customerId)
+  if (!found) {
+    throw new ApiError(404, 'CUSTOMER_NOT_FOUND', '고객을 찾을 수 없습니다.')
+  }
+  const serverBalanceAfter = found.balance + amount
+  const entry: RecentLedgerEntryResponse = {
+    id: crypto.randomUUID(),
+    type: 'CHARGE',
+    amount,
+    signedAmount: amount,
+    balanceAfter: serverBalanceAfter,
+    memo,
+    performedAt: new Date().toISOString(),
+    performedByName: '김직원',
+    cancelled: false,
+  }
+  found.balance = serverBalanceAfter
+  found.active = true
+  found.recentEntries = [entry, ...found.recentEntries].slice(0, 5)
+  return { entryId: entry.id, balanceAfter: serverBalanceAfter, performedAt: entry.performedAt }
 }
