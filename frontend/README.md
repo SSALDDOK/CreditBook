@@ -26,6 +26,17 @@ npm run dev        # http://localhost:5173
 
 목 모드의 로그인(`src/api/mock/auth.ts`): 처음에는 로그인된 상태(김직원, STAFF)로 시작해 고객 목록이 바로 보인다. 로그아웃하면 로그인 화면으로 가고, 아이디·비밀번호를 아무 값이나 넣으면 로그인된다. 비밀번호를 `wrong`으로 넣으면 로그인 실패 화면을 볼 수 있다. 로그인 상태는 메모리에만 있어 새로고침하면 처음 상태로 돌아간다.
 
+목 모드의 고객(`src/api/mock/customers.ts`): 상세 화면 상태별 확인용 고객이 있다.
+
+| 고객 | id | 상태 |
+|---|---|---|
+| 박서연 | `00000000-0000-4000-8000-000000000001` | 활성, 잔액 45,500원, 최근 거래 5건 |
+| 이준호 | `00000000-0000-4000-8000-000000000002` | 활성, 잔액 0원 — [사용] 비활성 + "잔액이 없습니다" |
+| 오지훈 | `00000000-0000-4000-8000-000000000051` | 비활성, 잔액 0원 — 목록에서는 '비활성 포함'을 켜야 보인다 |
+| 한지민 | `00000000-0000-4000-8000-000000000052` | 활성, 잔액 0원, 거래 0건 |
+
+없는 UUID는 404(`CUSTOMER_NOT_FOUND`), UUID 형식이 아닌 id는 400(`INVALID_INPUT`)을 돌려준다.
+
 ## 라우트와 인증
 
 라우터는 react-router v7(declarative 모드 — `BrowserRouter`·`Routes`·`Route`)이다. 라우트 표는 `src/App.tsx` 한 곳에 있다.
@@ -34,6 +45,7 @@ npm run dev        # http://localhost:5173
 |---|---|---|
 | `/login` | SCR-1 로그인 | 공개 |
 | `/customers` | SCR-3 고객 목록 | 필요 |
+| `/customers/:customerId` | SCR-5 고객 상세 | 필요 |
 | 그 밖 (`/` 포함) | `/customers`로 이동 | — |
 
 로그인이 필요한 화면은 `RequireAuth` 레이아웃 라우트(`<Route element={<RequireAuth />}>`)의 자식으로 추가한다. 경로 파라미터는 `path="/customers/:customerId"` + `useParams()`로 쓴다.
@@ -83,6 +95,38 @@ npm run lint       # oxlint
 
 테스트 제목에 `@TC-n`을 넣는다(JUnit `@Tag("TC-n")`과 짝). 예: `test('로그아웃 후 뒤로가기로 고객 목록이 보이지 않는다 @TC-19', …)` → `--grep "@TC-19"`로 고른다.
 
+### data-testid
+
+역할(`getByRole`)·라벨(`getByLabel`)로 찾기 어려운 요소와 핵심 요소에 `화면-요소` 형태의 영문 kebab-case `data-testid`를 붙인다. 이름을 바꾸면 PR에 적는다.
+
+| 화면 | testid | 요소 |
+|---|---|---|
+| 공통 | `page-title` | 머리글 제목 (상세는 "고객 › 상세") |
+| 공통 | `auth-checking` | 로그인 확인 중 표시 — 사라지면 보호 화면이 그려진다 |
+| SCR-3 목록 | `customer-search-input` | 검색창 |
+| SCR-3 목록 | `customer-include-inactive` | '비활성 포함' 체크박스 (`getByLabel('비활성 포함')`으로도 찾는다) |
+| SCR-3 목록 | `customer-list` | 목록 영역. `data-state`가 `loading` → `ready`/`error` |
+| SCR-3 목록 | `customer-row` | 고객 행 (`data-customer-id`, `data-active`) — 누르면 상세로 이동 |
+| SCR-3 목록 | `customer-name` | 행의 이름 링크 (상세로 이동) |
+| SCR-3 목록 | `customer-inactive-badge` | 비활성 행의 '비활성' 배지 |
+| SCR-3 목록 | `customer-phone` / `customer-balance` / `customer-created-at` | 행의 연락처·잔액·등록일 |
+| SCR-3 목록 | `customer-empty` | 0건 안내 |
+| SCR-3 목록 | `customer-include-inactive-hint` | 토글이 꺼진 채 검색 0건일 때 힌트 한 줄 |
+| SCR-3 목록 | `customer-total` / `page-prev` / `page-next` | 건수·페이지 이동 |
+| SCR-5 상세 | `customer-detail` | 화면 영역. `data-state`가 `loading` → `ready`/`not-found`/`error` |
+| SCR-5 상세 | `customer-detail-name` / `customer-detail-phone` | 이름·마스킹 연락처 |
+| SCR-5 상세 | `customer-detail-inactive-badge` | '비활성' 배지 |
+| SCR-5 상세 | `customer-inactive-notice` | 비활성 고객 안내 배너 |
+| SCR-5 상세 | `customer-detail-balance` | 현재 잔액 (`data-balance`에 서버 값) |
+| SCR-5 상세 | `customer-last-entry` | "마지막 거래 … · 직원" 줄 (거래 0건이면 없음) |
+| SCR-5 상세 | `customer-charge-button` / `customer-use-button` | [충전]·[사용] (`getByRole('button', { name: '사용' })`로도 찾는다) |
+| SCR-5 상세 | `customer-use-hint` | 잔액 0원일 때 "잔액이 없습니다" |
+| SCR-5 상세 | `recent-entries` / `recent-entry-row` | 최근 거래 목록·행 (`data-entry-id`, `data-entry-type`, `data-cancelled`) |
+| SCR-5 상세 | `recent-entry-title` / `recent-entry-time` / `recent-entry-amount` / `recent-entry-balance-after` | 행의 유형·메모, 시각, 부호 붙은 금액, 변동 후 잔액 |
+| SCR-5 상세 | `recent-entries-empty` | 거래 0건 안내 |
+| SCR-5 상세 | `customer-not-found` / `customer-detail-back` | 404 안내·목록으로 돌아가기 |
+| SCR-5 상세 | `error-message` / `customer-detail-retry` | 그 밖의 오류 문구·다시 시도 |
+
 ### CI
 
 `.github/workflows/ci.yml`의 `e2e` job이 일회용 PostgreSQL(`postgres:18-alpine`) → 백엔드 jar(`local-docker` 프로필) → 직원 시드 → `npx playwright test`를 headless로 돌린다. DB 비밀번호·JWT 서명 키·직원 비밀번호는 실행마다 새로 만들고 로그에서 가린다. 실패하면 Playwright 리포트·trace와 백엔드 로그를 artifact로 올린다.
@@ -95,7 +139,8 @@ src/
 ├─ components/ui/       shadcn/ui 컴포넌트
 ├─ components/layout/   공통 레이아웃(사이드바)
 ├─ features/auth/       로그인 화면(SCR-1)·인증 상태(AuthProvider)
-├─ features/customers/  고객 목록 화면(SCR-3)
+├─ features/customers/  고객 목록(SCR-3)·고객 상세(SCR-5) 화면
+├─ features/ledger/     거래 유형 표시 문구·거래 행(화면 간 공용)
 ├─ routes/              보호 라우트(RequireAuth)·로그인 후 이동 경로 검사 — 라우트 표는 App.tsx
 └─ lib/                 표시 형식(금액·날짜) 등 공용 함수
 e2e/                    Playwright 테스트(사용자 작성), support/ 계정 읽기

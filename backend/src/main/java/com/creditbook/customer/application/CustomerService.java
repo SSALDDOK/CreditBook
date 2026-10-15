@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerDetail;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.customer.domain.CustomerSearchKeyword;
@@ -29,6 +30,9 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 public class CustomerService {
 
 	private static final Logger log = LoggerFactory.getLogger(CustomerService.class);
+
+	/** 고객 상세에 담는 최근 거래 최대 건수 (REQ-11). 전체 이력은 거래 이력 조회가 맡는다. */
+	public static final int RECENT_ENTRY_LIMIT = 5;
 
 	private final CustomerRepository customerRepository;
 	private final PrepaidAccountRepository prepaidAccountRepository;
@@ -78,6 +82,22 @@ public class CustomerService {
 		log.debug("customer search: type={}, includeInactive={}, page={}, size={}, total={}", keyword.type(),
 				includeInactive, page, size, result.getTotalElements());
 		return result;
+	}
+
+	/**
+	 * 고객 상세를 잔액·최근 거래와 함께 돌려준다 (REQ-11). 비활성 고객도 조회된다 (REQ-4).
+	 * 잔액과 최근 거래는 저장소가 한 SQL 문장으로 읽으므로 같은 시점의 값이다 — 여기서 잔액을 계산하지 않는다.
+	 *
+	 * @throws CustomerNotFoundException 고객이 없을 때
+	 */
+	@Transactional(readOnly = true)
+	public CustomerDetail getDetail(UUID customerId) {
+		Objects.requireNonNull(customerId, "customerId");
+		CustomerDetail detail = customerRepository.findDetail(customerId, RECENT_ENTRY_LIMIT)
+				.orElseThrow(() -> new CustomerNotFoundException(customerId));
+		// 고객 이름·연락처는 로그에 남기지 않는다 (운영 점검 가이드 §6)
+		log.debug("customer detail: customerId={}, recentEntries={}", customerId, detail.recentEntries().size());
+		return detail;
 	}
 
 	/**

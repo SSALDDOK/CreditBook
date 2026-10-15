@@ -20,21 +20,29 @@ export function useDebouncedValue<T>(value: T, delay = 300): T {
  * 고객 목록을 조회한다. 조건이 바뀌면 이전 요청을 취소(AbortController)해 늦게 온 응답이 화면을 덮지 않게 한다.
  * 조회(GET)라 자동 재시도는 하지 않고, 실패하면 "다시 시도"로 reloadKey 를 올려 다시 부른다.
  */
-export function useCustomerList(q: string, page: number, reloadKey: number): CustomerListState {
+export function useCustomerList(
+  q: string,
+  page: number,
+  size: number | null,
+  reloadKey: number,
+  includeInactive = false,
+): CustomerListState {
   // 응답을 요청 조건(key)과 함께 저장하고, 현재 조건과 다르면 "불러오는 중"으로 본다(effect 안에서 동기 setState 없음).
-  const key = JSON.stringify([q, page, reloadKey])
+  const key = JSON.stringify([q, page, size, reloadKey, includeInactive])
   const [result, setResult] = useState<Settled | null>(null)
 
   useEffect(() => {
+    // 한 페이지 행 수를 아직 재지 못했으면 조회하지 않는다
+    if (size === null) return
     const controller = new AbortController()
-    searchCustomers({ q, page }, controller.signal)
+    searchCustomers({ q, page, size, includeInactive }, controller.signal)
       .then((data) => setResult({ key, ok: true, data }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         setResult({ key, ok: false, error })
       })
     return () => controller.abort()
-  }, [key, q, page])
+  }, [key, q, page, size, includeInactive])
 
   if (result?.key === key) {
     return result.ok ? { status: 'success', data: result.data } : { status: 'error', error: result.error }

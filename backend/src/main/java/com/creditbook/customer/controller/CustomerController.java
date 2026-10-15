@@ -17,6 +17,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
+import com.creditbook.customer.controller.dto.CustomerDetailResponse;
 import com.creditbook.customer.controller.dto.CustomerListResponse;
 import com.creditbook.customer.controller.dto.CustomerRegisterRequest;
 import com.creditbook.customer.controller.dto.CustomerResponse;
@@ -82,6 +83,17 @@ public class CustomerController {
 			@Min(value = 1, message = "페이지 크기는 {value} 이상이어야 합니다.")
 			@Max(value = MAX_PAGE_SIZE, message = "페이지 크기는 {value} 이하여야 합니다.") int size) {
 		return CustomerListResponse.from(customerService.search(q, includeInactive, page, size));
+	}
+
+	/**
+	 * 고객 상세 (REQ-11). 잔액·활성 여부와 최근 거래(최신순 최대 5건)를 함께 돌려준다. 비활성 고객도 조회된다.
+	 * 연락처는 가려서 내보낸다. 로그인한 직원(ADMIN·STAFF) 모두 부를 수 있다.
+	 *
+	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT, 없는 고객이면 404 CUSTOMER_NOT_FOUND
+	 */
+	@GetMapping("/{id}")
+	public CustomerDetailResponse getDetail(@PathVariable("id") UUID id) {
+		return CustomerDetailResponse.from(customerService.getDetail(id));
 	}
 
 	/**
