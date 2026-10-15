@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toUserMessage } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { formatMonthDay, formatWon } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { InactiveBadge } from './InactiveBadge'
 import { useCustomerList, useDebouncedValue } from './useCustomerList'
+import { useFitPageSize } from './useFitPageSize'
 
 /**
  * SCR-3 고객 목록. 잔액·연락처는 서버 응답 값을 그대로 표시한다.
@@ -56,7 +57,23 @@ export function CustomerListPage() {
   // 상세로 갈 때 지금 목록 주소를 넘긴다 — 상세의 브레드크럼 '고객'이 이 목록으로 돌아온다
   const detailState = { listSearch: search }
 
-  const state = useCustomerList(urlQuery, page, reloadKey, includeInactive)
+  // 한 페이지 행 수는 표 영역 높이에 맞춘다 — 태블릿(1024×768)은 10명, 더 큰 화면은 더 많이
+  const listRef = useRef<HTMLElement>(null)
+  const fit = useFitPageSize(listRef, { headerHeight: HEADER_HEIGHT, minRowHeight: MIN_ROW_HEIGHT, min: 5, max: 30 })
+  const pageSize = fit?.size ?? null
+
+  // 창 크기가 바뀌어 행 수가 달라지면, 보던 첫 고객이 들어 있는 페이지로 옮긴다
+  const prevPageSize = useRef<number | null>(null)
+  useEffect(() => {
+    const prev = prevPageSize.current
+    prevPageSize.current = pageSize
+    if (prev === null || pageSize === null || prev === pageSize || page === 0) return
+    const next = Math.floor((page * prev) / pageSize)
+    if (next !== page) updateParams({ page: next })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 행 수가 바뀔 때만 옮긴다
+  }, [pageSize])
+
+  const state = useCustomerList(urlQuery, page, pageSize, reloadKey, includeInactive)
   const data = state.status === 'error' ? undefined : state.data
   const loading = state.status === 'loading'
   const listState = state.status === 'loading' ? 'loading' : state.status === 'error' ? 'error' : 'ready'
@@ -66,7 +83,7 @@ export function CustomerListPage() {
   const rangeEnd = data ? data.page * data.size + data.content.length : 0
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <label htmlFor={searchId} className="sr-only">
@@ -120,7 +137,9 @@ export function CustomerListPage() {
         aria-busy={loading}
         data-testid="customer-list"
         data-state={listState}
-        className="overflow-hidden rounded-2xl border bg-background"
+        data-page-size={pageSize ?? undefined}
+        ref={listRef}
+        className="min-h-0 flex-1 overflow-hidden rounded-2xl border bg-background"
       >
         {state.status === 'error' ? (
           <div className="flex flex-col items-start gap-3 p-8">
@@ -168,6 +187,8 @@ export function CustomerListPage() {
                     navigate(`/customers/${customer.id}`, { state: detailState })
                   }}
                   className="cursor-pointer"
+                  // 표 영역 높이를 행 수로 나눈 높이 — 표 아래에 빈 공간이 남지 않게
+                  style={fit ? { height: fit.rowHeight } : undefined}
                 >
                   <TableCell className="h-12 px-8 font-semibold">
                     <span className="flex items-center gap-3">
@@ -252,6 +273,10 @@ export function CustomerListPage() {
     </div>
   )
 }
+
+// 표 머리글(h-14 + 아래 테두리) 높이 — 실제 머리글을 재기 전에만 쓴다. 데이터 행은 최소 48px(테두리 포함)
+const HEADER_HEIGHT = 57
+const MIN_ROW_HEIGHT = 48
 
 /** 주소의 page 값(0부터). 숫자가 아니거나 음수면 0페이지로 본다 */
 function toPage(value: string | null): number {

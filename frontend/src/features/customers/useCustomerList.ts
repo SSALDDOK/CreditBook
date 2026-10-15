@@ -23,23 +23,26 @@ export function useDebouncedValue<T>(value: T, delay = 300): T {
 export function useCustomerList(
   q: string,
   page: number,
+  size: number | null,
   reloadKey: number,
   includeInactive = false,
 ): CustomerListState {
   // 응답을 요청 조건(key)과 함께 저장하고, 현재 조건과 다르면 "불러오는 중"으로 본다(effect 안에서 동기 setState 없음).
-  const key = JSON.stringify([q, page, reloadKey, includeInactive])
+  const key = JSON.stringify([q, page, size, reloadKey, includeInactive])
   const [result, setResult] = useState<Settled | null>(null)
 
   useEffect(() => {
+    // 한 페이지 행 수를 아직 재지 못했으면 조회하지 않는다
+    if (size === null) return
     const controller = new AbortController()
-    searchCustomers({ q, page, includeInactive }, controller.signal)
+    searchCustomers({ q, page, size, includeInactive }, controller.signal)
       .then((data) => setResult({ key, ok: true, data }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return
         setResult({ key, ok: false, error })
       })
     return () => controller.abort()
-  }, [key, q, page, includeInactive])
+  }, [key, q, page, size, includeInactive])
 
   if (result?.key === key) {
     return result.ok ? { status: 'success', data: result.data } : { status: 'error', error: result.error }

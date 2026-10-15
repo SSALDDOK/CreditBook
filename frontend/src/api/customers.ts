@@ -36,7 +36,7 @@ export type CustomerSearchParams = {
   includeInactive?: boolean
 }
 
-// 기준 해상도 1024×768(화면설계서 §0.1)에서 스크롤 없이 한 화면에 들어가는 행 수 — 더 보려면 이전·다음으로 넘긴다
+// 기본 행 수. 고객 목록 화면은 표 영역 높이에 맞춰 size 를 따로 넘긴다(useFitPageSize)
 export const CUSTOMER_PAGE_SIZE = 10
 
 /** GET /api/customers?q=&page=&size=&includeInactive= — 고객 목록·검색 (최근 등록순, 기본은 활성 고객만) */
