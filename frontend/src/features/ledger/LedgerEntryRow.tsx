@@ -1,20 +1,22 @@
 import type { RecentLedgerEntryResponse } from '@/api/customers'
 import { formatEntryTime, formatSignedWon, formatWon } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { LEDGER_ENTRY_TYPE_LABELS } from './ledgerEntryTypes'
+import { LEDGER_ENTRY_TYPE_STYLES } from './ledgerEntryTypes'
 
 type LedgerEntryRowProps = { entry: RecentLedgerEntryResponse }
 
 /**
- * 거래 한 줄. 금액·변동 후 잔액은 서버 값(signedAmount·balanceAfter)을 그대로 표시한다.
+ * 거래 한 줄 (화면설계 SCR-5 최근 거래). 금액·변동 후 잔액은 서버 값(signedAmount·balanceAfter)을 그대로 표시한다.
  * 부호·색은 signedAmount 부호를 따른다(+ 초록, - 기본색).
  *
- * 취소 표시(cancelled 배지, 충전 취소·사용 취소 행 전용 모양)는 화면설계가 나온 뒤 추가한다 —
- * 지금은 모든 유형을 같은 모양으로 그리고, data-entry-type·data-cancelled 로만 구분해 둔다.
- * 배지는 제목 줄(entry-title 옆)에 넣으면 된다.
+ * - 윗줄: 유형 아이콘(장식) + 같은 색 유형 라벨 칩(폭 66px 고정 — 메모 시작 위치를 맞춘다) + 메모.
+ *   충전 취소·사용 취소 행은 메모 자리에 서버 memo(취소 사유)를 그대로 보여 준다.
+ * - 아랫줄: 날짜 시각. 취소된 원거래(cancelled=true)는 그 앞에 회색 '취소됨' 배지만 붙인다
+ *   — 취소선·금액 색 변경 없음(원거래 금액·잔액은 그 시점의 장부 기록 그대로다).
+ * 유형별 라벨·아이콘·색은 ledgerEntryTypes.ts 한 곳에서 정한다.
  */
 export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
-  const label = LEDGER_ENTRY_TYPE_LABELS[entry.type]
+  const style = LEDGER_ENTRY_TYPE_STYLES[entry.type]
   const credit = entry.signedAmount > 0
 
   return (
@@ -27,16 +29,39 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
     >
       <span
         aria-hidden="true"
-        className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-semibold text-primary"
+        className={cn(
+          'flex size-12 shrink-0 items-center justify-center rounded-xl font-semibold',
+          style.toneClassName,
+        )}
       >
-        {label.charAt(0)}
+        {style.icon}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-lg font-semibold" data-testid="recent-entry-title">
-          {label}
-          {entry.memo && ` · ${entry.memo}`}
+        <p className="flex min-w-0 items-center gap-3" data-testid="recent-entry-title">
+          <span
+            className={cn(
+              'inline-flex w-[66px] shrink-0 items-center justify-center rounded-md py-1 text-sm font-semibold whitespace-nowrap',
+              style.toneClassName,
+            )}
+            data-testid="entry-type-label"
+          >
+            {style.label}
+          </span>
+          {entry.memo && (
+            <span className="truncate text-lg font-semibold" data-testid="recent-entry-memo">
+              {entry.memo}
+            </span>
+          )}
         </p>
-        <p className="mt-1 text-muted-foreground" data-testid="recent-entry-time">
+        <p className="mt-1 flex items-center gap-2 text-muted-foreground" data-testid="recent-entry-time">
+          {entry.cancelled && (
+            <span
+              className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-0.5 text-sm font-semibold text-muted-foreground"
+              data-testid="entry-cancelled-badge"
+            >
+              취소됨
+            </span>
+          )}
           <time dateTime={entry.performedAt}>{formatEntryTime(entry.performedAt)}</time>
         </p>
       </div>

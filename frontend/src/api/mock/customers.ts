@@ -12,7 +12,7 @@ import type {
 // (화면도 목도 금액을 계산하지 않는다). 최근 거래의 잔액 흐름은 손으로 맞춰 적었다.
 //
 // 상세 화면 확인용 고객 (화면설계 SCR-5 이미지 기준)
-// - 박서연  …001  활성, 잔액 45,500원, 최근 거래 5건
+// - 박서연  …001  활성, 잔액 45,500원, 최근 거래 5건(충전 취소·사용 취소와 '취소됨' 원거래 포함)
 // - 이준호  …002  활성, 잔액 0원 → [사용] 비활성 + "잔액이 없습니다"
 // - 오지훈  …051  비활성, 잔액 0원 → 안내 배너·'비활성' 배지 (목록에서는 '비활성 포함'을 켜야 보인다)
 // - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래 빈 안내
@@ -29,12 +29,14 @@ function entryId(n: number): string {
   return `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`
 }
 
+// 박서연: 화면설계 SCR-5 "취소 표시" 이미지의 장부 — 충전 → 충전 취소, 사용 → 사용 취소 쌍이 모두 들어 있다.
+// 취소된 원거래는 cancelled: true, 반제 행의 memo 는 취소 사유다.
 const PARK_ENTRIES: RecentLedgerEntryResponse[] = [
   { id: entryId(105), type: 'USE', amount: 4500, signedAmount: -4500, balanceAfter: 45500, memo: '아메리카노 2잔', performedAt: '2026-10-15T05:22:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(104), type: 'CHARGE', amount: 50000, signedAmount: 50000, balanceAfter: 50000, memo: '현금', performedAt: '2026-09-18T00:14:00Z', performedByName: '박사장', cancelled: false },
-  { id: entryId(103), type: 'USE', amount: 5200, signedAmount: -5200, balanceAfter: 0, memo: '라떼 1잔', performedAt: '2026-09-12T08:02:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(102), type: 'USE', amount: 4800, signedAmount: -4800, balanceAfter: 5200, memo: '케이크 1조각', performedAt: '2026-09-03T06:40:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(101), type: 'CHARGE', amount: 10000, signedAmount: 10000, balanceAfter: 10000, memo: '계좌이체', performedAt: '2026-08-28T01:05:00Z', performedByName: '박사장', cancelled: false },
+  { id: entryId(104), type: 'USE_CANCEL', amount: 6000, signedAmount: 6000, balanceAfter: 50000, memo: '손님이 주문 취소', performedAt: '2026-10-15T04:12:00Z', performedByName: '김직원', cancelled: false },
+  { id: entryId(103), type: 'USE', amount: 6000, signedAmount: -6000, balanceAfter: 44000, memo: '카페라떼, 쿠키', performedAt: '2026-10-15T04:05:00Z', performedByName: '김직원', cancelled: true },
+  { id: entryId(102), type: 'CHARGE_CANCEL', amount: 30000, signedAmount: -30000, balanceAfter: 50000, memo: '금액 잘못 입력', performedAt: '2026-09-18T00:20:00Z', performedByName: '박사장', cancelled: false },
+  { id: entryId(101), type: 'CHARGE', amount: 30000, signedAmount: 30000, balanceAfter: 80000, memo: '계좌이체', performedAt: '2026-09-18T00:16:00Z', performedByName: '박사장', cancelled: true },
 ]
 
 const LEE_ENTRIES: RecentLedgerEntryResponse[] = [
