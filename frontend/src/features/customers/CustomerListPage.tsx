@@ -1,6 +1,6 @@
 import { Search } from 'lucide-react'
-import { useId, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useEffect, useId, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toUserMessage } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,18 +13,50 @@ import { useCustomerList, useDebouncedValue } from './useCustomerList'
 /**
  * SCR-3 고객 목록. 잔액·연락처는 서버 응답 값을 그대로 표시한다.
  * '비활성 포함'은 보기 필터다 — 켜면 includeInactive=true 로 조회할 뿐 고객 상태를 바꾸지 않는다(STAFF·ADMIN 모두).
+ *
+ * 검색어·페이지·비활성 포함은 주소(?q=&page=&inactive=1)에 둔다 — 상세에서 브레드크럼 '고객'이나 브라우저 뒤로가기로
+ * 돌아오면 보던 검색 결과·페이지가 그대로 보인다. 주소는 replace 로 바꿔 페이지를 넘길 때마다 방문 기록이 쌓이지 않게 한다.
  */
 export function CustomerListPage() {
   const searchId = useId()
   const includeInactiveId = useId()
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
-  const [includeInactive, setIncludeInactive] = useState(false)
-  const [page, setPage] = useState(0)
+  const { search } = useLocation()
+  const [params, setParams] = useSearchParams()
+  const urlQuery = params.get('q') ?? ''
+  const includeInactive = params.get('inactive') === '1'
+  const page = toPage(params.get('page'))
+  const [query, setQuery] = useState(urlQuery)
   const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query.trim(), 300)
 
-  const state = useCustomerList(debouncedQuery, page, reloadKey, includeInactive)
+  // 주소 조건을 바꾼다. 값이 기본값(빈 검색어·0페이지·비활성 제외)이면 주소에서 뺀다
+  const updateParams = (next: { q?: string; page?: number; inactive?: boolean }) => {
+    const q = next.q ?? urlQuery
+    const p = next.page ?? page
+    const inactive = next.inactive ?? includeInactive
+    const updated = new URLSearchParams()
+    if (q) updated.set('q', q)
+    if (p > 0) updated.set('page', String(p))
+    if (inactive) updated.set('inactive', '1')
+    setParams(updated, { replace: true })
+  }
+  const setPage = (p: number) => updateParams({ page: p })
+
+  // 입력이 멈춘 검색어를 주소에 반영하고 1페이지로 돌아간다
+  useEffect(() => {
+    if (debouncedQuery === urlQuery) return
+    const updated = new URLSearchParams(params)
+    if (debouncedQuery) updated.set('q', debouncedQuery)
+    else updated.delete('q')
+    updated.delete('page')
+    setParams(updated, { replace: true })
+  }, [debouncedQuery, urlQuery, params, setParams])
+
+  // 상세로 갈 때 지금 목록 주소를 넘긴다 — 상세의 브레드크럼 '고객'이 이 목록으로 돌아온다
+  const detailState = { listSearch: search }
+
+  const state = useCustomerList(urlQuery, page, reloadKey, includeInactive)
   const data = state.status === 'error' ? undefined : state.data
   const loading = state.status === 'loading'
   const listState = state.status === 'loading' ? 'loading' : state.status === 'error' ? 'error' : 'ready'
@@ -48,10 +80,7 @@ export function CustomerListPage() {
             id={searchId}
             type="search"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setPage(0)
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="이름 또는 연락처 뒷자리로 검색"
             // 서버 검색어 길이 제한(20자)과 맞춘다
             maxLength={20}
@@ -65,10 +94,7 @@ export function CustomerListPage() {
             id={includeInactiveId}
             type="checkbox"
             checked={includeInactive}
-            onChange={(e) => {
-              setIncludeInactive(e.target.checked)
-              setPage(0)
-            }}
+            onChange={(e) => updateParams({ inactive: e.target.checked, page: 0 })}
             data-testid="customer-include-inactive"
             className="size-5 accent-primary"
           />
@@ -94,7 +120,7 @@ export function CustomerListPage() {
         aria-busy={loading}
         data-testid="customer-list"
         data-state={listState}
-        className="flex-1 overflow-hidden rounded-2xl border bg-background"
+        className="overflow-hidden rounded-2xl border bg-background"
       >
         {state.status === 'error' ? (
           <div className="flex flex-col items-start gap-3 p-8">
@@ -139,14 +165,15 @@ export function CustomerListPage() {
                   // 행 어디를 눌러도 상세로 간다(마우스 편의). 키보드·보조기기는 이름 링크로 간다
                   onClick={(e) => {
                     if (e.target instanceof Element && e.target.closest('a')) return
-                    navigate(`/customers/${customer.id}`)
+                    navigate(`/customers/${customer.id}`, { state: detailState })
                   }}
                   className="cursor-pointer"
                 >
-                  <TableCell className="h-14 px-8 font-semibold">
+                  <TableCell className="h-12 px-8 font-semibold">
                     <span className="flex items-center gap-3">
                       <Link
                         to={`/customers/${customer.id}`}
+                        state={detailState}
                         data-testid="customer-name"
                         className={cn(
                           'rounded outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50',
@@ -172,8 +199,8 @@ export function CustomerListPage() {
               {data && data.content.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="h-32 text-center text-muted-foreground" data-testid="customer-empty">
-                    {debouncedQuery ? '검색 결과가 없습니다.' : '등록된 고객이 없습니다.'}
-                    {debouncedQuery && !includeInactive && (
+                    {urlQuery ? '검색 결과가 없습니다.' : '등록된 고객이 없습니다.'}
+                    {urlQuery && !includeInactive && (
                       <p className="mt-3 text-sm" data-testid="customer-include-inactive-hint">
                         비활성 고객까지 찾으려면 '비활성 포함'을 켜세요
                       </p>
@@ -204,7 +231,7 @@ export function CustomerListPage() {
             size="lg"
             className="h-11 rounded-xl bg-background px-6 text-base"
             disabled={loading || !data || data.page === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            onClick={() => setPage(Math.max(0, page - 1))}
             data-testid="page-prev"
           >
             이전
@@ -215,7 +242,7 @@ export function CustomerListPage() {
             size="lg"
             className="h-11 rounded-xl bg-background px-6 text-base"
             disabled={loading || !data || !data.hasNext}
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => setPage(page + 1)}
             data-testid="page-next"
           >
             다음
@@ -224,4 +251,10 @@ export function CustomerListPage() {
       </div>
     </div>
   )
+}
+
+/** 주소의 page 값(0부터). 숫자가 아니거나 음수면 0페이지로 본다 */
+function toPage(value: string | null): number {
+  const n = Number(value)
+  return Number.isInteger(n) && n > 0 ? n : 0
 }

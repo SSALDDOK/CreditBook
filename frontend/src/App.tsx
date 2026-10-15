@@ -3,6 +3,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { CustomerDetailBreadcrumb } from '@/features/customers/CustomerDetailBreadcrumb'
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
 import { CustomerListPage } from '@/features/customers/CustomerListPage'
 import { RequireAuth } from '@/routes/RequireAuth'
@@ -37,13 +38,7 @@ export default function App() {
               <Route
                 path="/customers/:customerId"
                 element={
-                  <AppLayout
-                    title={
-                      <>
-                        고객 <span aria-hidden="true">›</span> 상세
-                      </>
-                    }
-                  >
+                  <AppLayout title={<CustomerDetailBreadcrumb />}>
                     <CustomerDetailPage />
                   </AppLayout>
                 }
