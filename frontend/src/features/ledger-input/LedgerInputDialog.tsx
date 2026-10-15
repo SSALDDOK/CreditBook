@@ -116,6 +116,3 @@ export function LedgerInputDialogContent({
     </DialogContent>
   )
 }
-
-/** 모달 아래 버튼 공통 크기(터치 영역 44px 이상) */
-export const LEDGER_DIALOG_BUTTON_CLASS = 'h-12 min-w-28 rounded-xl px-6 text-lg font-bold'
