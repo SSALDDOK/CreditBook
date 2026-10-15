@@ -24,7 +24,7 @@ export function CustomerDetailPage() {
 
   return (
     <div
-      className="flex flex-1 flex-col gap-6"
+      className="flex flex-1 flex-col gap-5"
       data-testid="customer-detail"
       data-state={viewState}
       aria-busy={state.status === 'loading'}
@@ -69,7 +69,7 @@ function CustomerDetailView({ customer, loading }: { customer: CustomerDetailRes
   const useDescribedBy = !customer.active ? noticeId : noBalance ? useHintId : undefined
 
   return (
-    <div className={cn('flex flex-col gap-6', loading && 'opacity-60')}>
+    <div className={cn('flex flex-col gap-4', loading && 'opacity-60')}>
       {!customer.active && (
         <div
           id={noticeId}
@@ -95,7 +95,7 @@ function CustomerDetailView({ customer, loading }: { customer: CustomerDetailRes
 
       <section
         aria-label="현재 잔액"
-        className="flex flex-wrap items-center justify-between gap-6 rounded-3xl bg-sidebar px-12 py-10 text-white"
+        className="flex flex-wrap items-center justify-between gap-6 rounded-3xl bg-sidebar px-10 py-5 text-white"
       >
         <div>
           <p className="text-sidebar-foreground">현재 잔액</p>
@@ -143,7 +143,7 @@ function CustomerDetailView({ customer, loading }: { customer: CustomerDetailRes
         </div>
       </section>
 
-      <section aria-labelledby={recentHeadingId} className="rounded-2xl border bg-background px-10 py-8">
+      <section aria-labelledby={recentHeadingId} className="rounded-2xl border bg-background px-8 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <h3 id={recentHeadingId} className="text-xl font-bold">
             최근 거래

@@ -21,7 +21,7 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
 
   return (
     <li
-      className="flex items-center gap-5 border-b py-5 last:border-b-0"
+      className="flex items-center gap-5 border-b py-2.5 last:border-b-0"
       data-testid="recent-entry-row"
       data-entry-id={entry.id}
       data-entry-type={entry.type}
@@ -30,7 +30,7 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
       <span
         aria-hidden="true"
         className={cn(
-          'flex size-12 shrink-0 items-center justify-center rounded-xl font-semibold',
+          'flex size-11 shrink-0 items-center justify-center rounded-xl font-semibold',
           style.toneClassName,
         )}
       >
@@ -48,12 +48,12 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
             {style.label}
           </span>
           {entry.memo && (
-            <span className="truncate text-lg font-semibold" data-testid="recent-entry-memo">
+            <span className="truncate text-lg leading-6 font-semibold" data-testid="recent-entry-memo">
               {entry.memo}
             </span>
           )}
         </p>
-        <p className="mt-1 flex items-center gap-2 text-muted-foreground" data-testid="recent-entry-time">
+        <p className="mt-0.5 flex items-center gap-2 text-muted-foreground" data-testid="recent-entry-time">
           {entry.cancelled && (
             <span
               className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-0.5 text-sm font-semibold text-muted-foreground"
@@ -67,12 +67,12 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
       </div>
       <div className="shrink-0 text-right">
         <p
-          className={cn('text-lg font-bold tabular-nums', credit && 'text-green-700')}
+          className={cn('text-lg leading-6 font-bold tabular-nums', credit && 'text-green-700')}
           data-testid="recent-entry-amount"
         >
           {formatSignedWon(entry.signedAmount)}
         </p>
-        <p className="mt-1 text-muted-foreground tabular-nums" data-testid="recent-entry-balance-after">
+        <p className="mt-0.5 text-muted-foreground tabular-nums" data-testid="recent-entry-balance-after">
           잔액 {formatWon(entry.balanceAfter)}
         </p>
       </div>
