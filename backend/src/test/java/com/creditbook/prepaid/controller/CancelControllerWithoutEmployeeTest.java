@@ -54,4 +54,20 @@ class CancelControllerWithoutEmployeeTest {
 		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
 	}
 
+	@Test
+	@Tag("REQ-7")
+	@DisplayName("현재 직원 구현이 없으면 충전 취소 요청을 401로 거절하고 취소하지 않는다")
+	void cancel_charge_is_rejected_with_401_when_no_current_employee_bean() throws Exception {
+		// given
+		String url = "/api/customers/" + UUID.randomUUID() + "/charges/" + UUID.randomUUID() + "/cancel";
+
+		// when / then
+		mockMvc.perform(post(url).header(IdempotencyHeaders.IDEMPOTENCY_KEY, "key-0001")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"reason\": \"금액 잘못 입력\"}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+	}
+
 }

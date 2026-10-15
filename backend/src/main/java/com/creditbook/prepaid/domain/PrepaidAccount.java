@@ -3,6 +3,8 @@ package com.creditbook.prepaid.domain;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -166,6 +168,63 @@ public class PrepaidAccount {
 		String normalizedReason = requireReason(reason);
 		BigDecimal newBalance = requireWithinRange(this.balance.add(target.getAmount()));
 		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.USE_CANCEL, target.getAmount(), newBalance,
+				normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
+	}
+
+	/**
+	 * 충전 건을 취소한다 (REQ-7). 원 거래는 그대로 두고 CHARGE_CANCEL 반제 거래를 추가해 충전 금액만큼 잔액을 줄인다.
+	 * 전액 취소만 있고, 당일 등록 건만 취소할 수 있다. 취소하면 잔액이 음수가 되는 경우(이미 사용함)는 거절한다.
+	 * 잔액을 줄이므로 고객 재활성화와는 관계없다.
+	 * <p>
+	 * '당일' 은 {@code businessZone} 의 달력 날짜로 판단한다 — 충전 시각과 취소 시각({@code performedAt})을
+	 * 그 시간대의 날짜로 바꿔 같은지 본다. 서버·DB 시각은 UTC 이므로 시간대 없이 비교하면 KST 00:00–09:00 충전이 전날로 잡힌다.
+	 * 검사 순서: 대상(같은 계좌·CHARGE·반제 행 아님·이미 취소) → 사유 → 당일 → 잔액.
+	 * 조회와 저장 사이에 다른 요청이 같은 충전을 먼저 취소하면 DB 의 ux_ledger_entries_reverses 가 두 번째 반제를 막는다.
+	 *
+	 * @param target 취소할 충전 거래
+	 * @param existingCancel target 을 이미 반제한 거래 (없으면 empty) — 서비스가 조회해 넘긴다
+	 * @param reason 취소 사유 (필수, 앞뒤 공백 제거 후 memo 에 저장)
+	 * @param performedAt 취소 시각 (서버 시각). 당일 판단의 '오늘' 이기도 하다
+	 * @param businessZone 영업 시간대 (creditbook.business-zone)
+	 * @param idempotencyKey 요청 키 (REQ-10, 필수). 만들어진 반제 거래에 그대로 저장된다
+	 * @throws InvalidCancelTargetException target 이 다른 계좌의 거래이거나 CHARGE 가 아닐 때 (반제 행 포함)
+	 * @throws AlreadyCancelledException target 이 이미 취소됐을 때
+	 * @throws CancelReasonRequiredException 사유가 null·공백일 때
+	 * @throws ChargeCancelNotSameDayException target 이 오늘(영업 시간대) 등록된 충전이 아닐 때
+	 * @throws ChargeAlreadyUsedException 현재 잔액이 충전 금액보다 적을 때
+	 */
+	public LedgerEntry cancelCharge(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt, ZoneId businessZone, IdempotencyKey idempotencyKey) {
+		return cancelChargeWithKey(target, existingCancel, reason, performedBy, performedAt, businessZone,
+				Objects.requireNonNull(idempotencyKey, "idempotencyKey"));
+	}
+
+	/**
+	 * 요청 키 없이 충전 건을 취소한다 (idempotency_key NULL). 같은 패키지의 테스트 준비용 — API 경로는 키를 받는
+	 * {@link #cancelCharge(LedgerEntry, Optional, String, UUID, Instant, ZoneId, IdempotencyKey)} 만 쓴다.
+	 */
+	LedgerEntry cancelCharge(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt, ZoneId businessZone) {
+		return cancelChargeWithKey(target, existingCancel, reason, performedBy, performedAt, businessZone, null);
+	}
+
+	private LedgerEntry cancelChargeWithKey(LedgerEntry target, Optional<LedgerEntry> existingCancel, String reason,
+			UUID performedBy, Instant performedAt, ZoneId businessZone, IdempotencyKey idempotencyKey) {
+		Objects.requireNonNull(performedAt, "performedAt");
+		Objects.requireNonNull(businessZone, "businessZone");
+		requireReversible(target, LedgerEntryType.CHARGE_CANCEL, existingCancel);
+		String normalizedReason = requireReason(reason);
+		LocalDate chargedOn = LocalDate.ofInstant(target.getPerformedAt(), businessZone);
+		LocalDate today = LocalDate.ofInstant(performedAt, businessZone);
+		if (!chargedOn.equals(today)) {
+			throw new ChargeCancelNotSameDayException(target.getId(), chargedOn, today);
+		}
+		BigDecimal chargeAmount = target.getAmount();
+		if (this.balance.compareTo(chargeAmount) < 0) {
+			throw new ChargeAlreadyUsedException(target.getId(), this.balance, chargeAmount);
+		}
+		BigDecimal newBalance = this.balance.subtract(chargeAmount);
+		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.CHARGE_CANCEL, chargeAmount, newBalance,
 				normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
 	}
 
