@@ -401,14 +401,14 @@ function ChargeConfirmSummary({
 
   return (
     <>
-      <section aria-label="충전 후 잔액" className="rounded-2xl bg-muted px-6 py-5" data-testid="charge-confirm-summary">
+      <section aria-label="충전 후 잔액" className="rounded-2xl bg-primary/10 px-6 py-5 text-sidebar" data-testid="charge-confirm-summary">
         <p className="text-2xl font-bold tabular-nums">
           <span data-testid="charge-confirm-current-balance">{formatWon(customer.balance)}</span>
-          <span aria-hidden="true" className="mx-3 text-muted-foreground">
+          <span aria-hidden="true" className="mx-3">
             →
           </span>
           <span className="sr-only">에서</span>
-          <span className="text-primary" data-testid="charge-confirm-expected-balance" data-balance={expected}>
+          <span data-testid="charge-confirm-expected-balance" data-balance={expected}>
             {formatWon(expected)}
           </span>
         </p>

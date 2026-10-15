@@ -34,7 +34,7 @@ const STEPS: Array<{ step: LedgerInputStep; label: string }> = [
   { step: 'confirm', label: '2 확인' },
 ]
 
-/** 오른쪽 위 단계 표시 "1 입력 — 2 확인". 지금 단계는 진하게, aria-current="step" */
+/** 오른쪽 위 단계 표시 "1 입력 — 2 확인". 지금 단계는 남색 배지, 나머지는 회색 배지, aria-current="step" */
 function StepIndicator({ current }: { current: LedgerInputStep }) {
   return (
     <ol aria-label="진행 단계" className="flex shrink-0 items-center gap-2 text-base" data-testid="ledger-input-steps">
@@ -47,7 +47,10 @@ function StepIndicator({ current }: { current: LedgerInputStep }) {
           )}
           <span
             aria-current={step === current ? 'step' : undefined}
-            className={cn(step === current ? 'font-bold text-foreground' : 'text-muted-foreground')}
+            className={cn(
+              'rounded-full px-3 py-1 text-sm font-bold',
+              step === current ? 'bg-sidebar text-sidebar-foreground' : 'bg-muted text-muted-foreground',
+            )}
           >
             {label}
           </span>

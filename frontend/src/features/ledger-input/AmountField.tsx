@@ -35,15 +35,15 @@ export function AmountField({
   const inputId = useId()
   const hintId = useId()
   const errorId = useId()
-  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
+  // 오류가 있으면 안내 문구 대신 오류만 보여 준다(화면설계 '1회 상한 초과' 상태)
+  const showHint = Boolean(hint) && !error
+  const describedBy = [showHint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={inputId} className="text-base font-semibold">
-        {label}
-      </label>
+      {/* 화면설계대로 빠른 금액 칩이 금액 라벨 위에 온다 */}
       {quickAmounts.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="빠른 금액">
+        <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="빠른 금액">
           {quickAmounts.map((amount) => {
             const selected = value === String(amount)
             return (
@@ -58,7 +58,7 @@ export function AmountField({
                 className={cn(
                   'h-11 min-w-28 rounded-full border px-5 text-base font-semibold tabular-nums transition-colors',
                   'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50',
-                  selected ? 'border-primary bg-primary text-primary-foreground' : 'bg-background hover:bg-muted',
+                  selected ? 'border-primary bg-primary/10 text-primary' : 'bg-background hover:bg-muted',
                 )}
               >
                 {formatWon(amount)}
@@ -67,7 +67,10 @@ export function AmountField({
           })}
         </div>
       )}
-      <div className="relative">
+      <label htmlFor={inputId} className="text-base font-semibold">
+        {label}
+      </label>
+      <div>
         <Input
           ref={inputRef}
           id={inputId}
@@ -80,13 +83,10 @@ export function AmountField({
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           data-testid={`${testIdPrefix}-amount-input`}
-          className="h-14 rounded-xl pr-12 text-right text-2xl font-bold tabular-nums md:text-2xl aria-invalid:border-2"
+          className="h-14 rounded-xl px-4 text-xl tabular-nums md:text-xl aria-invalid:border-2"
         />
-        <span aria-hidden="true" className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-xl">
-          원
-        </span>
       </div>
-      {hint && (
+      {showHint && (
         <p id={hintId} className="text-sm text-muted-foreground" data-testid={`${testIdPrefix}-amount-hint`}>
           {hint}
         </p>

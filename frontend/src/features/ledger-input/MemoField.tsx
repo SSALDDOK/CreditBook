@@ -74,7 +74,7 @@ export function MemoField({
                 className={cn(
                   'h-11 min-w-20 rounded-full border px-5 text-base font-semibold transition-colors',
                   'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50',
-                  on ? 'border-primary bg-primary text-primary-foreground' : 'bg-background hover:bg-muted',
+                  on ? 'border-primary bg-primary/10 text-primary' : 'bg-background hover:bg-muted',
                 )}
               >
                 {chip}
