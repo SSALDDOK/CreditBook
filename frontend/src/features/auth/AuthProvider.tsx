@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { flushSync } from 'react-dom'
 import { getSession, login as apiLogin, logout as apiLogout, type LoginRequest } from '@/api/auth'
 import { ApiError, setUnauthorizedHandler } from '@/api/client'
+import { clearAllLedgerDrafts, clearLedgerDraftsExcept } from '@/features/ledger-input/draftStorage'
 import { LOGIN_PATH, loginPath } from '@/routes/redirect'
 import { AuthContext, type AuthContextValue, type AuthState } from './AuthContext'
 
@@ -20,6 +21,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkController = useRef<AbortController | null>(null)
 
   const transition = useCallback((next: AuthState): number => {
+    // 충전·사용 입력 복구(REQ-17)는 같은 직원에게만 — 다른 직원으로 로그인되면 그 직원 것이 아닌 저장값을 지운다
+    if (next.status === 'authenticated') clearLedgerDraftsExcept(next.session.employeeId)
     generation.current += 1
     stateRef.current = next
     setState(next)
@@ -91,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 쿠키가 남은 채로 자리를 떠나게 된다
     await apiLogout()
     checkController.current?.abort()
+    clearAllLedgerDrafts() // 로그아웃하면 입력 복구용 저장값도 지운다
     // 보호 화면이 이 주소로 replace 이동한다 — 지금 보던 보호 화면 기록이 로그인 화면으로 바뀐다
     transition({ status: 'anonymous', loginTarget: LOGIN_PATH })
   }, [transition])

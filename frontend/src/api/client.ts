@@ -50,6 +50,30 @@ export function setUnauthorizedHandler(handler: () => void): () => void {
   }
 }
 
+// 401 로 로그인 화면에 보내기 "직전"에 먼저 부를 함수들. 충전·사용 모달이 입력하던 금액을 저장(REQ-17)하는 데 쓴다.
+// 로그인 이동(상태 전환)보다 먼저 같은 호출 안에서 동기로 부르므로, 화면이 내려가기 전에 저장이 끝난다.
+const beforeUnauthorizedListeners = new Set<() => void>()
+
+/** 401 처리 직전에 부를 함수를 등록하고, 해제 함수를 돌려준다. */
+export function addBeforeUnauthorizedListener(listener: () => void): () => void {
+  beforeUnauthorizedListeners.add(listener)
+  return () => {
+    beforeUnauthorizedListeners.delete(listener)
+  }
+}
+
+/** 보호 API 가 401 을 받았을 때의 공통 처리 — 저장 함수들을 먼저 부르고 로그인 이동을 맡긴다. 목 API 도 이 함수를 쓴다. */
+export function notifyUnauthorized(): void {
+  for (const listener of beforeUnauthorizedListeners) {
+    try {
+      listener()
+    } catch {
+      // 저장 실패(저장소 꺼짐·용량 초과 등)가 로그인 이동을 막지 않게 한다 — 복구는 편의 기능이다
+    }
+  }
+  unauthorizedHandler?.()
+}
+
 export type ApiRequestOptions = {
   /**
    * false 면 401 을 받아도 로그인 화면으로 보내지 않고 오류만 던진다.
@@ -74,7 +98,7 @@ export async function apiRequest<T>(
   }
 
   if (res.status === 401 && redirectOnUnauthorized) {
-    unauthorizedHandler?.()
+    notifyUnauthorized()
   }
 
   const body: unknown = await res.json().catch(() => null)
