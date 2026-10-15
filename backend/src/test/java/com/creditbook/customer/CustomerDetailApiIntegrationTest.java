@@ -69,6 +69,7 @@ class CustomerDetailApiIntegrationTest {
 	Clock clock;
 
 	@Test
+	@Tag("TC-48")
 	@DisplayName("고객 상세는 현재 잔액과 최근 거래 5건을 최신순으로 주고, 첫 거래의 거래 후 잔액이 현재 잔액과 같다")
 	@Tag("REQ-12")
 	void detail_returns_balance_and_latest_five_entries_in_order() throws Exception {
@@ -111,6 +112,7 @@ class CustomerDetailApiIntegrationTest {
 	}
 
 	@Test
+	@Tag("TC-20")
 	@DisplayName("고객 상세 응답에 연락처 원문은 어디에도 없다")
 	@Tag("REQ-26")
 	void detail_never_contains_raw_phone() throws Exception {
@@ -129,6 +131,7 @@ class CustomerDetailApiIntegrationTest {
 	}
 
 	@Test
+	@Tag("TC-48")
 	@DisplayName("거래가 한 건도 없는 고객은 잔액 0원과 빈 최근 거래 목록으로 조회된다")
 	void detail_of_customer_without_entries_has_empty_list() throws Exception {
 		// given 고객 등록만 (거래 0건)
@@ -145,6 +148,7 @@ class CustomerDetailApiIntegrationTest {
 	}
 
 	@Test
+	@Tag("TC-48")
 	@DisplayName("비활성 고객도 상세가 조회되고 active=false로 표시된다")
 	@Tag("REQ-4")
 	void inactive_customer_detail_is_readable() throws Exception {
@@ -163,6 +167,7 @@ class CustomerDetailApiIntegrationTest {
 	}
 
 	@Test
+	@Tag("TC-48")
 	@DisplayName("없는 고객의 상세를 조회하면 404 CUSTOMER_NOT_FOUND")
 	void unknown_customer_detail_is_404() throws Exception {
 		// given 로그인한 직원, 아무 고객도 아닌 UUID
