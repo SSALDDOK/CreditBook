@@ -34,7 +34,7 @@ export function CustomerListPage() {
   const rangeEnd = data ? data.page * data.size + data.content.length : 0
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
+    <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <label htmlFor={searchId} className="sr-only">
@@ -143,7 +143,7 @@ export function CustomerListPage() {
                   }}
                   className="cursor-pointer"
                 >
-                  <TableCell className="h-16 px-8 font-semibold">
+                  <TableCell className="h-14 px-8 font-semibold">
                     <span className="flex items-center gap-3">
                       <Link
                         to={`/customers/${customer.id}`}

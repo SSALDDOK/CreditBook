@@ -36,7 +36,8 @@ export type CustomerSearchParams = {
   includeInactive?: boolean
 }
 
-export const CUSTOMER_PAGE_SIZE = 20
+// 기준 해상도 1024×768(화면설계서 §0.1)에서 스크롤 없이 한 화면에 들어가는 행 수 — 더 보려면 이전·다음으로 넘긴다
+export const CUSTOMER_PAGE_SIZE = 8
 
 /** GET /api/customers?q=&page=&size=&includeInactive= — 고객 목록·검색 (최근 등록순, 기본은 활성 고객만) */
 export function searchCustomers(
