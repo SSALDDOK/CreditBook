@@ -13,7 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.creditbook.global.security.CurrentEmployee;
 import com.creditbook.global.security.UnauthenticatedException;
 import com.creditbook.prepaid.application.CancelService;
+import com.creditbook.prepaid.application.ChargeCancelResult;
 import com.creditbook.prepaid.application.UseCancelResult;
+import com.creditbook.prepaid.controller.dto.ChargeCancelRequest;
+import com.creditbook.prepaid.controller.dto.ChargeCancelResponse;
 import com.creditbook.prepaid.controller.dto.UseCancelRequest;
 import com.creditbook.prepaid.controller.dto.UseCancelResponse;
 import com.creditbook.prepaid.domain.IdempotencyKey;
@@ -21,7 +24,7 @@ import com.creditbook.prepaid.domain.IdempotencyKey;
 import jakarta.validation.Valid;
 
 /**
- * 취소 API — 사용 취소 (REQ-34). 요청 형식 검증과 DTO 변환만 하고, 취소 대상 판단·잔액 계산은 서비스·도메인이 한다.
+ * 취소 API — 충전 취소 (REQ-7)·사용 취소 (REQ-34). 요청 형식 검증과 DTO 변환만 하고, 취소 대상 판단·잔액 계산은 서비스·도메인이 한다.
  * <p>
  * 처리 직원은 {@link CurrentEmployee} 에서만 꺼낸다 (요청 본문·헤더로 받지 않는다). 구현 빈이 없거나 직원을 알 수 없으면
  * 거래를 만들지 않고 401 로 거절한다.
@@ -38,6 +41,19 @@ public class CancelController {
 	public CancelController(CancelService cancelService, ObjectProvider<CurrentEmployee> currentEmployee) {
 		this.cancelService = cancelService;
 		this.currentEmployee = currentEmployee;
+	}
+
+	/** 고객의 당일 충전 건을 전액 취소한다 (REQ-7). 만들어진 CHARGE_CANCEL 거래를 201 로 돌려준다. */
+	@PostMapping("/api/customers/{customerId}/charges/{chargeEntryId}/cancel")
+	public ResponseEntity<ChargeCancelResponse> cancelCharge(@PathVariable("customerId") UUID customerId,
+			@PathVariable("chargeEntryId") UUID chargeEntryId,
+			@Valid @RequestBody ChargeCancelRequest request,
+			@RequestHeader(name = IdempotencyHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey) {
+		UUID performedBy = requireCurrentEmployeeId();
+		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
+		ChargeCancelResult result = cancelService.cancelCharge(customerId, chargeEntryId, request.reason(),
+				performedBy, key);
+		return IdempotencyHeaders.created(result.entryId(), result.replayed(), ChargeCancelResponse.from(result));
 	}
 
 	/** 고객의 사용 건을 전액 취소한다. 만들어진 USE_CANCEL 거래를 201 로 돌려준다. */

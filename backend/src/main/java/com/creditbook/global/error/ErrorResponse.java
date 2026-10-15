@@ -48,6 +48,15 @@ public record ErrorResponse(
 	public record AlreadyCancelledDetails(UUID cancelEntryId) {
 	}
 
+	/**
+	 * 이미 사용돼 취소할 수 없는 충전(CHARGE_ALREADY_USED)의 부가 정보. 화면이 현재 잔액과 충전액을 안내할 수 있게 한다.
+	 *
+	 * @param balance 요청 시점의 현재 잔액 (원)
+	 * @param chargeAmount 취소하려던 충전 금액 (원)
+	 */
+	public record ChargeAlreadyUsedDetails(BigDecimal balance, BigDecimal chargeAmount) {
+	}
+
 	public static ErrorResponse of(ErrorCode errorCode) {
 		return new ErrorResponse(errorCode.name(), errorCode.defaultMessage(), List.of(), null);
 	}

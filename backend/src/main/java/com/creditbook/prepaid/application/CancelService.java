@@ -2,6 +2,7 @@ package com.creditbook.prepaid.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,12 +10,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.AlreadyCancelledException;
+import com.creditbook.prepaid.domain.ChargeAlreadyUsedException;
+import com.creditbook.prepaid.domain.ChargeCancelNotSameDayException;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.prepaid.domain.IdempotentRequest;
 import com.creditbook.prepaid.domain.InvalidCancelTargetException;
@@ -26,13 +30,15 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 
 /**
- * 취소 유스케이스 — 사용 취소 (REQ-34, REQ-10, REQ-33). 대상 검증(같은 계좌·유형 대응·반제 행 재반제 금지·이미 취소)과
- * 잔액 계산은 {@link PrepaidAccount#cancelUse}, 재활성화는 {@link Customer} 가 하고, 요청 키 처리와 트랜잭션 경계는
- * {@link IdempotentLedgerWriter} 가 잡는다.
+ * 취소 유스케이스 — 충전 취소 (REQ-7)와 사용 취소 (REQ-34), 요청 키 (REQ-10), 재활성화 (REQ-33).
+ * 대상 검증(같은 계좌·유형 대응·반제 행 재반제 금지·이미 취소), 당일·잔액 판단과 잔액 계산은
+ * {@link PrepaidAccount#cancelCharge}·{@link PrepaidAccount#cancelUse}, 재활성화는 {@link Customer} 가 하고,
+ * 요청 키 처리와 트랜잭션 경계는 {@link IdempotentLedgerWriter} 가 잡는다 (이 서비스에는 @Transactional 을 두지 않는다).
  * <p>
  * 대상 거래와 기존 반제 거래 조회는 계좌 잔액 변경·반제 거래 추가와 같은 쓰기 트랜잭션 안에서 한다.
  * 사용 취소는 잔액을 늘리므로, 비활성 고객이면 같은 트랜잭션에서 다시 활성화한다 (충전과 같은 규칙).
- * 원 거래는 바꾸지 않고 USE_CANCEL 반제 거래를 추가만 한다 (append-only).
+ * 충전 취소는 잔액을 줄이므로 고객 상태를 건드리지 않는다.
+ * 원 거래는 바꾸지 않고 반제 거래를 추가만 한다 (append-only).
  */
 @Service
 public class CancelService {
@@ -43,13 +49,92 @@ public class CancelService {
 	private final LedgerEntryRepository ledgerEntryRepository;
 	private final CustomerRepository customerRepository;
 	private final Clock clock;
+	private final ZoneId businessZone;
 
+	/**
+	 * @param businessZone 영업 시간대 — 충전 취소의 '당일' 을 이 시간대의 달력 날짜로 판단한다 (creditbook.business-zone)
+	 */
 	CancelService(IdempotentLedgerWriter ledgerWriter, LedgerEntryRepository ledgerEntryRepository,
-			CustomerRepository customerRepository, Clock clock) {
+			CustomerRepository customerRepository, Clock clock,
+			@Value("${creditbook.business-zone}") ZoneId businessZone) {
 		this.ledgerWriter = ledgerWriter;
 		this.ledgerEntryRepository = ledgerEntryRepository;
 		this.customerRepository = customerRepository;
 		this.clock = clock;
+		this.businessZone = Objects.requireNonNull(businessZone, "businessZone");
+	}
+
+	/**
+	 * 충전 건을 전액 취소한다 (REQ-7). 당일(영업 시간대 날짜) 충전 건만, 사유는 필수, 취소 후 잔액이 음수가 되면 거절한다.
+	 * 시각은 서버 시각이다 (REQ-20). 같은 요청 키로 같은 요청(고객·대상 거래·사유)이 다시 오면 다시 취소하지 않고
+	 * 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10).
+	 *
+	 * @param customerId 취소할 충전 건의 고객
+	 * @param chargeEntryId 취소할 충전 거래 ID
+	 * @param reason 취소 사유 (필수)
+	 * @param performedBy 처리 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다
+	 * @param idempotencyKey 요청 키
+	 * @throws PrepaidAccountNotFoundException 고객의 계좌가 없을 때
+	 * @throws LedgerEntryNotFoundException 거래 ID 에 해당하는 거래가 없을 때
+	 * @throws InvalidCancelTargetException 다른 고객의 거래이거나 CHARGE 가 아니거나 반제 거래일 때
+	 * @throws AlreadyCancelledException 이미 취소된 충전 건일 때
+	 * @throws ChargeCancelNotSameDayException 당일 충전 건이 아닐 때
+	 * @throws ChargeAlreadyUsedException 취소하면 잔액이 음수가 될 때
+	 * @throws com.creditbook.prepaid.domain.CancelReasonRequiredException 사유가 없거나 공백일 때
+	 * @throws com.creditbook.prepaid.domain.IdempotencyKeyReusedException 요청 키가 다른 요청에 이미 쓰였을 때
+	 */
+	public ChargeCancelResult cancelCharge(UUID customerId, UUID chargeEntryId, String reason, UUID performedBy,
+			IdempotencyKey idempotencyKey) {
+		Objects.requireNonNull(customerId, "customerId");
+		Objects.requireNonNull(chargeEntryId, "chargeEntryId");
+		Objects.requireNonNull(performedBy, "performedBy");
+		Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+		IdempotentRequest request = IdempotentRequest.reversal(LedgerEntryType.CHARGE_CANCEL, chargeEntryId, reason);
+
+		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
+				account -> cancelChargeOrWarn(account, chargeEntryId, reason, performedBy, idempotencyKey));
+
+		if (!outcome.replayed()) {
+			LedgerEntry entry = outcome.entry();
+			// 고객 이름·연락처·취소 사유는 남기지 않는다 (운영 점검 가이드 §6)
+			log.info("balance changed: accountId={}, type={}, amount={}, balanceAfter={}, performedBy={}, reversesId={}",
+					entry.getAccountId(), entry.getType(), entry.getAmount().toPlainString(),
+					entry.getBalanceAfter().toPlainString(), performedBy, entry.getReversesId());
+		}
+		return ChargeCancelResult.of(customerId, outcome);
+	}
+
+	/** 쓰기 트랜잭션 안에서 불린다. 정상적인 거절은 WARN 으로 남기고 그대로 다시 던진다. */
+	private LedgerEntry cancelChargeOrWarn(PrepaidAccount account, UUID chargeEntryId, String reason,
+			UUID performedBy, IdempotencyKey idempotencyKey) {
+		LedgerEntry target = ledgerEntryRepository.findById(chargeEntryId)
+				.orElseThrow(() -> new LedgerEntryNotFoundException(chargeEntryId));
+		Optional<LedgerEntry> existingCancel = ledgerEntryRepository.findByReversesId(chargeEntryId);
+		try {
+			return account.cancelCharge(target, existingCancel, reason, performedBy, clock.instant(), businessZone,
+					idempotencyKey);
+		}
+		catch (ChargeCancelNotSameDayException ex) {
+			log.warn("charge cancel rejected: not same day, accountId={}, targetId={}, chargedOn={}, today={}, performedBy={}",
+					account.getId(), ex.getTargetId(), ex.getChargedOn(), ex.getToday(), performedBy);
+			throw ex;
+		}
+		catch (ChargeAlreadyUsedException ex) {
+			log.warn("charge cancel rejected: already used, accountId={}, targetId={}, balance={}, chargeAmount={}, performedBy={}",
+					account.getId(), ex.getTargetId(), ex.getBalance().toPlainString(),
+					ex.getChargeAmount().toPlainString(), performedBy);
+			throw ex;
+		}
+		catch (AlreadyCancelledException ex) {
+			log.warn("charge cancel rejected: already cancelled, accountId={}, targetId={}, cancelEntryId={}, performedBy={}",
+					account.getId(), ex.getTargetId(), ex.getCancelEntryId(), performedBy);
+			throw ex;
+		}
+		catch (InvalidCancelTargetException ex) {
+			log.warn("charge cancel rejected: invalid target, accountId={}, targetId={}, targetAccountId={}, targetType={}, performedBy={}",
+					account.getId(), target.getId(), target.getAccountId(), target.getType(), performedBy);
+			throw ex;
+		}
 	}
 
 	/**
