@@ -273,6 +273,7 @@ class ChargeCancelControllerTest {
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("ALREADY_CANCELLED"))
+				.andExpect(jsonPath("$.message").value("이미 취소된 충전 건입니다."))
 				.andExpect(jsonPath("$.details.cancelEntryId").value(firstCancel.getId().toString()));
 	}
 

@@ -19,7 +19,11 @@ public class AlreadyCancelledException extends PrepaidDomainException {
 
 	/** 화면에 그대로 보여 줄 문구. 대상 유형에 맞춰 말한다. */
 	private static String messageFor(LedgerEntryType targetType) {
-		return targetType == LedgerEntryType.USE ? "이미 취소된 사용 건입니다." : "이미 취소된 거래입니다.";
+		return switch (targetType) {
+			case USE -> "이미 취소된 사용 건입니다.";
+			case CHARGE -> "이미 취소된 충전 건입니다.";
+			default -> "이미 취소된 거래입니다.";
+		};
 	}
 
 	public UUID getTargetId() {

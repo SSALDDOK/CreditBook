@@ -263,6 +263,7 @@ class PrepaidAccountCancelChargeTest {
 				.isInstanceOfSatisfying(AlreadyCancelledException.class, e -> {
 					assertThat(e.getTargetId()).isEqualTo(given.charge().getId());
 					assertThat(e.getCancelEntryId()).isEqualTo(firstCancel.getId());
+					assertThat(e.getMessage()).isEqualTo("이미 취소된 충전 건입니다.");
 				});
 		assertThat(account.getBalance()).isEqualByComparingTo("20000");
 	}
