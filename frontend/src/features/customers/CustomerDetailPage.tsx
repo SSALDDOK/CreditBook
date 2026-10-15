@@ -5,8 +5,14 @@ import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ChargeDialog } from '@/features/charge/ChargeDialog'
-import { clearLedgerDraft, loadLedgerDraft, type LedgerDraft } from '@/features/ledger-input/draftStorage'
+import {
+  clearLedgerDraft,
+  loadLatestLedgerDraft,
+  type LatestLedgerDraft,
+  type LedgerDraftKind,
+} from '@/features/ledger-input/draftStorage'
 import { LedgerEntryRow } from '@/features/ledger/LedgerEntryRow'
+import { UseDialog } from '@/features/use/UseDialog'
 import { formatEntryTime, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { InactiveBadge } from './InactiveBadge'
@@ -18,7 +24,7 @@ import { useCustomerDetail } from './useCustomerDetail'
  */
 export function CustomerDetailPage() {
   const { customerId = '' } = useParams()
-  // 충전 모달이 성공하면 refetch 로 잔액·최근 거래를 서버에서 다시 받는다(화면에서 잔액을 고치지 않는다)
+  // 충전·사용 모달이 성공하면 refetch 로 잔액·최근 거래를 서버에서 다시 받는다(화면에서 잔액을 고치지 않는다)
   const { state, refetch } = useCustomerDetail(customerId)
   const { state: auth } = useAuth()
   // 보호 라우트 안이라 항상 로그인 상태다. 입력 복구(REQ-17) 저장값을 직원별로 찾는 데 쓴다
@@ -81,17 +87,25 @@ function CustomerDetailView({
   employeeId: string
   onRefetch: () => void
 }) {
-  // 재로그인 후 이 고객 상세로 돌아오면, 401 직전에 저장한 충전 입력이 있을 때 충전 모달을 입력 화면으로 다시 연다(자동 전송 없음)
-  const [restoredDraft, setRestoredDraft] = useState<LedgerDraft | null>(() =>
-    employeeId ? loadLedgerDraft(employeeId, customer.id, 'charge') : null,
+  // 재로그인 후 이 고객 상세로 돌아오면, 401 직전에 저장한 입력이 있을 때 그 모달을 입력 화면으로 다시 연다(자동 전송 없음).
+  // 충전·사용 저장값이 둘 다 있으면 가장 최근 것 하나만 연다(나머지는 loadLatestLedgerDraft 가 지운다)
+  const [restored, setRestored] = useState<LatestLedgerDraft | null>(() =>
+    employeeId ? loadLatestLedgerDraft(employeeId, customer.id) : null,
   )
-  const [chargeOpen, setChargeOpen] = useState(restoredDraft !== null)
+  const [openDialog, setOpenDialog] = useState<LedgerDraftKind | null>(restored?.kind ?? null)
+  // 모달이 닫히면서 남기는 안내(사용 중 다른 기기에서 비활성화된 경우의 서버 문구). 모달을 다시 열면 지운다
+  const [pageAlert, setPageAlert] = useState<string | null>(null)
 
-  function closeCharge() {
+  function openLedgerDialog(kind: LedgerDraftKind) {
+    setPageAlert(null)
+    setOpenDialog(kind)
+  }
+
+  function closeLedgerDialog(kind: LedgerDraftKind) {
     // [취소]·성공 때 복구용 저장값을 지운다. 다시 열면 빈 입력부터 시작한다
-    clearLedgerDraft(employeeId, customer.id, 'charge')
-    setRestoredDraft(null)
-    setChargeOpen(false)
+    clearLedgerDraft(employeeId, customer.id, kind)
+    setRestored(null)
+    setOpenDialog(null)
   }
   const noticeId = useId()
   const useHintId = useId()
@@ -112,6 +126,16 @@ function CustomerDetailView({
         >
           <strong className="font-bold">비활성 고객입니다.</strong> 사용은 할 수 없고, 충전하면 다시 활성화됩니다.
         </div>
+      )}
+
+      {pageAlert && (
+        <p
+          role="alert"
+          data-testid="customer-detail-alert"
+          className="rounded-2xl border border-destructive/30 bg-destructive/10 px-8 py-4 font-semibold text-destructive"
+        >
+          {pageAlert}
+        </p>
       )}
 
       <div className="flex flex-wrap items-center gap-4">
@@ -150,11 +174,11 @@ function CustomerDetailView({
 
         <div className="flex flex-col items-end gap-2">
           <div className="flex gap-4">
-            {/* [충전]은 충전 모달(SCR-6)을 연다. [사용]은 사용 모달(SCR-7) 전까지 누르면 아무 동작도 하지 않는다 */}
+            {/* [충전]은 충전 모달(SCR-6), [사용]은 사용 모달(SCR-7)을 연다 */}
             <Button
               type="button"
               variant="outline"
-              onClick={() => setChargeOpen(true)}
+              onClick={() => openLedgerDialog('charge')}
               aria-haspopup="dialog"
               className="h-14 rounded-xl border-white bg-white px-10 text-lg font-bold text-sidebar hover:bg-white/90"
               data-testid="customer-charge-button"
@@ -164,6 +188,8 @@ function CustomerDetailView({
             <Button
               type="button"
               disabled={useDisabled}
+              onClick={() => openLedgerDialog('use')}
+              aria-haspopup="dialog"
               aria-describedby={useDescribedBy}
               className="h-14 rounded-xl px-10 text-lg font-bold disabled:bg-sidebar-accent disabled:text-white/60 disabled:opacity-100"
               data-testid="customer-use-button"
@@ -180,16 +206,34 @@ function CustomerDetailView({
       </section>
 
       <ChargeDialog
-        open={chargeOpen}
+        open={openDialog === 'charge'}
         customer={customer}
         employeeId={employeeId}
-        restoredDraft={restoredDraft}
-        onCancel={closeCharge}
+        restoredDraft={restored?.kind === 'charge' ? restored.draft : null}
+        onCancel={() => closeLedgerDialog('charge')}
         onCharged={() => {
-          closeCharge()
+          closeLedgerDialog('charge')
           onRefetch() // 처리 뒤 잔액·최근 거래·활성 여부(비활성 고객은 충전 시 재활성화)는 서버에서 다시 받는다
         }}
         onConflict={onRefetch}
+      />
+
+      <UseDialog
+        open={openDialog === 'use'}
+        customer={customer}
+        employeeId={employeeId}
+        restoredDraft={restored?.kind === 'use' ? restored.draft : null}
+        onCancel={() => closeLedgerDialog('use')}
+        onUsed={() => {
+          closeLedgerDialog('use')
+          onRefetch() // 처리 뒤 잔액·최근 거래는 서버에서 다시 받는다(잔액 0원이 되면 [사용]이 비활성으로 바뀐다)
+        }}
+        onConflict={onRefetch}
+        onInactive={(message) => {
+          closeLedgerDialog('use')
+          setPageAlert(message)
+          onRefetch() // 비활성 상태·잔액을 서버에서 다시 받는다
+        }}
       />
 
       <section aria-labelledby={recentHeadingId} className="rounded-2xl border bg-background px-8 pt-4 pb-2">
