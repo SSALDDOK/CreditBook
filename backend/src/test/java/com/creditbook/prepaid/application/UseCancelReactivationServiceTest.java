@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
@@ -86,7 +87,7 @@ class UseCancelReactivationServiceTest {
 		use = account.use(BigDecimal.valueOf(10_000), EMPLOYEE_ID, USED_AT, "음료", IdempotencyKey.of("setup-use"));
 		service = new CancelService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
-				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC), ZoneId.of("Asia/Seoul"));
 	}
 
 	private void givenStored(LedgerEntry target) {

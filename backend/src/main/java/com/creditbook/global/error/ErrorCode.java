@@ -54,6 +54,10 @@ public enum ErrorCode {
 	ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 거래입니다."),
 	/** 비활성 고객에게 사용(USE) 요청 (REQ-33). 충전하면 다시 활성화된다. 장부·잔액은 바뀌지 않는다. */
 	CUSTOMER_INACTIVE(HttpStatus.CONFLICT, "비활성 고객입니다. 충전하면 다시 활성화됩니다."),
+	/** 당일(영업 시간대 달력 날짜)에 등록되지 않은 충전 건 취소 (REQ-7). */
+	CHARGE_CANCEL_NOT_SAME_DAY(HttpStatus.CONFLICT, "당일 충전 건만 취소할 수 있습니다."),
+	/** 취소하면 잔액이 음수가 되는 충전 건 취소 (REQ-7). 현재 잔액·충전액은 응답의 details 에 실린다. */
+	CHARGE_ALREADY_USED(HttpStatus.CONFLICT, "잔액이 부족해 취소할 수 없어요. 먼저 사용 건을 취소해 주세요."),
 
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),

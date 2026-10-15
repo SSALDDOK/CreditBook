@@ -23,6 +23,8 @@ import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
 import com.creditbook.prepaid.domain.AlreadyCancelledException;
 import com.creditbook.prepaid.domain.CancelReasonRequiredException;
+import com.creditbook.prepaid.domain.ChargeAlreadyUsedException;
+import com.creditbook.prepaid.domain.ChargeCancelNotSameDayException;
 import com.creditbook.prepaid.domain.ChargeLimitExceededException;
 import com.creditbook.prepaid.domain.IdempotencyKeyConflictException;
 import com.creditbook.prepaid.domain.IdempotencyKeyReusedException;
@@ -182,6 +184,23 @@ public class GlobalExceptionHandler {
 	ResponseEntity<ErrorResponse> handleInvalidIdempotencyKey(InvalidIdempotencyKeyException ex) {
 		log.warn("request rejected: invalid idempotency key");
 		return respond(ErrorCode.INVALID_IDEMPOTENCY_KEY, ErrorResponse.of(ErrorCode.INVALID_IDEMPOTENCY_KEY));
+	}
+
+	/** 당일 충전 건이 아닌 충전 취소 (REQ-7). WARN 로그는 서비스가 계좌·거래 ID 와 함께 남기므로 여기서는 다시 남기지 않는다. */
+	@ExceptionHandler(ChargeCancelNotSameDayException.class)
+	ResponseEntity<ErrorResponse> handleChargeCancelNotSameDay(ChargeCancelNotSameDayException ex) {
+		return respond(ErrorCode.CHARGE_CANCEL_NOT_SAME_DAY,
+				ErrorResponse.of(ErrorCode.CHARGE_CANCEL_NOT_SAME_DAY, ex.getMessage()));
+	}
+
+	/**
+	 * 취소하면 잔액이 음수가 되는 충전 취소 (REQ-7). 사유 문구와 함께 현재 잔액·충전액을 details 에 싣는다.
+	 * WARN 로그는 서비스가 남기므로 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(ChargeAlreadyUsedException.class)
+	ResponseEntity<ErrorResponse> handleChargeAlreadyUsed(ChargeAlreadyUsedException ex) {
+		return respond(ErrorCode.CHARGE_ALREADY_USED, ErrorResponse.of(ErrorCode.CHARGE_ALREADY_USED, ex.getMessage(),
+				new ErrorResponse.ChargeAlreadyUsedDetails(ex.getBalance(), ex.getChargeAmount())));
 	}
 
 	/** 요청 키를 다른 거래에 다시 씀 (REQ-10). WARN 로그는 서비스가 계좌·거래 ID 와 함께 남기므로 여기서는 다시 남기지 않는다. */

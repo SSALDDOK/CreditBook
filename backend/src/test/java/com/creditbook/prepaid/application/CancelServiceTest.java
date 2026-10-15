@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
@@ -86,7 +87,7 @@ class CancelServiceTest {
 				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", USED_AT)));
 		service = new CancelService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
-				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC), ZoneId.of("Asia/Seoul"));
 	}
 
 	/** 잔액이 {@code balance} 원인 계좌. 공개 API(open → charge)로만 만들고 저장소가 이 고객의 계좌로 돌려준다. */
