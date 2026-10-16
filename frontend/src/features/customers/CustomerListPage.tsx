@@ -9,7 +9,7 @@ import { formatMonthDay, formatWon } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { InactiveBadge } from './InactiveBadge'
 import { useCustomerList, useDebouncedValue } from './useCustomerList'
-import { useFitPageSize } from './useFitPageSize'
+import { useFitPageSize, useKeepFirstRowOnResize } from '@/hooks/useFitPageSize'
 
 /**
  * SCR-3 고객 목록. 잔액·연락처는 서버 응답 값을 그대로 표시한다.
@@ -63,15 +63,7 @@ export function CustomerListPage() {
   const pageSize = fit?.size ?? null
 
   // 창 크기가 바뀌어 행 수가 달라지면, 보던 첫 고객이 들어 있는 페이지로 옮긴다
-  const prevPageSize = useRef<number | null>(null)
-  useEffect(() => {
-    const prev = prevPageSize.current
-    prevPageSize.current = pageSize
-    if (prev === null || pageSize === null || prev === pageSize || page === 0) return
-    const next = Math.floor((page * prev) / pageSize)
-    if (next !== page) updateParams({ page: next })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 행 수가 바뀔 때만 옮긴다
-  }, [pageSize])
+  useKeepFirstRowOnResize(pageSize, page, setPage)
 
   const state = useCustomerList(urlQuery, page, pageSize, reloadKey, includeInactive)
   const data = state.status === 'error' ? undefined : state.data

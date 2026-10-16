@@ -3,6 +3,9 @@ package com.creditbook.prepaid.domain;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 /**
  * 원장 거래 저장소. 구현은 infrastructure 에 있다.
  * <p>
@@ -33,5 +36,15 @@ public interface LedgerEntryRepository {
 	 * @param originalId 반제 대상이 된 원 거래의 ID
 	 */
 	Optional<LedgerEntry> findByReversesId(UUID originalId);
+
+	/**
+	 * 고객의 거래 이력을 최신순(seq 내림차순)으로 한 페이지 읽는다 (거래 이력 조회). 읽기만 한다.
+	 * 각 거래에 처리 직원 이름과 취소 여부(이 거래를 반제한 행이 있는가)를 붙인다. 고객의 활성 여부는 보지 않는다.
+	 * 계좌나 거래가 없는 고객이면 빈 페이지다 — 고객이 있는지는 호출자가 따로 확인한다.
+	 *
+	 * @param customerId 고객 ID
+	 * @param pageable 페이지 번호·크기 (정렬은 seq 내림차순 고정이라 넘긴 정렬은 쓰지 않는다)
+	 */
+	Page<LedgerHistoryEntry> findHistoryByCustomerId(UUID customerId, Pageable pageable);
 
 }
