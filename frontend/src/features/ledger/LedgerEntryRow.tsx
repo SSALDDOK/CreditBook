@@ -1,6 +1,7 @@
 import type { RecentLedgerEntryResponse } from '@/api/customers'
 import { formatEntryTime, formatSignedWon, formatWon } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { EntryCancelledBadge, EntryTypeLabel } from './LedgerEntryParts'
 import { LEDGER_ENTRY_TYPE_STYLES } from './ledgerEntryTypes'
 
 type LedgerEntryRowProps = { entry: RecentLedgerEntryResponse }
@@ -38,15 +39,7 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-3" data-testid="recent-entry-title">
-          <span
-            className={cn(
-              'inline-flex w-[66px] shrink-0 items-center justify-center rounded-md py-1 text-sm font-semibold whitespace-nowrap',
-              style.toneClassName,
-            )}
-            data-testid="entry-type-label"
-          >
-            {style.label}
-          </span>
+          <EntryTypeLabel type={entry.type} />
           {entry.memo && (
             <span className="truncate text-lg leading-6 font-semibold" data-testid="recent-entry-memo">
               {entry.memo}
@@ -54,14 +47,7 @@ export function LedgerEntryRow({ entry }: LedgerEntryRowProps) {
           )}
         </p>
         <p className="mt-0.5 flex items-center gap-2 text-muted-foreground" data-testid="recent-entry-time">
-          {entry.cancelled && (
-            <span
-              className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-0.5 text-sm font-semibold text-muted-foreground"
-              data-testid="entry-cancelled-badge"
-            >
-              취소됨
-            </span>
-          )}
+          {entry.cancelled && <EntryCancelledBadge />}
           <time dateTime={entry.performedAt}>{formatEntryTime(entry.performedAt)}</time>
         </p>
       </div>

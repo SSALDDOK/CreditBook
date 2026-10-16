@@ -57,3 +57,19 @@ export function formatEntryTime(isoInstant: string, now: Date = new Date()): str
   }
   return `${monthDayFormatter.format(at)} ${time}`
 }
+
+const shortDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'Asia/Seoul',
+})
+
+/** 거래 이력 표의 일시. 매장 기준(Asia/Seoul) "MM-DD HH:mm" — "2026-10-15T06:40:00Z" → "10-15 15:40" */
+export function formatShortDateTime(isoInstant: string): string {
+  const parts = shortDateTimeFormatter.formatToParts(new Date(isoInstant))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
+}

@@ -6,21 +6,27 @@ import type {
   CustomerSearchParams,
   RecentLedgerEntryResponse,
 } from '../customers'
+import type { TransactionResponse } from '../transactions'
 
 // 화면 개발용 목 데이터. 이름은 가상이고, 연락처는 서버 응답과 같은 "이미 가린" 형태로만 둔다.
-// 잔액·변동 후 잔액(balanceAfter)·부호 붙은 금액(signedAmount)은 서버가 준 값처럼 고정 값으로 적어 둔다
-// (화면도 목도 금액을 계산하지 않는다). 최근 거래의 잔액 흐름은 손으로 맞춰 적었다.
+// 잔액·변동 후 잔액(balanceAfter)·부호 붙은 금액(signedAmount)·취소 가능 여부(cancellable)는 서버가 준 값처럼
+// 고정 값으로 적어 둔다(화면도 목도 금액을 계산하지 않는다). 장부의 잔액 흐름은 손으로 맞춰 적었다.
 //
-// 상세 화면 확인용 고객 (화면설계 SCR-5 이미지 기준)
-// - 박서연  …001  활성, 잔액 45,500원, 최근 거래 5건(충전 취소·사용 취소와 '취소됨' 원거래 포함)
+// 고객마다 장부 전체(entries, 최신순)를 하나 두고, 고객 상세의 최근 거래(recentEntries)는 그 앞 5건,
+// 거래 이력(mock/transactions.ts)은 그 전체를 페이지로 나눠 돌려준다 — 두 화면이 같은 장부를 본다.
+//
+// 상세·거래 이력 화면 확인용 고객 (화면설계 SCR-5·SCR-8 이미지 기준)
+// - 박서연  …001  활성, 잔액 95,500원, 거래 10건(SCR-8 이미지 그대로 — 충전 취소·사용 취소와 '취소됨' 원거래 포함)
 // - 이준호  …002  활성, 잔액 0원 → [사용] 비활성 + "잔액이 없습니다"
+// - 정하은  …005  활성, 잔액 128,000원, 거래 28건 → 거래 이력 페이지 나눔 확인용
 // - 오지훈  …051  비활성, 잔액 0원 → 안내 배너·'비활성' 배지 (목록에서는 '비활성 포함'을 켜야 보인다)
-// - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래 빈 안내
-// 그 밖의 고객은 최근 거래 없이(recentEntries: []) 상세를 돌려준다.
-// 충전·사용 목(mock/charges.ts·uses.ts)이 성공하면 recordMockCharge·recordMockUse 가 이 목록을 바꾼다 — 상세를 다시 불러오면 바뀐 잔액·거래가 보인다.
+// - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래·거래 이력 빈 안내
+// 그 밖의 고객은 거래 없이(entries: []) 돌려준다.
+// 충전·사용 목(mock/charges.ts·uses.ts)이 성공하면 recordMockCharge·recordMockUse 가 이 장부를 바꾼다
+// — 다시 불러오면 바뀐 잔액·거래가 상세와 거래 이력 모두에 보인다.
 // 형식이 UUID 가 아닌 id 는 400 INVALID_INPUT, 없는 UUID 는 404 CUSTOMER_NOT_FOUND.
 
-type MockCustomer = CustomerResponse & { recentEntries: RecentLedgerEntryResponse[] }
+type MockCustomer = CustomerResponse & { entries: TransactionResponse[] }
 
 function mockId(n: number): string {
   return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -30,44 +36,111 @@ function entryId(n: number): string {
   return `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`
 }
 
-// 박서연: 화면설계 SCR-5 "취소 표시" 이미지의 장부 — 충전 → 충전 취소, 사용 → 사용 취소 쌍이 모두 들어 있다.
+type EntryRow = [
+  n: number,
+  type: TransactionResponse['type'],
+  amount: number,
+  signedAmount: number,
+  balanceAfter: number,
+  memo: string | null,
+  performedAt: string,
+  performedByName: string,
+  flags?: { cancelled?: boolean; reversesId?: number; cancellable?: boolean },
+]
+
+/** 표로 적은 거래 한 줄을 응답 모양으로 옮긴다(값은 적힌 그대로 — 계산 없음) */
+function toEntry([n, type, amount, signedAmount, balanceAfter, memo, performedAt, performedByName, flags = {}]: EntryRow): TransactionResponse {
+  return {
+    id: entryId(n),
+    type,
+    amount,
+    signedAmount,
+    balanceAfter,
+    memo,
+    performedAt,
+    performedByName,
+    cancelled: flags.cancelled ?? false,
+    reversesId: flags.reversesId === undefined ? null : entryId(flags.reversesId),
+    cancellable: flags.cancellable ?? false,
+  }
+}
+
+// 박서연: 화면설계 SCR-8 이미지의 장부 10건(최신순). 충전 → 충전 취소, 사용 → 사용 취소 쌍이 모두 들어 있다.
 // 취소된 원거래는 cancelled: true, 반제 행의 memo 는 취소 사유다.
-const PARK_ENTRIES: RecentLedgerEntryResponse[] = [
-  { id: entryId(105), type: 'USE', amount: 4500, signedAmount: -4500, balanceAfter: 45500, memo: '아메리카노 2잔', performedAt: '2026-10-15T05:22:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(104), type: 'USE_CANCEL', amount: 6000, signedAmount: 6000, balanceAfter: 50000, memo: '손님이 주문 취소', performedAt: '2026-10-15T04:12:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(103), type: 'USE', amount: 6000, signedAmount: -6000, balanceAfter: 44000, memo: '카페라떼, 쿠키', performedAt: '2026-10-15T04:05:00Z', performedByName: '김직원', cancelled: true },
-  { id: entryId(102), type: 'CHARGE_CANCEL', amount: 30000, signedAmount: -30000, balanceAfter: 50000, memo: '금액 잘못 입력', performedAt: '2026-09-18T00:20:00Z', performedByName: '박사장', cancelled: false },
-  { id: entryId(101), type: 'CHARGE', amount: 30000, signedAmount: 30000, balanceAfter: 80000, memo: '계좌이체', performedAt: '2026-09-18T00:16:00Z', performedByName: '박사장', cancelled: true },
+// cancellable 은 이미지의 [취소] 버튼 상태 그대로다(이미지 기준일 10-15 — 그날 충전과 취소되지 않은 사용만 true).
+const PARK_ROWS: EntryRow[] = [
+  [106, 'CHARGE', 50000, 50000, 95500, '카드', '2026-10-15T06:40:00Z', '김직원', { cancellable: true }],
+  [105, 'USE', 4500, -4500, 45500, '아메리카노 2잔', '2026-10-15T05:22:00Z', '김직원', { cancellable: true }],
+  [104, 'USE_CANCEL', 6000, 6000, 50000, '손님이 주문 취소', '2026-10-15T04:12:00Z', '김직원', { reversesId: 103 }],
+  [103, 'USE', 6000, -6000, 44000, '카페라떼, 쿠키', '2026-10-15T04:05:00Z', '김직원', { cancelled: true }],
+  [102, 'CHARGE_CANCEL', 30000, -30000, 50000, '금액 잘못 입력', '2026-09-18T00:20:00Z', '박사장', { reversesId: 101 }],
+  [101, 'CHARGE', 30000, 30000, 80000, '계좌이체', '2026-09-18T00:16:00Z', '김직원', { cancelled: true }],
+  [100, 'USE', 5000, -5000, 50000, '아메리카노, 스콘', '2026-09-12T08:02:00Z', '김직원', { cancellable: true }],
+  [99, 'CHARGE', 10000, 10000, 55000, '계좌이체', '2026-09-10T00:03:00Z', '박사장'],
+  [98, 'USE', 5000, -5000, 45000, '라떼 2잔', '2026-09-05T06:10:00Z', '김직원', { cancellable: true }],
+  [97, 'CHARGE', 50000, 50000, 50000, '현금', '2026-09-01T01:30:00Z', '박사장'],
 ]
 
-const LEE_ENTRIES: RecentLedgerEntryResponse[] = [
-  { id: entryId(205), type: 'USE', amount: 9000, signedAmount: -9000, balanceAfter: 0, memo: '아메리카노 2잔', performedAt: '2026-10-15T05:22:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(204), type: 'USE', amount: 6500, signedAmount: -6500, balanceAfter: 9000, memo: '샌드위치 1개', performedAt: '2026-10-04T03:15:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(203), type: 'CHARGE', amount: 10000, signedAmount: 10000, balanceAfter: 15500, memo: '카드', performedAt: '2026-10-02T02:30:00Z', performedByName: '박사장', cancelled: false },
-  { id: entryId(202), type: 'USE', amount: 4500, signedAmount: -4500, balanceAfter: 5500, memo: '라떼 1잔', performedAt: '2026-09-24T23:50:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(201), type: 'CHARGE', amount: 10000, signedAmount: 10000, balanceAfter: 10000, memo: '현금', performedAt: '2026-09-20T00:02:00Z', performedByName: '박사장', cancelled: false },
+const LEE_ROWS: EntryRow[] = [
+  [205, 'USE', 9000, -9000, 0, '아메리카노 2잔', '2026-10-15T05:22:00Z', '김직원', { cancellable: true }],
+  [204, 'USE', 6500, -6500, 9000, '샌드위치 1개', '2026-10-04T03:15:00Z', '김직원', { cancellable: true }],
+  [203, 'CHARGE', 10000, 10000, 15500, '카드', '2026-10-02T02:30:00Z', '박사장'],
+  [202, 'USE', 4500, -4500, 5500, '라떼 1잔', '2026-09-24T23:50:00Z', '김직원', { cancellable: true }],
+  [201, 'CHARGE', 10000, 10000, 10000, '현금', '2026-09-20T00:02:00Z', '박사장'],
 ]
 
-const OH_ENTRIES: RecentLedgerEntryResponse[] = [
-  { id: entryId(305), type: 'USE', amount: 4500, signedAmount: -4500, balanceAfter: 0, memo: '아메리카노 1잔', performedAt: '2026-08-30T07:10:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(304), type: 'USE', amount: 10300, signedAmount: -10300, balanceAfter: 4500, memo: '라떼 2잔', performedAt: '2026-08-21T04:45:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(303), type: 'USE', amount: 4800, signedAmount: -4800, balanceAfter: 14800, memo: '케이크 1조각', performedAt: '2026-08-14T06:00:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(302), type: 'USE', amount: 10400, signedAmount: -10400, balanceAfter: 19600, memo: '라떼 2잔', performedAt: '2026-08-10T04:45:00Z', performedByName: '김직원', cancelled: false },
-  { id: entryId(301), type: 'CHARGE', amount: 30000, signedAmount: 30000, balanceAfter: 30000, memo: '현금', performedAt: '2026-08-05T01:20:00Z', performedByName: '박사장', cancelled: false },
+const OH_ROWS: EntryRow[] = [
+  [305, 'USE', 4500, -4500, 0, '아메리카노 1잔', '2026-08-30T07:10:00Z', '김직원', { cancellable: true }],
+  [304, 'USE', 10300, -10300, 4500, '라떼 2잔', '2026-08-21T04:45:00Z', '김직원', { cancellable: true }],
+  [303, 'USE', 4800, -4800, 14800, '케이크 1조각', '2026-08-14T06:00:00Z', '김직원', { cancellable: true }],
+  [302, 'USE', 10400, -10400, 19600, '라떼 2잔', '2026-08-10T04:45:00Z', '김직원', { cancellable: true }],
+  [301, 'CHARGE', 30000, 30000, 30000, '현금', '2026-08-05T01:20:00Z', '박사장'],
+]
+
+// 정하은: 거래 이력 페이지 나눔 확인용 28건(최신순). 잔액 흐름은 손으로 맞춰 적었다(최종 128,000원)
+const JUNG_ROWS: EntryRow[] = [
+  [428, 'USE', 5000, -5000, 128000, '아메리카노, 쿠키', '2026-10-13T05:40:00Z', '김직원', { cancellable: true }],
+  [427, 'USE', 7000, -7000, 133000, '라떼 2잔', '2026-10-06T03:10:00Z', '김직원', { cancellable: true }],
+  [426, 'CHARGE', 20000, 20000, 140000, '현금', '2026-10-01T01:00:00Z', '박사장'],
+  [425, 'USE', 4000, -4000, 120000, '아메리카노 1잔', '2026-09-26T06:20:00Z', '김직원', { cancellable: true }],
+  [424, 'USE', 6000, -6000, 124000, '카페라떼, 쿠키', '2026-09-23T04:15:00Z', '김직원', { cancellable: true }],
+  [423, 'USE', 5500, -5500, 130000, '베이커리', '2026-09-21T07:30:00Z', '김직원', { cancellable: true }],
+  [422, 'USE', 4500, -4500, 135500, '아메리카노 1잔', '2026-09-19T02:45:00Z', '김직원', { cancellable: true }],
+  [421, 'CHARGE', 50000, 50000, 140000, '계좌이체', '2026-09-16T00:30:00Z', '박사장'],
+  [420, 'USE', 5500, -5500, 90000, '원두 200g', '2026-09-14T05:05:00Z', '김직원', { cancellable: true }],
+  [419, 'USE', 4500, -4500, 95500, '아메리카노 1잔', '2026-09-12T03:40:00Z', '김직원', { cancellable: true }],
+  [418, 'USE', 4000, -4000, 100000, '디저트', '2026-09-09T06:50:00Z', '김직원', { cancellable: true }],
+  [417, 'USE', 6000, -6000, 104000, '라떼, 스콘', '2026-09-07T04:25:00Z', '김직원', { cancellable: true }],
+  [416, 'USE', 5500, -5500, 110000, '베이커리', '2026-09-05T08:10:00Z', '김직원', { cancellable: true }],
+  [415, 'USE', 4500, -4500, 115500, '아메리카노 1잔', '2026-09-02T02:55:00Z', '김직원', { cancellable: true }],
+  [414, 'CHARGE', 30000, 30000, 120000, '카드', '2026-08-31T01:15:00Z', '박사장'],
+  [413, 'USE', 5700, -5700, 90000, '음료, 베이커리', '2026-08-29T05:35:00Z', '김직원', { cancellable: true }],
+  [412, 'USE', 4800, -4800, 95700, '케이크 1조각', '2026-08-26T06:05:00Z', '김직원', { cancellable: true }],
+  [411, 'USE', 4500, -4500, 100500, '아메리카노 1잔', '2026-08-24T03:20:00Z', '김직원', { cancellable: true }],
+  [410, 'USE', 5000, -5000, 105000, '아메리카노, 쿠키', '2026-08-22T07:45:00Z', '김직원', { cancellable: true }],
+  [409, 'USE', 6500, -6500, 110000, '샌드위치 1개', '2026-08-19T04:00:00Z', '김직원', { cancellable: true }],
+  [408, 'USE', 4500, -4500, 116500, '아메리카노 1잔', '2026-08-17T02:30:00Z', '김직원', { cancellable: true }],
+  [407, 'USE', 9000, -9000, 121000, '라떼 2잔, 쿠키', '2026-08-15T05:50:00Z', '김직원', { cancellable: true }],
+  [406, 'CHARGE', 50000, 50000, 130000, '계좌이체', '2026-08-12T00:40:00Z', '박사장'],
+  [405, 'USE', 4500, -4500, 80000, '아메리카노 1잔', '2026-08-10T06:35:00Z', '김직원', { cancellable: true }],
+  [404, 'USE', 5000, -5000, 84500, 'MD', '2026-08-08T04:10:00Z', '김직원', { cancellable: true }],
+  [403, 'USE', 6000, -6000, 89500, '카페라떼, 쿠키', '2026-08-05T07:25:00Z', '김직원', { cancellable: true }],
+  [402, 'USE', 4500, -4500, 95500, '아메리카노 1잔', '2026-08-03T03:00:00Z', '김직원', { cancellable: true }],
+  [401, 'CHARGE', 100000, 100000, 100000, '현금', '2026-08-01T01:10:00Z', '박사장'],
 ]
 
 const FIRST: Array<Omit<MockCustomer, 'id'>> = [
-  { name: '박서연', maskedPhone: '010-****-4821', balance: 45500, createdAt: '2026-10-05T02:10:00Z', active: true, recentEntries: PARK_ENTRIES },
-  { name: '이준호', maskedPhone: '010-****-1093', balance: 0, createdAt: '2026-10-02T05:30:00Z', active: true, recentEntries: LEE_ENTRIES },
-  { name: '최다은', maskedPhone: '010-****-7740', balance: 12200, createdAt: '2026-09-30T01:00:00Z', active: true, recentEntries: [] },
-  { name: '강민석', maskedPhone: '010-****-2256', balance: 0, createdAt: '2026-09-26T07:45:00Z', active: true, recentEntries: [] },
-  { name: '정하은', maskedPhone: '010-****-6612', balance: 128000, createdAt: '2026-09-19T03:20:00Z', active: true, recentEntries: [] },
+  { name: '박서연', maskedPhone: '010-****-4821', balance: 95500, createdAt: '2026-10-05T02:10:00Z', active: true, entries: PARK_ROWS.map(toEntry) },
+  { name: '이준호', maskedPhone: '010-****-1093', balance: 0, createdAt: '2026-10-02T05:30:00Z', active: true, entries: LEE_ROWS.map(toEntry) },
+  { name: '최다은', maskedPhone: '010-****-7740', balance: 12200, createdAt: '2026-09-30T01:00:00Z', active: true, entries: [] },
+  { name: '강민석', maskedPhone: '010-****-2256', balance: 0, createdAt: '2026-09-26T07:45:00Z', active: true, entries: [] },
+  { name: '정하은', maskedPhone: '010-****-6612', balance: 128000, createdAt: '2026-09-19T03:20:00Z', active: true, entries: JUNG_ROWS.map(toEntry) },
 ]
 
 // 목록 어디에 끼어도 되도록 id 를 따로 둔다(등록일 순으로 다시 정렬한다)
 const EXTRA: MockCustomer[] = [
-  { id: mockId(51), name: '오지훈', maskedPhone: '010-****-3390', balance: 0, createdAt: '2026-08-01T02:00:00Z', active: false, recentEntries: OH_ENTRIES },
-  { id: mockId(52), name: '한지민', maskedPhone: '010-****-5047', balance: 0, createdAt: '2026-10-15T00:30:00Z', active: true, recentEntries: [] },
+  { id: mockId(51), name: '오지훈', maskedPhone: '010-****-3390', balance: 0, createdAt: '2026-08-01T02:00:00Z', active: false, entries: OH_ROWS.map(toEntry) },
+  { id: mockId(52), name: '한지민', maskedPhone: '010-****-5047', balance: 0, createdAt: '2026-10-15T00:30:00Z', active: true, entries: [] },
 ]
 
 const FAMILY = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권']
@@ -91,7 +164,7 @@ const MOCK_CUSTOMERS: MockCustomer[] = [
     balance: BALANCES[(i * 7) % BALANCES.length],
     createdAt: new Date(OLDEST_FIRST_ROW - (i + 1) * 2 * DAY_MS).toISOString(),
     active: true,
-    recentEntries: [],
+    entries: [],
   })),
   ...EXTRA,
 ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -99,6 +172,7 @@ const MOCK_CUSTOMERS: MockCustomer[] = [
 const PHONE_QUERY = /^[\d\s-]+$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MOCK_DELAY_MS = 250
+const RECENT_ENTRY_COUNT = 5
 
 function filter(q: string | undefined, includeInactive: boolean): MockCustomer[] {
   const visible = includeInactive ? MOCK_CUSTOMERS : MOCK_CUSTOMERS.filter((c) => c.active)
@@ -112,11 +186,17 @@ function filter(q: string | undefined, includeInactive: boolean): MockCustomer[]
   return visible.filter((c) => c.name.includes(trimmed))
 }
 
-function toListItem({ recentEntries: _entries, ...item }: MockCustomer): CustomerResponse {
+function toListItem({ entries: _entries, ...item }: MockCustomer): CustomerResponse {
   return item
 }
 
-function delayed<T>(produce: () => T, signal?: AbortSignal): Promise<T> {
+/** 고객 상세의 최근 거래 한 줄 — 거래 이력 응답에서 상세 응답에 없는 필드(reversesId·cancellable)를 뺀다 */
+function toRecentEntry({ reversesId: _reversesId, cancellable: _cancellable, ...rest }: TransactionResponse): RecentLedgerEntryResponse {
+  return rest
+}
+
+/** 목 응답을 잠깐 늦게 돌려준다(로딩 상태 확인용). signal 로 취소되면 AbortError */
+export function delayed<T>(produce: () => T, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       try {
@@ -150,17 +230,28 @@ export function searchMockCustomers(
   }, signal)
 }
 
+/** 경로의 고객 id 를 서버처럼 확인한다 — UUID 형식이 아니면 400, 없으면 404 */
+function findCustomer(customerId: string): MockCustomer {
+  if (!UUID_PATTERN.test(customerId)) {
+    throw new ApiError(400, 'INVALID_INPUT', '입력값을 확인해 주세요.')
+  }
+  const found = MOCK_CUSTOMERS.find((c) => c.id === customerId)
+  if (!found) {
+    throw new ApiError(404, 'CUSTOMER_NOT_FOUND', '고객을 찾을 수 없습니다.')
+  }
+  return found
+}
+
 export function getMockCustomer(customerId: string, signal?: AbortSignal): Promise<CustomerDetailResponse> {
   return delayed(() => {
-    if (!UUID_PATTERN.test(customerId)) {
-      throw new ApiError(400, 'INVALID_INPUT', '입력값을 확인해 주세요.')
-    }
-    const found = MOCK_CUSTOMERS.find((c) => c.id === customerId)
-    if (!found) {
-      throw new ApiError(404, 'CUSTOMER_NOT_FOUND', '고객을 찾을 수 없습니다.')
-    }
-    return { ...found }
+    const { entries, ...customer } = findCustomer(customerId)
+    return { ...customer, recentEntries: entries.slice(0, RECENT_ENTRY_COUNT).map(toRecentEntry) }
   }, signal)
+}
+
+/** 거래 이력 목(mock/transactions.ts)용 — 고객의 장부 전체(최신순). 400·404 는 상세와 같다 */
+export function mockEntriesOf(customerId: string): TransactionResponse[] {
+  return findCustomer(customerId).entries
 }
 
 type MockLedgerResult = { entryId: string; balanceAfter: number; performedAt: string }
@@ -182,7 +273,7 @@ function appendEntry(
   memo: string | null,
   performedByName: string,
 ): MockLedgerResult {
-  const entry: RecentLedgerEntryResponse = {
+  const entry: TransactionResponse = {
     id: crypto.randomUUID(),
     type,
     amount,
@@ -192,14 +283,17 @@ function appendEntry(
     performedAt: new Date().toISOString(),
     performedByName,
     cancelled: false,
+    reversesId: null,
+    // 방금 만든 충전(당일)·사용은 서버가 취소 가능으로 준다고 본다
+    cancellable: true,
   }
   found.balance = serverBalanceAfter
-  found.recentEntries = [entry, ...found.recentEntries].slice(0, 5)
+  found.entries = [entry, ...found.entries]
   return { entryId: entry.id, balanceAfter: serverBalanceAfter, performedAt: entry.performedAt }
 }
 
 /**
- * 충전 목이 성공했을 때 "서버 쪽" 장부를 흉내 낸다 — 잔액을 바꾸고, 최근 거래 맨 앞에 CHARGE 를 넣고,
+ * 충전 목이 성공했을 때 "서버 쪽" 장부를 흉내 낸다 — 잔액을 바꾸고, 장부 맨 앞에 CHARGE 를 넣고,
  * 비활성 고객은 다시 활성화한다(REQ-33).
  * 여기는 가짜 서버(PrepaidAccount 역할)라서 잔액을 더한다. 화면 코드는 이 값을 계산하지 않고 응답·재조회 값만 쓴다.
  */
@@ -211,7 +305,7 @@ export function recordMockCharge(customerId: string, amount: number, memo: strin
 
 /**
  * 사용 목의 "서버 쪽" 장부 — 비활성 고객은 409 CUSTOMER_INACTIVE, 잔액보다 크면 400 INSUFFICIENT_BALANCE(details 에
- * 현재 잔액·부족액), 아니면 잔액을 빼고 최근 거래 맨 앞에 USE 를 넣는다. 잔액과 같은 금액은 받는다(잔액 0원이 된다).
+ * 현재 잔액·부족액), 아니면 잔액을 빼고 장부 맨 앞에 USE 를 넣는다. 잔액과 같은 금액은 받는다(잔액 0원이 된다).
  * 여기는 가짜 서버(PrepaidAccount 역할)라서 잔액을 뺀다. 화면 코드는 이 값을 계산하지 않고 응답·재조회 값만 쓴다.
  */
 export function recordMockUse(

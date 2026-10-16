@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
@@ -107,6 +107,7 @@ function CustomerDetailView({
     setRestored(null)
     setOpenDialog(null)
   }
+  const location = useLocation()
   const noticeId = useId()
   const useHintId = useId()
   const recentHeadingId = useId()
@@ -241,7 +242,15 @@ function CustomerDetailView({
           <h3 id={recentHeadingId} className="text-xl font-bold">
             최근 거래
           </h3>
-          {/* "전체 이력 보기"는 거래 이력 화면이 생기면 그 화면으로 가는 Link 로 넣는다 */}
+          {/* 거래 이력(SCR-8)으로 간다. 목록에서 가져온 상태(listSearch)를 넘겨 그 화면의 브레드크럼 '고객'도 보던 목록으로 돌아가게 한다 */}
+          <Link
+            to={`/customers/${customer.id}/transactions`}
+            state={location.state}
+            data-testid="customer-history-link"
+            className="rounded font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            전체 이력 보기 ›
+          </Link>
         </div>
         {customer.recentEntries.length > 0 ? (
           <ul className="mt-2" data-testid="recent-entries">
