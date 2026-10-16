@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
+import type { TransactionResponse } from '@/api/transactions'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { CancelDialog } from '@/features/ledger-cancel/CancelDialog'
+import { TransactionCancelButton } from '@/features/ledger-cancel/TransactionCancelButton'
 import { CustomerBreadcrumb } from '@/features/customers/CustomerDetailBreadcrumb'
 import { InactiveBadge } from '@/features/customers/InactiveBadge'
 import { useCustomerDetail } from '@/features/customers/useCustomerDetail'
@@ -22,6 +25,10 @@ import { useCustomerTransactions } from './useCustomerTransactions'
  *
  * 페이지는 주소(?page=)에 두고 replace 로 바꾼다 — 상세로 갔다가 뒤로가기로 돌아오면 보던 페이지가 보인다.
  * 한 페이지 행 수는 표 영역 높이에 맞춘다(고객 목록과 같은 useFitPageSize — 태블릿 1024×768 에서 10행).
+ *
+ * 행 맨 오른쪽 [취소](CB-18)는 서버의 cancellable·cancelled 값만 보고 그리고, 누르면 취소 사유 창(사용 취소·충전 취소)을 연다.
+ * 취소가 끝나면(또는 거절·이미 취소됨이면) 이력과 고객 상세(현재 잔액)를 서버에서 다시 받는다 — 화면에서 고치지 않는다.
+ * 원거래 행은 지우거나 숨기지 않는다('취소됨' 배지 + 비활성 [취소], 새 반제 행이 맨 위에 생긴다).
  */
 export function CustomerTransactionsScreen() {
   const { customerId = '' } = useParams()
@@ -46,6 +53,8 @@ function CustomerTransactionsPage({
   const [params, setParams] = useSearchParams()
   const page = toPage(params.get('page'))
   const [reloadKey, setReloadKey] = useState(0)
+  // 취소 사유 창을 연 원거래(열 때의 행 값). null 이면 닫혀 있다
+  const [cancelTarget, setCancelTarget] = useState<TransactionResponse | null>(null)
 
   const setPage = (p: number) => {
     const updated = new URLSearchParams(params)
@@ -91,6 +100,13 @@ function CustomerTransactionsPage({
         ? 'ready'
         : 'loading'
 
+  // 장부가 바뀌었을 수 있을 때(취소 성공·거절·이미 취소됨) 이력과 현재 잔액을 서버에서 다시 받는다
+  const reloadLedger = () => {
+    customer.refetch()
+    setReloadKey((k) => k + 1)
+  }
+  const customerData = customer.state.status === 'error' ? undefined : customer.state.data
+
   const retry = () => {
     if (customerError) customer.refetch()
     if (transactionsError) setReloadKey((k) => k + 1)
@@ -126,7 +142,20 @@ function CustomerTransactionsPage({
       data-state={viewState}
       aria-busy={viewState === 'loading'}
     >
-      <CustomerLine customer={customer.state.status === 'error' ? undefined : customer.state.data} />
+      <CustomerLine customer={customerData} />
+
+      {customerData && (
+        <CancelDialog
+          target={cancelTarget}
+          customer={customerData}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null)
+            reloadLedger() // 반제 행·'취소됨'·현재 잔액은 서버에서 다시 받는다
+          }}
+          onLedgerChanged={reloadLedger}
+        />
+      )}
 
       {/* 행 수를 재는 영역. 빈 상태에서는 표 카드만 짧아지고 이 영역의 높이는 그대로라 행 수가 흔들리지 않는다 */}
       <div ref={fitRef} className="flex min-h-0 flex-1 flex-col" data-page-size={pageSize ?? undefined}>
@@ -157,7 +186,7 @@ function CustomerTransactionsPage({
                 <col className="w-[96px]" />
                 <col className="w-[96px]" />
                 <col className="w-[72px]" />
-                <col className="w-[64px]" />
+                <col className="w-[72px]" />
               </colgroup>
               <TableHeader className="bg-muted/60">
                 <TableRow className="hover:bg-transparent">
@@ -180,14 +209,19 @@ function CustomerTransactionsPage({
                     처리
                   </TableHead>
                   <TableHead scope="col" className="pr-3 pl-1">
-                    {/* 취소 버튼 칸(거래 취소 화면에서 채운다) — 머리글 글자는 화면에 보이지 않는다 */}
+                    {/* [취소] 버튼 칸 — 머리글 글자는 화면에 보이지 않는다 */}
                     <span className="sr-only">취소</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data?.content.map((entry) => (
-                  <TransactionRow key={entry.id} entry={entry} height={fit?.rowHeight} />
+                  <TransactionRow
+                    key={entry.id}
+                    entry={entry}
+                    height={fit?.rowHeight}
+                    action={<TransactionCancelButton entry={entry} onCancel={setCancelTarget} />}
+                  />
                 ))}
                 {empty && (
                   <TableRow className="hover:bg-transparent">

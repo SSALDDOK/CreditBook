@@ -1,6 +1,6 @@
 import { ApiError } from '../client'
 
-// 충전·사용 목이 같이 쓰는 요청 키(Idempotency-Key, REQ-10) 기록 — 실제 서버처럼 키 하나에 거래 하나다.
+// 충전·사용·취소 목이 같이 쓰는 요청 키(Idempotency-Key, REQ-10) 기록 — 실제 서버처럼 키 하나에 거래 하나다.
 // 같은 키 + 같은 요청(고객·유형·금액·메모)이면 처음 응답을 다시 주고, 같은 키 + 다른 요청이면 422 를 던진다.
 // 충전과 사용이 한 저장소를 쓰므로, 충전에 쓴 키로 사용을 보내도 422 다(서버와 같다).
 
@@ -12,6 +12,11 @@ const processed = new Map<string, Stored>()
 /** 요청 지문 — 고객·유형·금액·메모 */
 export function mockFingerprint(customerId: string, type: string, amount: number, memo: string | undefined): string {
   return JSON.stringify([customerId, type, amount, memo ?? null])
+}
+
+/** 취소 요청 지문 — 고객·유형·대상 거래·사유(앞뒤 공백 제거). 서버처럼 금액은 대상 거래가 정하므로 넣지 않는다 */
+export function mockReversalFingerprint(customerId: string, type: string, targetEntryId: string, reason: string): string {
+  return JSON.stringify([customerId, type, targetEntryId, reason.trim()])
 }
 
 /** 키 형식을 보고, 이미 처리한 키면 저장된 응답(복사본)을 돌려준다. 처음 보는 키면 null */

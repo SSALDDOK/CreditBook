@@ -58,7 +58,13 @@ export function formatEntryTime(isoInstant: string, now: Date = new Date()): str
   return `${monthDayFormatter.format(at)} ${time}`
 }
 
-const shortDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+/** 날짜와 시각을 항상 함께(오늘이어도). 매장 기준(Asia/Seoul) — "2026-10-15T05:22:00Z" → "10월 15일 14:22" */
+export function formatMonthDayTime(isoInstant: string): string {
+  const at = new Date(isoInstant)
+  return `${monthDayFormatter.format(at)} ${timeFormatter.format(at)}`
+}
+
+const shortDateTimeFormatter =new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
   hour: '2-digit',
