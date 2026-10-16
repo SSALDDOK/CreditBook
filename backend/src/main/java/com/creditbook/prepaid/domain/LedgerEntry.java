@@ -2,6 +2,8 @@ package com.creditbook.prepaid.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -128,6 +130,56 @@ public class LedgerEntry {
 			return null;
 		}
 		return memo.strip();
+	}
+
+	/**
+	 * 두 시각이 영업 시간대에서 같은 달력 날짜인가 — 충전 취소의 '당일' 판단 (REQ-7).
+	 * 서버·DB 시각은 UTC 이므로 시간대 없이 비교하면 KST 00:00–09:00 시각이 전날로 잡힌다.
+	 * 충전 취소({@link PrepaidAccount#cancelCharge})와 거래 이력의 취소 가능 표시({@link #canBeCancelledAt})가
+	 * 모두 이 판단만 쓴다 — '당일' 규칙을 두 곳에 따로 쓰지 않는다.
+	 *
+	 * @param performedAt 거래 시각
+	 * @param now 판단 시각 (서버 시각)
+	 * @param businessZone 영업 시간대 (creditbook.business-zone)
+	 */
+	public static boolean isSameBusinessDay(Instant performedAt, Instant now, ZoneId businessZone) {
+		Objects.requireNonNull(businessZone, "businessZone");
+		return businessDate(performedAt, businessZone).equals(businessDate(now, businessZone));
+	}
+
+	/** 시각을 영업 시간대의 달력 날짜로 바꾼다. */
+	static LocalDate businessDate(Instant instant, ZoneId businessZone) {
+		return LocalDate.ofInstant(Objects.requireNonNull(instant, "instant"), businessZone);
+	}
+
+	/**
+	 * 이 유형·시각의 거래를 {@code now} 에 취소할 수 있는가 (거래 이력의 취소 버튼 표시).
+	 * <ul>
+	 * <li>USE — 아직 취소되지 않았으면 언제든 (기한 없음, REQ-34)</li>
+	 * <li>CHARGE — 아직 취소되지 않았고 {@link #isSameBusinessDay 당일}일 때만 (REQ-7)</li>
+	 * <li>CHARGE_CANCEL·USE_CANCEL — 반제 행은 다시 반제할 수 없으므로 항상 false</li>
+	 * </ul>
+	 * 잔액은 보지 않는다 — 취소하면 잔액이 음수가 되는 충전 건도 true 이고, 실제 취소 요청에서 거절된다.
+	 *
+	 * @param type 거래 유형
+	 * @param performedAt 거래 시각
+	 * @param alreadyCancelled 이 거래를 반제한 행이 이미 있는가
+	 * @param now 판단 시각 (서버 시각)
+	 * @param businessZone 영업 시간대 (creditbook.business-zone)
+	 */
+	public static boolean canBeCancelledAt(LedgerEntryType type, Instant performedAt, boolean alreadyCancelled,
+			Instant now, ZoneId businessZone) {
+		Objects.requireNonNull(type, "type");
+		Objects.requireNonNull(now, "now");
+		Objects.requireNonNull(businessZone, "businessZone");
+		if (alreadyCancelled) {
+			return false;
+		}
+		return switch (type) {
+			case USE -> true;
+			case CHARGE -> isSameBusinessDay(performedAt, now, businessZone);
+			case CHARGE_CANCEL, USE_CANCEL -> false;
+		};
 	}
 
 	public boolean isReversal() {

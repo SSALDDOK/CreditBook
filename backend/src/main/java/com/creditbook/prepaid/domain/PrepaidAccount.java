@@ -3,7 +3,6 @@ package com.creditbook.prepaid.domain;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
@@ -176,8 +175,8 @@ public class PrepaidAccount {
 	 * 전액 취소만 있고, 당일 등록 건만 취소할 수 있다. 취소하면 잔액이 음수가 되는 경우(이미 사용함)는 거절한다.
 	 * 잔액을 줄이므로 고객 재활성화와는 관계없다.
 	 * <p>
-	 * '당일' 은 {@code businessZone} 의 달력 날짜로 판단한다 — 충전 시각과 취소 시각({@code performedAt})을
-	 * 그 시간대의 날짜로 바꿔 같은지 본다. 서버·DB 시각은 UTC 이므로 시간대 없이 비교하면 KST 00:00–09:00 충전이 전날로 잡힌다.
+	 * '당일' 은 {@link LedgerEntry#isSameBusinessDay} 로 판단한다 — 충전 시각과 취소 시각({@code performedAt})을
+	 * {@code businessZone} 의 날짜로 바꿔 같은지 본다. 서버·DB 시각은 UTC 이므로 시간대 없이 비교하면 KST 00:00–09:00 충전이 전날로 잡힌다.
 	 * 검사 순서: 대상(같은 계좌·CHARGE·반제 행 아님·이미 취소) → 사유 → 당일 → 잔액.
 	 * 조회와 저장 사이에 다른 요청이 같은 충전을 먼저 취소하면 DB 의 ux_ledger_entries_reverses 가 두 번째 반제를 막는다.
 	 *
@@ -214,10 +213,10 @@ public class PrepaidAccount {
 		Objects.requireNonNull(businessZone, "businessZone");
 		requireReversible(target, LedgerEntryType.CHARGE_CANCEL, existingCancel);
 		String normalizedReason = requireReason(reason);
-		LocalDate chargedOn = LocalDate.ofInstant(target.getPerformedAt(), businessZone);
-		LocalDate today = LocalDate.ofInstant(performedAt, businessZone);
-		if (!chargedOn.equals(today)) {
-			throw new ChargeCancelNotSameDayException(target.getId(), chargedOn, today);
+		if (!LedgerEntry.isSameBusinessDay(target.getPerformedAt(), performedAt, businessZone)) {
+			throw new ChargeCancelNotSameDayException(target.getId(),
+					LedgerEntry.businessDate(target.getPerformedAt(), businessZone),
+					LedgerEntry.businessDate(performedAt, businessZone));
 		}
 		BigDecimal chargeAmount = target.getAmount();
 		if (this.balance.compareTo(chargeAmount) < 0) {
