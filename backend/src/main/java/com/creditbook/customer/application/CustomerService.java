@@ -2,6 +2,7 @@ package com.creditbook.customer.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -19,6 +20,8 @@ import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.customer.domain.CustomerSearchKeyword;
 import com.creditbook.customer.domain.CustomerSummary;
+import com.creditbook.customer.domain.DuplicatePhoneException;
+import com.creditbook.customer.domain.SamePhoneCustomer;
 import com.creditbook.prepaid.domain.PrepaidAccount;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountRepository;
@@ -46,14 +49,41 @@ public class CustomerService {
 	}
 
 	/**
-	 * 고객을 등록하고 잔액 0원인 선결제 계좌를 함께 연다 (REQ-1). 둘 다 저장되거나 둘 다 저장되지 않는다.
+	 * 메모 없이 고객을 등록한다. 같은 번호 확인을 하지 않는다 — {@code register(name, phone, null, true)} 와 같다.
+	 * 등록 API 는 {@link #register(String, String, String, boolean)} 을 쓴다.
 	 *
 	 * @param phone 숫자만 남긴 정규형 (필수)
 	 */
 	@Transactional
 	public RegisteredCustomer register(String name, String phone) {
+		return register(name, phone, null, true);
+	}
+
+	/**
+	 * 고객을 등록하고 잔액 0원인 선결제 계좌를 함께 연다 (REQ-1). 둘 다 저장되거나 둘 다 저장되지 않는다.
+	 * <p>
+	 * 같은 연락처의 고객(비활성 포함)이 있으면 {@code confirmDuplicatePhone} 이 false 일 때 아무것도 저장하지 않고 거절한다 —
+	 * 직원이 기존 고객 이름을 보고 같은 사람인지 판단한 뒤 true 로 다시 요청하면 등록된다. 같은 번호 등록 자체는 허용하므로
+	 * 동시에 같은 번호로 등록되는 경합은 막지 않는다. 이름·연락처·메모 검증은 같은 번호 확인보다 먼저 한다.
+	 *
+	 * @param phone 숫자만 남긴 정규형 (필수)
+	 * @param memo 메모 (선택, null 가능). 정규화·길이 검증은 {@link Customer} 가 한다
+	 * @param confirmDuplicatePhone 같은 번호 고객이 있어도 등록할지 여부
+	 * @throws DuplicatePhoneException 같은 번호 고객이 있고 확인 표시가 없을 때. 고객·계좌를 저장하지 않는다
+	 */
+	@Transactional
+	public RegisteredCustomer register(String name, String phone, String memo, boolean confirmDuplicatePhone) {
 		Instant now = clock.instant();
-		Customer customer = Customer.register(name, phone, now);
+		Customer customer = Customer.register(name, phone, memo, now);
+		if (!confirmDuplicatePhone) {
+			List<SamePhoneCustomer> samePhone = customerRepository.findAllByPhone(customer.getPhone());
+			if (!samePhone.isEmpty()) {
+				// 정상 흐름(직원 확인 요청)이라 INFO. 고객 이름·연락처는 남기지 않는다 (운영 점검 가이드 §6)
+				log.info("customer registration held: duplicate phone, existingCount={}, existingCustomerIds={}",
+						samePhone.size(), samePhone.stream().map(SamePhoneCustomer::id).toList());
+				throw new DuplicatePhoneException(samePhone);
+			}
+		}
 		customerRepository.add(customer);
 		PrepaidAccount account = PrepaidAccount.open(customer.getId(), now);
 		prepaidAccountRepository.add(account);
@@ -61,7 +91,7 @@ public class CustomerService {
 		// 고객 이름·연락처는 로그에 남기지 않는다 (운영 점검 가이드 §6)
 		log.info("customer registered: customerId={}, accountId={}", customer.getId(), account.getId());
 		return new RegisteredCustomer(customer.getId(), customer.getName(), customer.getPhone(), account.getId(),
-				account.getBalance(), customer.getCreatedAt());
+				account.getBalance(), customer.getMemo(), customer.getCreatedAt());
 	}
 
 	/**

@@ -12,6 +12,11 @@ import jakarta.validation.constraints.Size;
  * 이름과 연락처는 모두 필수다. null·빈 문자열·필드 누락은 400.
  * 연락처는 입력 편의를 위해 하이픈을 허용한다 ({@code 010-1234-5678}). 하이픈은 숫자 사이에 하나씩만 올 수 있고,
  * 숫자는 9–11자리여야 한다. 저장 전에 {@link #phoneDigits()} 로 숫자만 남긴다 — 도메인과 DB 는 숫자 정규형만 받는다.
+ * <p>
+ * 메모는 선택이다. 공백 정리와 200자(코드 포인트) 제한은 도메인({@link Customer})이 한다 — {@code @Size} 는 UTF-16 단위로 세서
+ * 이름 검증과 글자 수 세는 방식이 달라지므로 쓰지 않는다. 초과하면 400 INVALID_INPUT, fieldErrors 에 {@code memo}.
+ *
+ * @param confirmDuplicatePhone 같은 번호 고객이 있어도 등록할지 (선택 — 누락·null 이면 false)
  */
 public record CustomerRegisterRequest(
 		@NotBlank(message = "이름을 입력해 주세요.")
@@ -20,7 +25,11 @@ public record CustomerRegisterRequest(
 
 		@NotBlank(message = "연락처를 입력해 주세요.")
 		@Pattern(regexp = PHONE_INPUT_PATTERN, message = "연락처는 숫자 9–11자리여야 합니다. 하이픈(-)은 숫자 사이에만 쓸 수 있습니다.")
-		String phone) {
+		String phone,
+
+		String memo,
+
+		Boolean confirmDuplicatePhone) {
 
 	/**
 	 * 숫자 9–11자리(숫자 사이에 하이픈 하나씩 허용).
@@ -31,6 +40,11 @@ public record CustomerRegisterRequest(
 	/** 저장용 연락처 — 하이픈을 지운 숫자만. 필수 검증은 @NotBlank 와 도메인이 한다. */
 	public String phoneDigits() {
 		return phone == null ? null : phone.replace("-", "");
+	}
+
+	/** 같은 번호 등록 확인 여부. 누락·null 이면 false. */
+	public boolean duplicatePhoneConfirmed() {
+		return Boolean.TRUE.equals(confirmDuplicatePhone);
 	}
 
 }

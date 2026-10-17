@@ -1,5 +1,6 @@
 package com.creditbook.customer.domain;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,6 +17,15 @@ public interface CustomerRepository {
 	void add(Customer customer);
 
 	Optional<Customer> findById(UUID id);
+
+	/**
+	 * 연락처가 같은 고객을 모두 찾는다 (REQ-1 중복 연락처 확인). 비활성 고객도 담는다 (REQ-1 — 비활성 고객의 연락처도 중복으로 본다).
+	 * 정렬은 활성 먼저, 그 안에서 최근 등록순(등록 시각 내림차순, 같으면 id 내림차순)으로 고정한다.
+	 *
+	 * @param phone 숫자만 남긴 정규형 — 저장된 연락처도 정규형이므로 그대로 같은지 비교한다
+	 * @return 없으면 빈 목록
+	 */
+	List<SamePhoneCustomer> findAllByPhone(String phone);
 
 	/**
 	 * 고객을 잔액과 함께 검색한다 (REQ-2). 기본은 활성 고객만이고 비활성 고객은 목록·검색·건수에서 빠진다 (REQ-4).
