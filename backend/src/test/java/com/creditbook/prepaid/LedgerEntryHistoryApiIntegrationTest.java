@@ -49,6 +49,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest
 @Transactional // 테스트마다 롤백 → 매번 새 고객·새 키
 @Tag("REQ-12")
+@Tag("TC-49")
 class LedgerEntryHistoryApiIntegrationTest {
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 
