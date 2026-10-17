@@ -60,7 +60,7 @@ function CustomerTransactionsPage({
     const updated = new URLSearchParams(params)
     if (p > 0) updated.set('page', String(p))
     else updated.delete('page')
-    // 고객 목록에서 가져온 상태(listSearch — 브레드크럼 '고객'이 돌아갈 목록 주소)를 유지한다
+    // 고객 목록에서 가져온 상태(listReturn — 브레드크럼 '고객'이 돌아갈 목록)를 유지한다
     setParams(updated, { replace: true, state: location.state })
   }
 

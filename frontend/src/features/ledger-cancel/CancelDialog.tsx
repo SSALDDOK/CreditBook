@@ -304,8 +304,10 @@ function CancelDialogBody({
             data-testid="cancel-reason-input"
             className={cn(
               'w-full resize-none rounded-xl border border-input bg-transparent px-4 py-3 text-lg outline-none',
-              'focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30',
+              // 포커스·오류 표시는 공통 입력칸(components/ui/input.tsx)과 같게 — 파란 굵은 테두리, 오류 색 우선
+              'focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary',
               'aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20',
+              'aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-3 aria-invalid:focus-visible:ring-destructive/20',
             )}
           />
           {reasonError && (
