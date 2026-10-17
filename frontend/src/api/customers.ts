@@ -1,6 +1,6 @@
 import { apiRequest } from './client'
 import { USE_MOCK } from './config'
-import { getMockCustomer, searchMockCustomers } from './mock/customers'
+import { getMockCustomer, registerMockCustomer, searchMockCustomers } from './mock/customers'
 
 // 백엔드 CustomerListItemResponse·CustomerListResponse·CustomerDetailResponse 와 필드 이름을 맞춘다.
 
@@ -92,4 +92,60 @@ export function getCustomer(customerId: string, signal?: AbortSignal): Promise<C
     return getMockCustomer(customerId, signal)
   }
   return apiRequest<CustomerDetailResponse>(`/api/customers/${encodeURIComponent(customerId)}`, { signal })
+}
+
+// 백엔드 CustomerRegisterRequest·CustomerResponse·ErrorResponse.DuplicatePhoneDetails 와 필드 이름을 맞춘다.
+
+export type CustomerRegisterRequest = {
+  name: string
+  /** 숫자 9–11자리(하이픈 허용). 서버가 숫자만 남겨 저장한다 */
+  phone: string
+  /** 메모(선택, 200자 이하). 비어 있으면 보내지 않는다 */
+  memo?: string
+  /** 같은 번호 고객이 있어도 등록할지. 확인 창의 [새로 등록]에서만 true */
+  confirmDuplicatePhone: boolean
+}
+
+export type CustomerRegisterResponse = {
+  id: string
+  name: string
+  /** 서버가 가린 연락처. 원문은 응답에 없다 */
+  maskedPhone: string
+  /** 새 고객 잔액(0원) — 표시만 한다 */
+  balance: number
+  memo: string | null
+  createdAt: string
+}
+
+/** 409 DUPLICATE_PHONE 의 details.existingCustomers 한 줄 — 연락처는 없다 */
+export type DuplicatePhoneCustomer = { id: string; name: string; active: boolean }
+
+/**
+ * POST /api/customers — 고객 등록 (STAFF·ADMIN).
+ * 같은 번호 고객이 있고 confirmDuplicatePhone 이 false 면 409 DUPLICATE_PHONE(details.existingCustomers).
+ * 멱등키가 없는 API 라서 자동 재시도는 하지 않는다 — 다시 보내는 것은 직원이 버튼을 다시 누를 때뿐이다.
+ */
+export function registerCustomer(request: CustomerRegisterRequest): Promise<CustomerRegisterResponse> {
+  if (USE_MOCK) return registerMockCustomer(request)
+  return apiRequest<CustomerRegisterResponse>('/api/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+}
+
+/** DUPLICATE_PHONE 오류의 details 에서 같은 번호 고객 목록을 꺼낸다(서버 순서 그대로). 모양이 다르면 null */
+export function readDuplicatePhoneCustomers(details: unknown): DuplicatePhoneCustomer[] | null {
+  if (typeof details !== 'object' || details === null) return null
+  const list = (details as { existingCustomers?: unknown }).existingCustomers
+  if (!Array.isArray(list) || list.length === 0) return null
+  const valid = list.every(
+    (c: unknown) =>
+      typeof c === 'object' &&
+      c !== null &&
+      typeof (c as DuplicatePhoneCustomer).id === 'string' &&
+      typeof (c as DuplicatePhoneCustomer).name === 'string' &&
+      typeof (c as DuplicatePhoneCustomer).active === 'boolean',
+  )
+  return valid ? (list as DuplicatePhoneCustomer[]).map(({ id, name, active }) => ({ id, name, active })) : null
 }

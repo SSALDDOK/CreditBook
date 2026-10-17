@@ -18,6 +18,8 @@ import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
 import com.creditbook.customer.domain.CustomerInactiveException;
 import com.creditbook.customer.domain.CustomerNotFoundException;
+import com.creditbook.customer.domain.DuplicatePhoneException;
+import com.creditbook.customer.domain.InvalidCustomerMemoException;
 import com.creditbook.customer.domain.InvalidCustomerNameException;
 import com.creditbook.customer.domain.InvalidPhoneNumberException;
 import com.creditbook.global.security.UnauthenticatedException;
@@ -95,6 +97,30 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidPhoneNumberException.class)
 	ResponseEntity<ErrorResponse> handleInvalidPhoneNumber(InvalidPhoneNumberException ex) {
 		return respond(ErrorCode.INVALID_PHONE_NUMBER, ErrorResponse.of(ErrorCode.INVALID_PHONE_NUMBER, ex.getMessage()));
+	}
+
+	/**
+	 * 메모 200자 초과 (REQ-1). 글자 수를 코드 포인트로 세는 규칙이 도메인에 있어 요청 DTO 대신 도메인이 거절한다.
+	 * 다른 입력 형식 오류와 같은 모양(INVALID_INPUT, fieldErrors 에 memo)으로 응답한다. 입력값은 응답·로그에 남기지 않는다.
+	 */
+	@ExceptionHandler(InvalidCustomerMemoException.class)
+	ResponseEntity<ErrorResponse> handleInvalidCustomerMemo(InvalidCustomerMemoException ex) {
+		log.debug("request validation failed: fields=[memo]");
+		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT,
+				List.of(new ErrorResponse.FieldError("memo", ex.getMessage()))));
+	}
+
+	/**
+	 * 같은 번호 고객이 있어 등록을 보류 (REQ-1). 기존 고객 id·이름·활성 여부를 details 에 싣는다 (연락처는 싣지 않는다).
+	 * 정상 흐름이라 INFO 로그는 서비스가 건수·고객 ID 와 함께 남기고 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(DuplicatePhoneException.class)
+	ResponseEntity<ErrorResponse> handleDuplicatePhone(DuplicatePhoneException ex) {
+		List<ErrorResponse.DuplicatePhoneDetails.ExistingCustomer> existing = ex.getExistingCustomers().stream()
+				.map(c -> new ErrorResponse.DuplicatePhoneDetails.ExistingCustomer(c.id(), c.name(), c.active()))
+				.toList();
+		return respond(ErrorCode.DUPLICATE_PHONE, ErrorResponse.of(ErrorCode.DUPLICATE_PHONE,
+				ErrorCode.DUPLICATE_PHONE.defaultMessage(), new ErrorResponse.DuplicatePhoneDetails(existing)));
 	}
 
 	@ExceptionHandler(CustomerNotFoundException.class)

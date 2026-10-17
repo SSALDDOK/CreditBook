@@ -1,5 +1,6 @@
 package com.creditbook.customer.infrastructure;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerSummary;
+import com.creditbook.customer.domain.SamePhoneCustomer;
 
 /**
  * 고객 조회용 Spring Data 리포지토리.
@@ -37,6 +39,15 @@ interface CustomerJpaRepository extends Repository<Customer, UUID> {
 	String COUNT = "select count(c) ";
 
 	Optional<Customer> findById(UUID id);
+
+	/**
+	 * 같은 연락처 고객 전부 (REQ-1 중복 연락처 확인). 같음 비교라 ix_customers_phone 을 탄다. 활성 여부 조건은 없다 (비활성도 중복).
+	 * boolean 내림차순은 true 가 먼저라 활성 고객이 앞에 온다.
+	 */
+	@Query("select new com.creditbook.customer.domain.SamePhoneCustomer(c.id, c.name, c.active) "
+			+ "from Customer c where c.phone = :phone "
+			+ "order by c.active desc, c.createdAt desc, c.id desc")
+	List<SamePhoneCustomer> findAllByPhone(@Param("phone") String phone);
 
 	// 활성 고객만 (기본)
 

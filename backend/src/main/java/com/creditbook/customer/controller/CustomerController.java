@@ -51,10 +51,14 @@ public class CustomerController {
 		this.currentEmployee = currentEmployee;
 	}
 
-	/** 고객 등록 (REQ-1). 잔액 0원인 선결제 계좌가 함께 생성된다. */
+	/**
+	 * 고객 등록 (REQ-1). 잔액 0원인 선결제 계좌가 함께 생성된다.
+	 * 같은 번호 고객이 있고 {@code confirmDuplicatePhone} 이 true 가 아니면 409 DUPLICATE_PHONE (details 에 기존 고객 id·이름·활성 여부).
+	 */
 	@PostMapping
 	public ResponseEntity<CustomerResponse> register(@Valid @RequestBody CustomerRegisterRequest request) {
-		RegisteredCustomer registered = customerService.register(request.name(), request.phoneDigits());
+		RegisteredCustomer registered = customerService.register(request.name(), request.phoneDigits(), request.memo(),
+				request.duplicatePhoneConfirmed());
 		URI location = ServletUriComponentsBuilder.fromCurrentRequest()
 				.path("/{id}")
 				.buildAndExpand(registered.customerId())

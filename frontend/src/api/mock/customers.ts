@@ -1,7 +1,9 @@
-import { ApiError } from '../client'
+import { ApiError, type FieldError } from '../client'
 import type {
   CustomerDetailResponse,
   CustomerListResponse,
+  CustomerRegisterRequest,
+  CustomerRegisterResponse,
   CustomerResponse,
   CustomerSearchParams,
   RecentLedgerEntryResponse,
@@ -22,6 +24,13 @@ import type { TransactionResponse } from '../transactions'
 // - 오지훈  …051  비활성, 잔액 0원 → 안내 배너·'비활성' 배지 (목록에서는 '비활성 포함'을 켜야 보인다)
 // - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래·거래 이력 빈 안내
 // 그 밖의 고객은 거래 없이(entries: []) 돌려준다.
+//
+// 고객 등록(SCR-4) 같은 번호 확인용 — 응답에는 가린 번호만 나가므로, 가짜 서버만 아는 원래 번호를 MOCK_PHONE_DIGITS 에 둔다.
+// - 010-3381-4821  박서연(활성)                     → "같은 번호의 고객이 있습니다"
+// - 010-5521-3390  오지훈(비활성)                   → "같은 번호의 비활성 고객이 있습니다" + [해당 고객으로 이동]
+// - 010-2470-1093  이준호(활성) + 서지우(비활성)     → 활성·비활성이 섞인 경우("같은 번호의 고객이 있습니다")
+// - 010-9012-7781  윤하린·윤하늘(둘 다 비활성)       → 비활성 여럿: 행을 눌러 그 고객으로 이동
+// 목에서 새로 등록한 고객의 번호도 여기에 더해 다시 등록하면 같은 번호로 잡힌다(새로고침하면 사라진다).
 // 충전·사용·취소 목(mock/charges.ts·uses.ts·cancels.ts)이 성공하면 recordMockCharge·recordMockUse·recordMockCancel 이 이 장부를 바꾼다
 // — 다시 불러오면 바뀐 잔액·거래가 상세와 거래 이력 모두에 보인다.
 // 형식이 UUID 가 아닌 id 는 400 INVALID_INPUT, 없는 UUID 는 404 CUSTOMER_NOT_FOUND.
@@ -145,6 +154,10 @@ const FIRST: Array<Omit<MockCustomer, 'id'>> = [
 const EXTRA: MockCustomer[] = [
   { id: mockId(51), name: '오지훈', maskedPhone: '010-****-3390', balance: 0, createdAt: '2026-08-01T02:00:00Z', active: false, entries: OH_ROWS.map(toEntry) },
   { id: mockId(52), name: '한지민', maskedPhone: '010-****-5047', balance: 0, createdAt: '2026-10-15T00:30:00Z', active: true, entries: [] },
+  // 고객 등록(SCR-4)의 같은 번호 확인 창 확인용 비활성 고객 — 아래 MOCK_PHONE_DIGITS 참고
+  { id: mockId(53), name: '서지우', maskedPhone: '010-****-1093', balance: 0, createdAt: '2026-07-20T02:00:00Z', active: false, entries: [] },
+  { id: mockId(54), name: '윤하린', maskedPhone: '010-****-7781', balance: 0, createdAt: '2026-07-10T02:00:00Z', active: false, entries: [] },
+  { id: mockId(55), name: '윤하늘', maskedPhone: '010-****-7781', balance: 0, createdAt: '2026-06-02T02:00:00Z', active: false, entries: [] },
 ]
 
 const FAMILY = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권']
@@ -410,4 +423,88 @@ export function recordMockCancel(
 /** 가짜 서버의 현재 잔액(시나리오 준비용). 없는 고객이면 null */
 export function mockBalanceOf(customerId: string): number | null {
   return MOCK_CUSTOMERS.find((c) => c.id === customerId)?.balance ?? null
+}
+
+// 가짜 서버만 아는 연락처 원문(숫자만). 화면으로 나가는 응답에는 넣지 않는다
+const MOCK_PHONE_DIGITS = new Map<string, string>([
+  [mockId(1), '01033814821'],
+  [mockId(51), '01055213390'],
+  [mockId(2), '01024701093'],
+  [mockId(53), '01024701093'],
+  [mockId(54), '01090127781'],
+  [mockId(55), '01090127781'],
+])
+
+const PHONE_INPUT_PATTERN = /^(?:[0-9]-?){8,10}[0-9]$/
+const NAME_MAX_LENGTH = 20
+const MEMO_MAX_LENGTH = 200
+
+/** 서버 PhoneNumberMasker 와 같은 모양으로 가린다: 02 는 앞 2자리, 그 밖은 앞 3자리 + 가운데 * + 뒤 4자리 */
+function maskMockPhone(digits: string): string {
+  const prefix = digits.startsWith('02') ? 2 : 3
+  const suffixStart = digits.length - 4
+  return `${digits.slice(0, prefix)}-${'*'.repeat(suffixStart - prefix)}-${digits.slice(suffixStart)}`
+}
+
+/**
+ * 고객 등록 목 — 서버(CustomerRegisterRequest·Customer·CustomerService)와 같은 순서로 판단한다:
+ * 형식 오류 400 INVALID_INPUT(fieldErrors) → 같은 번호(비활성 포함) 고객이 있고 확인 표시가 없으면 409 DUPLICATE_PHONE
+ * (details.existingCustomers — 활성 먼저·최근 등록순, 연락처 없음) → 아니면 잔액 0원 고객을 만든다.
+ */
+export function registerMockCustomer({
+  name,
+  phone,
+  memo,
+  confirmDuplicatePhone,
+}: CustomerRegisterRequest): Promise<CustomerRegisterResponse> {
+  return delayed(() => {
+    const trimmedName = name.trim()
+    const trimmedMemo = memo?.trim() ? memo.trim() : null
+    const fieldErrors: FieldError[] = []
+    if (!trimmedName) fieldErrors.push({ field: 'name', message: '이름을 입력해 주세요.' })
+    else if (Array.from(trimmedName).length > NAME_MAX_LENGTH)
+      fieldErrors.push({ field: 'name', message: `이름은 ${NAME_MAX_LENGTH}자 이하여야 합니다.` })
+    if (!phone.trim()) fieldErrors.push({ field: 'phone', message: '연락처를 입력해 주세요.' })
+    else if (!PHONE_INPUT_PATTERN.test(phone))
+      fieldErrors.push({
+        field: 'phone',
+        message: '연락처는 숫자 9–11자리여야 합니다. 하이픈(-)은 숫자 사이에만 쓸 수 있습니다.',
+      })
+    if (trimmedMemo && Array.from(trimmedMemo).length > MEMO_MAX_LENGTH)
+      fieldErrors.push({ field: 'memo', message: `메모는 ${MEMO_MAX_LENGTH}자 이하여야 합니다.` })
+    if (fieldErrors.length > 0) {
+      throw new ApiError(400, 'INVALID_INPUT', '입력값을 확인해 주세요.', fieldErrors)
+    }
+
+    const digits = phone.replace(/-/g, '')
+    const samePhone = MOCK_CUSTOMERS.filter((c) => MOCK_PHONE_DIGITS.get(c.id) === digits).sort(
+      (a, b) => Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt),
+    )
+    if (samePhone.length > 0 && !confirmDuplicatePhone) {
+      throw new ApiError(409, 'DUPLICATE_PHONE', '같은 번호의 고객이 있습니다.', [], {
+        existingCustomers: samePhone.map(({ id, name: n, active }) => ({ id, name: n, active })),
+      })
+    }
+
+    const created: MockCustomer = {
+      id: crypto.randomUUID(),
+      name: trimmedName,
+      maskedPhone: maskMockPhone(digits),
+      balance: 0,
+      createdAt: new Date().toISOString(),
+      active: true,
+      entries: [],
+    }
+    MOCK_PHONE_DIGITS.set(created.id, digits)
+    // 목록은 최근 등록순이라 맨 앞에 넣는다
+    MOCK_CUSTOMERS.unshift(created)
+    return {
+      id: created.id,
+      name: created.name,
+      maskedPhone: created.maskedPhone,
+      balance: created.balance,
+      memo: trimmedMemo,
+      createdAt: created.createdAt,
+    }
+  })
 }

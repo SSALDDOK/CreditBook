@@ -59,6 +59,9 @@ public enum ErrorCode {
 	/** 취소하면 잔액이 음수가 되는 충전 건 취소 (REQ-7). 현재 잔액·충전액은 응답의 details 에 실린다. */
 	CHARGE_ALREADY_USED(HttpStatus.CONFLICT, "잔액이 부족해 취소할 수 없어요. 먼저 사용 건을 취소해 주세요."),
 
+	/** 같은 연락처의 고객이 이미 있음 (REQ-1). 같은 번호 고객 id·이름·활성 여부는 응답의 details 에 실린다. 확인 표시로 다시 요청하면 등록된다. */
+	DUPLICATE_PHONE(HttpStatus.CONFLICT, "같은 번호의 고객이 있습니다."),
+
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
 

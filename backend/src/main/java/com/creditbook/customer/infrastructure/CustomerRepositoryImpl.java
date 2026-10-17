@@ -21,6 +21,7 @@ import com.creditbook.customer.domain.CustomerDetail;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.customer.domain.CustomerSearchKeyword;
 import com.creditbook.customer.domain.CustomerSummary;
+import com.creditbook.customer.domain.SamePhoneCustomer;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 
 import jakarta.persistence.EntityManager;
@@ -99,6 +100,11 @@ class CustomerRepositoryImpl implements CustomerRepository {
 	@Override
 	public Optional<Customer> findById(UUID id) {
 		return jpaRepository.findById(id);
+	}
+
+	@Override
+	public List<SamePhoneCustomer> findAllByPhone(String phone) {
+		return jpaRepository.findAllByPhone(phone);
 	}
 
 	@Override

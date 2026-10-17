@@ -25,6 +25,9 @@ public class Customer {
 	/** customers.name VARCHAR(20) */
 	public static final int NAME_MAX_LENGTH = 20;
 
+	/** customers.memo VARCHAR(200) */
+	public static final int MEMO_MAX_LENGTH = 200;
+
 	/** ck_customers_phone_digits 와 같은 규칙 */
 	private static final Pattern PHONE_DIGITS = Pattern.compile("^[0-9]{9,11}$");
 
@@ -54,10 +57,11 @@ public class Customer {
 		// JPA 전용
 	}
 
-	private Customer(String name, String phone, Instant registeredAt) {
+	private Customer(String name, String phone, String memo, Instant registeredAt) {
 		this.id = UUID.randomUUID();
 		this.name = requireValidName(name);
 		this.phone = requireValidPhone(phone);
+		this.memo = normalizeMemo(memo);
 		this.active = true;
 		this.createdAt = Objects.requireNonNull(registeredAt, "registeredAt");
 		this.updatedAt = registeredAt;
@@ -72,7 +76,20 @@ public class Customer {
 	 * @throws InvalidPhoneNumberException 연락처가 null 이거나 숫자 9–11자리가 아닐 때
 	 */
 	public static Customer register(String name, String phone, Instant registeredAt) {
-		return new Customer(name, phone, registeredAt);
+		return register(name, phone, null, registeredAt);
+	}
+
+	/**
+	 * 메모와 함께 고객을 등록한다 (REQ-1). 메모는 선택이다 — 앞뒤 공백을 지우고, 비었거나 공백뿐이면 메모 없음(null)으로 저장한다.
+	 *
+	 * @param phone 숫자 9–11자리
+	 * @param memo 메모 (null 가능). 공백을 지운 뒤 200자 이하
+	 * @throws InvalidCustomerNameException 이름이 null·공백뿐이거나 20자를 넘을 때
+	 * @throws InvalidPhoneNumberException 연락처가 null 이거나 숫자 9–11자리가 아닐 때
+	 * @throws InvalidCustomerMemoException 메모가 200자를 넘을 때
+	 */
+	public static Customer register(String name, String phone, String memo, Instant registeredAt) {
+		return new Customer(name, phone, memo, registeredAt);
 	}
 
 	/**
@@ -141,6 +158,18 @@ public class Customer {
 		// PostgreSQL VARCHAR(n) 은 문자(코드 포인트) 수로 센다
 		if (stripped.codePointCount(0, stripped.length()) > NAME_MAX_LENGTH) {
 			throw new InvalidCustomerNameException("이름은 " + NAME_MAX_LENGTH + "자 이하여야 합니다.");
+		}
+		return stripped;
+	}
+
+	private static String normalizeMemo(String memo) {
+		if (memo == null || memo.isBlank()) {
+			return null;
+		}
+		String stripped = memo.strip();
+		// 이름과 같은 방식 — PostgreSQL VARCHAR(n) 은 문자(코드 포인트) 수로 센다
+		if (stripped.codePointCount(0, stripped.length()) > MEMO_MAX_LENGTH) {
+			throw new InvalidCustomerMemoException("메모는 " + MEMO_MAX_LENGTH + "자 이하여야 합니다.");
 		}
 		return stripped;
 	}

@@ -1,5 +1,5 @@
-import { useId, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { useEffect, useId, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { LedgerEntryRow } from '@/features/ledger/LedgerEntryRow'
 import { UseDialog } from '@/features/use/UseDialog'
 import { formatEntryTime, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { CustomerLocationState } from './customerListReturn'
 import { InactiveBadge } from './InactiveBadge'
 import { useCustomerDetail } from './useCustomerDetail'
 
@@ -92,7 +93,20 @@ function CustomerDetailView({
   const [restored, setRestored] = useState<LatestLedgerDraft | null>(() =>
     employeeId ? loadLatestLedgerDraft(employeeId, customer.id) : null,
   )
-  const [openDialog, setOpenDialog] = useState<LedgerDraftKind | null>(restored?.kind ?? null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  // 고객 등록(SCR-4)에서 "등록 후 바로 충전하기"로 들어오면 충전 모달을 바로 연다. 복구할 입력이 있으면 그쪽이 먼저다
+  const openChargeRequested = (location.state as CustomerLocationState)?.openCharge === true
+  const [openDialog, setOpenDialog] = useState<LedgerDraftKind | null>(
+    restored?.kind ?? (openChargeRequested ? 'charge' : null),
+  )
+
+  // 충전 모달을 열라는 표시는 한 번만 쓴다 — 방문 기록에서 지워 새로고침·뒤로가기로 다시 열리지 않게 한다(목록 조건은 남긴다)
+  useEffect(() => {
+    if (!openChargeRequested) return
+    const { openCharge: _openCharge, ...rest } = (location.state as CustomerLocationState) ?? {}
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: rest })
+  }, [openChargeRequested, location.state, location.pathname, location.search, navigate])
   // 모달이 닫히면서 남기는 안내(사용 중 다른 기기에서 비활성화된 경우의 서버 문구). 모달을 다시 열면 지운다
   const [pageAlert, setPageAlert] = useState<string | null>(null)
 
@@ -107,7 +121,6 @@ function CustomerDetailView({
     setRestored(null)
     setOpenDialog(null)
   }
-  const location = useLocation()
   const noticeId = useId()
   const useHintId = useId()
   const recentHeadingId = useId()
@@ -242,7 +255,7 @@ function CustomerDetailView({
           <h3 id={recentHeadingId} className="text-xl font-bold">
             최근 거래
           </h3>
-          {/* 거래 이력(SCR-8)으로 간다. 목록에서 가져온 상태(listSearch)를 넘겨 그 화면의 브레드크럼 '고객'도 보던 목록으로 돌아가게 한다 */}
+          {/* 거래 이력(SCR-8)으로 간다. 목록에서 가져온 상태(listReturn)를 넘겨 그 화면의 브레드크럼 '고객'도 보던 목록으로 돌아가게 한다 */}
           <Link
             to={`/customers/${customer.id}/transactions`}
             state={location.state}

@@ -15,17 +15,20 @@ import com.creditbook.customer.domain.PhoneNumberMasker;
  *
  * @param maskedPhone 가운데 자리를 가린 연락처 (예: {@code 010-****-5678})
  * @param balance 선결제 잔액 (원 단위 정수)
+ * @param memo 메모 (없으면 null)
  */
 public record CustomerResponse(
 		UUID id,
 		String name,
 		String maskedPhone,
 		BigDecimal balance,
+		String memo,
 		Instant createdAt) {
 
 	public static CustomerResponse from(RegisteredCustomer registered) {
 		return new CustomerResponse(registered.customerId(), registered.name(),
-				PhoneNumberMasker.mask(registered.phone()), registered.balance(), registered.createdAt());
+				PhoneNumberMasker.mask(registered.phone()), registered.balance(), registered.memo(),
+				registered.createdAt());
 	}
 
 }

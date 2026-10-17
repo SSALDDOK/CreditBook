@@ -57,6 +57,28 @@ public record ErrorResponse(
 	public record ChargeAlreadyUsedDetails(BigDecimal balance, BigDecimal chargeAmount) {
 	}
 
+	/**
+	 * 같은 번호 고객이 있음(DUPLICATE_PHONE)의 부가 정보. 화면이 기존 고객 이름을 보여 주고 등록 진행 여부를 묻게 한다.
+	 * 연락처(원문·마스킹 모두)는 담지 않는다.
+	 *
+	 * @param existingCustomers 같은 번호 고객 전부 (활성 먼저 → 최근 등록순)
+	 */
+	public record DuplicatePhoneDetails(List<ExistingCustomer> existingCustomers) {
+
+		public DuplicatePhoneDetails {
+			existingCustomers = List.copyOf(existingCustomers);
+		}
+
+		/**
+		 * @param id 고객 ID
+		 * @param name 고객 이름 — 직원이 같은 사람인지 판단하는 기준
+		 * @param active 활성 여부 (비활성 고객도 중복으로 본다)
+		 */
+		public record ExistingCustomer(UUID id, String name, boolean active) {
+		}
+
+	}
+
 	public static ErrorResponse of(ErrorCode errorCode) {
 		return new ErrorResponse(errorCode.name(), errorCode.defaultMessage(), List.of(), null);
 	}
