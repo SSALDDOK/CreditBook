@@ -31,12 +31,26 @@ npm run dev        # http://localhost:5173
 | 고객 | id | 상태 |
 |---|---|---|
 | 박서연 | `00000000-0000-4000-8000-000000000001` | 활성, 잔액 95,500원, 거래 10건(거래 이력 화면설계 이미지와 같은 장부 — 충전 취소·사용 취소·'취소됨' 포함) |
-| 이준호 | `00000000-0000-4000-8000-000000000002` | 활성, 잔액 0원 — [사용] 비활성 + "잔액이 없습니다" |
+| 이준호 | `00000000-0000-4000-8000-000000000002` | 활성, 잔액 0원 — [사용] 비활성 + "잔액이 없습니다". 10-15 충전 30,000원을 취소하면 409 `CHARGE_ALREADY_USED`(현재 잔액 0원 · 충전 30,000원) |
 | 정하은 | `00000000-0000-4000-8000-000000000005` | 활성, 잔액 128,000원, 거래 28건 — 거래 이력 페이지 나눔 확인용 |
 | 오지훈 | `00000000-0000-4000-8000-000000000051` | 비활성, 잔액 0원 — 목록에서는 '비활성 포함'을 켜야 보인다 |
 | 한지민 | `00000000-0000-4000-8000-000000000052` | 활성, 잔액 0원, 거래 0건 — 최근 거래·거래 이력 빈 안내 |
 
 고객 상세의 최근 거래와 거래 이력(`src/api/mock/transactions.ts`)은 고객마다 하나인 장부를 같이 본다(상세는 앞 5건). 없는 UUID는 404(`CUSTOMER_NOT_FOUND`), UUID 형식이 아닌 id는 400(`INVALID_INPUT`)을 돌려준다.
+
+목 모드의 취소(`src/api/mock/cancels.ts`, 거래 이력의 [취소]): 사용 취소·충전 취소가 성공하면 장부 맨 앞에 반제 행(메모 = 사유)이 생기고 원거래가 '취소됨'이 된다. 거절은 실제 규칙(이미 취소됨 → 409 `ALREADY_CANCELLED`, 잔액보다 큰 충전 취소 → 409 `CHARGE_ALREADY_USED`, 빈 사유 → 400 `INVALID_INPUT`)으로 나고, 목 장부의 날짜는 고정이라 '당일 충전'은 장부에 적힌 `cancellable` 값으로 대신한다. 그 밖의 오류 흐름은 취소 사유를 아래 낱말 그대로 넣으면 볼 수 있다(충전·사용 목의 특수 금액과 같은 역할 — `mock/charges.ts`·`mock/uses.ts` 머리말).
+
+| 취소 사유 | 응답 |
+|---|---|
+| `응답끊김` | 처음 한 번은 처리됐는데 응답만 끊긴 것처럼 네트워크 오류. 같은 창에서 [취소하기]를 다시 누르면 같은 요청 키라 취소 거래가 하나만 생긴다 |
+| `먼저취소` | 다른 기기에서 먼저 취소된 경우 — '박사장'의 취소를 먼저 기록한 뒤 409 `ALREADY_CANCELLED` |
+| `세션만료` | 401 — 로그인 화면으로 간다(사유는 복구하지 않는다) |
+| `동시수정` | 409 `CONCURRENT_MODIFICATION` |
+| `당일아님` | (충전 취소) 409 `CHARGE_CANCEL_NOT_SAME_DAY` |
+| `대상오류` | 400 `INVALID_CANCEL_TARGET` |
+| `사유오류` | 400 `INVALID_INPUT` (`fieldErrors.reason`) |
+| `키재사용` | 422 `IDEMPOTENCY_KEY_REUSED` |
+| `서버오류` | 500 `INTERNAL_ERROR` |
 
 ## 라우트와 인증
 
@@ -128,6 +142,15 @@ npm run lint       # oxlint
 | SCR-5 상세 | `recent-entries-empty` | 거래 0건 안내 |
 | SCR-5 상세 | `customer-not-found` / `customer-detail-back` | 404 안내·목록으로 돌아가기 |
 | SCR-5 상세 | `error-message` / `customer-detail-retry` | 그 밖의 오류 문구·다시 시도 |
+| SCR-8 이력 | `transaction-row` | 거래 행 (`data-entry-id`, `data-type`, `data-cancelled`, `data-cancellable`) |
+| SCR-8 이력 | `transaction-cancel-button` | 행의 [취소] (`data-kind`=`use`/`charge`). 서버 `cancellable`이면 활성, `cancelled`면 비활성, 그 밖은 없음 |
+| SCR-8 취소 창 | `cancel-dialog` | 취소 사유 창 (`getByRole('dialog', { name: '사용 취소' })`·`'충전 취소'`). `data-kind`=`use`/`charge`, `data-state`=`idle`/`pending`/`rejected`/`already-cancelled` |
+| SCR-8 취소 창 | `cancel-target` / `cancel-target-time` / `cancel-target-amount` | 원거래 상자·거래 일시·금액(`data-amount`) |
+| SCR-8 취소 창 | `cancel-balance-preview` | 잔액 변화 상자(표시 전용 예상값, `data-balance`·`data-expected-balance`) |
+| SCR-8 취소 창 | `cancel-reason-input` / `cancel-reason-count` / `cancel-reason-error` | 사유 입력(`getByLabel('취소 사유')`)·글자 수·사유 오류 |
+| SCR-8 취소 창 | `cancel-confirm` / `cancel-close` | [취소하기]·[닫기] |
+| SCR-8 취소 창 | `cancel-error` / `cancel-error-detail` | 거절 상자·둘째 줄(잔액 부족 details) |
+| SCR-8 취소 창 | `cancel-already-cancelled` / `cancel-retry-error` / `cancel-note` | 이미 취소됨 안내·다시 보낼 수 있는 오류(네트워크·5xx·409 동시 처리·422)·아래 안내 문구 |
 
 ### CI
 

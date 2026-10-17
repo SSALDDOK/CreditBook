@@ -17,12 +17,12 @@ import type { TransactionResponse } from '../transactions'
 //
 // 상세·거래 이력 화면 확인용 고객 (화면설계 SCR-5·SCR-8 이미지 기준)
 // - 박서연  …001  활성, 잔액 95,500원, 거래 10건(SCR-8 이미지 그대로 — 충전 취소·사용 취소와 '취소됨' 원거래 포함)
-// - 이준호  …002  활성, 잔액 0원 → [사용] 비활성 + "잔액이 없습니다"
+// - 이준호  …002  활성, 잔액 0원 → [사용] 비활성 + "잔액이 없습니다". 10-15 충전 30,000원 취소는 잔액 부족으로 거절(409)
 // - 정하은  …005  활성, 잔액 128,000원, 거래 28건 → 거래 이력 페이지 나눔 확인용
 // - 오지훈  …051  비활성, 잔액 0원 → 안내 배너·'비활성' 배지 (목록에서는 '비활성 포함'을 켜야 보인다)
 // - 한지민  …052  활성, 잔액 0원, 거래 0건 → "마지막 거래" 줄 숨김, 최근 거래·거래 이력 빈 안내
 // 그 밖의 고객은 거래 없이(entries: []) 돌려준다.
-// 충전·사용 목(mock/charges.ts·uses.ts)이 성공하면 recordMockCharge·recordMockUse 가 이 장부를 바꾼다
+// 충전·사용·취소 목(mock/charges.ts·uses.ts·cancels.ts)이 성공하면 recordMockCharge·recordMockUse·recordMockCancel 이 이 장부를 바꾼다
 // — 다시 불러오면 바뀐 잔액·거래가 상세와 거래 이력 모두에 보인다.
 // 형식이 UUID 가 아닌 id 는 400 INVALID_INPUT, 없는 UUID 는 404 CUSTOMER_NOT_FOUND.
 
@@ -81,8 +81,12 @@ const PARK_ROWS: EntryRow[] = [
   [97, 'CHARGE', 50000, 50000, 50000, '현금', '2026-09-01T01:30:00Z', '박사장'],
 ]
 
+// 이준호: 잔액 0원. 10-15 10:05 의 30,000원 충전(당일 — 취소 가능)은 이미 다 써서, 충전 취소를 누르면
+// 409 CHARGE_ALREADY_USED(현재 잔액 0원 · 충전 30,000원)가 난다 — 화면설계 충전 취소 거절 이미지 그대로
 const LEE_ROWS: EntryRow[] = [
   [205, 'USE', 9000, -9000, 0, '아메리카노 2잔', '2026-10-15T05:22:00Z', '김직원', { cancellable: true }],
+  [207, 'USE', 30000, -30000, 9000, '원두 1kg, 디저트 세트', '2026-10-15T03:30:00Z', '김직원', { cancellable: true }],
+  [206, 'CHARGE', 30000, 30000, 39000, '현금', '2026-10-15T01:05:00Z', '김직원', { cancellable: true }],
   [204, 'USE', 6500, -6500, 9000, '샌드위치 1개', '2026-10-04T03:15:00Z', '김직원', { cancellable: true }],
   [203, 'CHARGE', 10000, 10000, 15500, '카드', '2026-10-02T02:30:00Z', '박사장'],
   [202, 'USE', 4500, -4500, 5500, '라떼 1잔', '2026-09-24T23:50:00Z', '김직원', { cancellable: true }],
@@ -325,6 +329,82 @@ export function recordMockUse(
     })
   }
   return appendEntry(found, 'USE', amount, -amount, found.balance - amount, memo, performedByName)
+}
+
+export type MockCancelKind = 'use' | 'charge'
+
+const CANCEL_TYPES = {
+  use: { target: 'USE', reversal: 'USE_CANCEL', alreadyMessage: '이미 취소된 사용 건입니다.' },
+  charge: { target: 'CHARGE', reversal: 'CHARGE_CANCEL', alreadyMessage: '이미 취소된 충전 건입니다.' },
+} as const
+
+/**
+ * 취소 목의 "서버 쪽" 장부 — 서버(PrepaidAccount)와 같은 순서로 판단한다:
+ * 거래 없음 404 LEDGER_ENTRY_NOT_FOUND → 반제 행·유형 불일치 400 INVALID_CANCEL_TARGET → 이미 취소됨 409 ALREADY_CANCELLED
+ * (details.cancelEntryId) → (충전) 당일 아님 409 CHARGE_CANCEL_NOT_SAME_DAY → (충전) 잔액이 모자람 409 CHARGE_ALREADY_USED
+ * (details.balance·chargeAmount). 통과하면 장부 맨 앞에 반제 행(memo = 사유)을 넣고, 원거래를 cancelled 로 바꾼다.
+ * 목 장부의 날짜는 고정 값이라 "당일" 은 장부에 적힌 원거래의 cancellable 값으로 대신한다.
+ * 사용 취소는 서버처럼 비활성 고객을 다시 활성화한다.
+ * 여기는 가짜 서버라서 잔액을 더하고 뺀다. 화면 코드는 이 값을 계산하지 않고 응답·재조회 값만 쓴다.
+ */
+export function recordMockCancel(
+  customerId: string,
+  targetEntryId: string,
+  kind: MockCancelKind,
+  reason: string,
+  performedByName = '김직원',
+): TransactionResponse {
+  const found = findForLedger(customerId)
+  const target = found.entries.find((e) => e.id === targetEntryId)
+  if (!target) {
+    throw new ApiError(404, 'LEDGER_ENTRY_NOT_FOUND', '거래를 찾을 수 없습니다.')
+  }
+  const types = CANCEL_TYPES[kind]
+  if (target.reversesId !== null) {
+    throw new ApiError(400, 'INVALID_CANCEL_TARGET', '취소 거래는 다시 취소할 수 없습니다.')
+  }
+  if (target.type !== types.target) {
+    throw new ApiError(400, 'INVALID_CANCEL_TARGET', `${types.reversal} 는 ${types.target} 거래만 취소할 수 있습니다.`)
+  }
+  if (target.cancelled) {
+    const cancel = found.entries.find((e) => e.reversesId === target.id)
+    throw new ApiError(409, 'ALREADY_CANCELLED', types.alreadyMessage, [], { cancelEntryId: cancel?.id ?? null })
+  }
+  if (kind === 'charge') {
+    if (!target.cancellable) {
+      throw new ApiError(409, 'CHARGE_CANCEL_NOT_SAME_DAY', '당일 충전 건만 취소할 수 있습니다.')
+    }
+    if (found.balance < target.amount) {
+      throw new ApiError(409, 'CHARGE_ALREADY_USED', '잔액이 부족해 취소할 수 없어요. 먼저 사용 건을 취소해 주세요.', [], {
+        balance: found.balance,
+        chargeAmount: target.amount,
+      })
+    }
+  }
+
+  const signedAmount = kind === 'use' ? target.amount : -target.amount
+  const balanceAfter = found.balance + signedAmount
+  const reversal: TransactionResponse = {
+    id: crypto.randomUUID(),
+    type: types.reversal,
+    amount: target.amount,
+    signedAmount,
+    balanceAfter,
+    memo: reason,
+    performedAt: new Date().toISOString(),
+    performedByName,
+    cancelled: false,
+    reversesId: target.id,
+    cancellable: false,
+  }
+  found.balance = balanceAfter
+  if (kind === 'use') found.active = true
+  // 원거래는 지우지 않고 '취소됨'으로만 바꾼다. 이미 응답으로 나간 객체를 고치지 않도록 새 객체로 바꿔 넣는다
+  found.entries = [
+    reversal,
+    ...found.entries.map((e) => (e.id === target.id ? { ...e, cancelled: true, cancellable: false } : e)),
+  ]
+  return reversal
 }
 
 /** 가짜 서버의 현재 잔액(시나리오 준비용). 없는 고객이면 null */
