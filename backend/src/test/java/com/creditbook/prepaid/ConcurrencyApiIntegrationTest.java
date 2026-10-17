@@ -51,7 +51,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 // @Transactional 붙이지 않는다 — 두 스레드가 각자 실제로 커밋해야 동시성이 재현됨
-@Tag("REQ-10")
 public class ConcurrencyApiIntegrationTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     @Autowired
@@ -73,6 +72,7 @@ public class ConcurrencyApiIntegrationTest {
 
     @Test
     @DisplayName("같은 계좌에 사용 요청 2건이 동시에 오면 1건만 반영되고 잔액은 음수가 되지 않는다")
+    @Tag("REQ-10")
     @Tag("TC-40")
     void concurrent_uses_on_same_account_apply_only_once() throws Exception {
         // given — 직원 로그인, 고유한 고객 등록, 5,000원 충전 (모두 커밋됨)
@@ -140,6 +140,7 @@ public class ConcurrencyApiIntegrationTest {
     @Test
     @DisplayName("같은 사용 건에 취소 2건이 동시에 오면 1건만 반영되고 잔액은 한 번만 복구된다")
     @Tag("REQ-34")
+    @Tag("TC-47")
     void concurrent_cancels_of_same_use_apply_only_once() throws Exception {
         // given — 직원 로그인, 고유한 고객 등록, 5,000원 충전 (모두 커밋됨)
         Cookie session = loginAsNewStaff();
