@@ -78,6 +78,10 @@ npx playwright show-report
 ```
 - 브라우저는 Chromium만(테스트 계획서 §1 — 크로스브라우저 제외), CI는 headless
 - E2E 환경·데이터는 테스트 계획서 §6(로컬 스택 + 시드로 고정 데이터)을 따른다
+- **E2E는 로컬 전체 스택에 붙는다** — 목 데이터가 아니라 실제 백엔드다. `playwright.config.ts`가 운영 빌드(`VITE_USE_MOCK=false`)를 `vite preview`(4173)로 띄우고 `/api`를 `localhost:8080`으로 넘긴다. 그래서 실행 전에 ① 로컬 Docker DB(`docker compose up -d`, 5433) ② 백엔드(`local-docker` 프로필 — Neon 아님)가 떠 있어야 한다. 백엔드를 띄우는 것은 **사용자가 지시했거나 이미 떠 있을 때만**이다. 떠 있지 않으면 실행하지 말고 "어떤 준비가 빠졌는지"를 보고한다
+- 로그인 계정은 환경변수(`E2E_STAFF_PASSWORD`·`E2E_ADMIN_PASSWORD`, 아이디는 기본 `staff`·`owner`)로만 받는다(`e2e/support/credentials.ts`). 비밀번호를 파일·명령 기록·보고에 남기지 않는다. 없으면 사용자에게 요청한다 — 실행 방법은 `frontend/README.md` "E2E (Playwright)" 절
+- 테스트 데이터는 API 도우미(`e2e/support/api.ts`)로 테스트마다 만들고 연락처는 테스트마다 다르게 한다. 다른 테스트가 만든 데이터나 실행 순서에 기대지 않는지 본다(CI는 워커 1개·같은 DB)
+- `retries: 0` — 재시도로 통과한 간헐 실패를 숨기지 않는다. 새 시나리오는 `--repeat-each`로 불안정 여부를 확인한 결과를 보고한다
 
 ---
 
