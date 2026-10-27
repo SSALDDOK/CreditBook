@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,8 @@ import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
+import com.creditbook.prepaid.application.ChargeService;
+import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.WithMockEmployee;
 import com.jayway.jsonpath.JsonPath;
@@ -53,6 +56,9 @@ class CustomerSearchApiIntegrationTest {
 
     @Autowired
     CustomerService customerService;
+
+    @Autowired
+    ChargeService chargeService;
 
     @Autowired
     EmployeeRepository employeeRepository;
@@ -237,19 +243,30 @@ class CustomerSearchApiIntegrationTest {
         assertThat(brokenCustomers).isEqualTo(0);
     }
 
-    // @Test
+    @Test
     @DisplayName("충전 후 고객 목록 API에 잔액 즉시 반영")
     @Tag("TC-39")
     void customer_list_reflects_balance_right_after_charge() throws Exception {
-        // RegisteredCustomer customer = customerService.register("TC39",
-        // "01043435005");
-        // String firstChargeBody = mockMvc
-        // .perform(withSession(post("/api/customers/{id}/charges",
-        // customer.customerId()), session)
-        // .header("Idempotency-Key", "tc39-charge")
-        // .content("{\"amount\": 10000}"))
-        // .andExpect(status().isCreated())
-        // .andReturn().getResponse().getContentAsString();
+        // given 0원 고객1명, 충전할 직원 1명
+        Employee saveAdmin = saveAdmin("tc39-admin");
+        RegisteredCustomer customer = customerService.register("TC39","01043435005");
+        //when 1 목록 검색으로 잔액 0원 확인
+        mockMvc.perform(get("/api/customers").param("q", "TC39"))
+                // then(사전 확인) 충전 전 잔액 0원
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].balance").value(0))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        //50000원 충전 ,충전은 사전 준비라 서비스로 (처리 직원 = 저장한 ADMIN)
+        chargeService.charge(customer.customerId(), new BigDecimal("50000"), null, saveAdmin.getId(), IdempotencyKey.of("tc39-charge")); 
+        
+        //when 2 충전 후 고객 목록 다시 검색
+        mockMvc.perform(get("/api/customers").param("q", "TC39"))
+                // then — 200, 잔액 50000원,totalElements 1
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].balance").value(50000))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
     }
 
     // 고객 등록 → 바로 비활성화 (잔액 0원이라 가능). 비활성화는 사전 준비라 API 대신 서비스로
