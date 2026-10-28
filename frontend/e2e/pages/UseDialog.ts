@@ -8,6 +8,7 @@ export class UseDialog {
   readonly amountError: Locator // 잔액 부족·형식 오류 문구(빨간 글자)
   readonly memoInput: Locator
   readonly memoChips: Locator // 메모 문구 칩 — 이름으로 고를 때는 memoChip('음료')
+  readonly memoNotice: Locator // 메모 길이 상한 안내
   readonly nextButton: Locator // [사용]
   readonly cancelButton: Locator // [취소] — 모달 닫기
   // 확인 화면
@@ -19,6 +20,7 @@ export class UseDialog {
     this.amountError = this.root.getByTestId('use-amount-error')
     this.memoInput = this.root.getByTestId('use-memo-input')
     this.memoChips = this.root.getByTestId('use-memo-chip')
+    this.memoNotice = this.root.getByTestId('use-memo-notice')
     this.nextButton = this.root.getByTestId('use-next')
     this.cancelButton = this.root.getByTestId('use-cancel')
     this.confirmButton = this.root.getByTestId('use-confirm')
