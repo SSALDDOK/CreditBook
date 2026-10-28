@@ -41,6 +41,15 @@ export async function chargeByApi(request: APIRequestContext, customerId: string
   expect(res.status(), '충전 API').toBe(201)
 }
 
+/** API로 사용 — 멱등키는 매번 새로 */
+export async function useByApi(request: APIRequestContext, customerId: string, amount: number): Promise<void> {
+  const res = await request.post(`/api/customers/${customerId}/uses`, {
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    data: { amount },
+  })
+  expect(res.status(), '사용 API').toBe(201)
+}
+
 export type CustomerDetail = {
   balance: number
   recentEntries: Array<{ id: string; type: string; signedAmount: number; balanceAfter: number }>
