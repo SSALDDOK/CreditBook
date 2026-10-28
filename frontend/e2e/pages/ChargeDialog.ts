@@ -7,6 +7,7 @@ export class ChargeDialog {
   readonly amountInput: Locator
   readonly amountError: Locator
   readonly nextButton: Locator // [충전]
+  readonly restoredBanner: Locator // 재로그인 후 '입력하던 금액을 불러왔습니다' 안내
   // 확인 화면 — testid 앞부분이 'charge-confirm-'
   readonly currentBalance: Locator
   readonly expectedBalance: Locator
@@ -21,6 +22,7 @@ export class ChargeDialog {
     this.amountInput = this.root.getByTestId('charge-amount-input')
     this.amountError = this.root.getByTestId('charge-amount-error')
     this.nextButton = this.root.getByTestId('charge-next')
+    this.restoredBanner = this.root.getByTestId('charge-restored-banner')
     this.currentBalance = this.root.getByTestId('charge-confirm-current-balance')
     this.expectedBalance = this.root.getByTestId('charge-confirm-expected-balance')
     this.expectedKorean = this.root.getByTestId('charge-confirm-expected-korean')
