@@ -7,12 +7,14 @@ export class CustomerDetailPage {
   readonly root: Locator
   readonly balance: Locator
   readonly chargeButton: Locator
+  readonly useButton: Locator
 
   constructor(page: Page) {
     this.page = page
     this.root = page.getByTestId('customer-detail')
     this.balance = page.getByTestId('customer-detail-balance')
     this.chargeButton = page.getByTestId('customer-charge-button')
+    this.useButton = page.getByTestId('customer-use-button')
   }
 
   /** 주소로 바로 들어가서 다 그려질 때까지 기다린다 (data-state 가 loading → ready) */

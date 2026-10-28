@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { staffAccount } from './support/credentials'
 
 // TC-19 로그인 → 보호 화면 → 로그아웃 → 뒤로가기 차단
-test('로그인 → 보호 화면 → 로그아웃 → 뒤로가기 차단 @TC-19', async ({ page }) => {
+test('로그인 → 보호 화면 → 로그아웃 → 뒤로가기 차단 E2E @TC-19', async ({ page }) => {
     const account = staffAccount() //로그인 안한 직원
 
     //로그인 안했을 시 고객목록 X -> 로그인 화면으로
