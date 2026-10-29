@@ -140,14 +140,71 @@ test('주문 메모 문구 칩 — 채움 · 이어붙기 · 토글 · 길이 �
   })
 })
 
-// TC-15 시나리오 A(더블클릭)는 이 위에 직접 작성 — 아래 B의 route 핸들러 방식을 따른다
+// TC-15 시나리오 A
+test('사용 확인 — 더블클릭해도 1건만 차감(중복 차감 방지) E2E @TC-15', async ({ page }) => {
+  // 사전조건 — STAFF 로그인, 잔액 10,000원 고객 1명 (API로 빠르게 준비)
+  await loginByApi(page.request, staffAccount())
+  const customer = await createCustomer(page.request, 'E2E더블클릭')
+  await chargeByApi(page.request, customer.id, 10_000)
 
+  const usesUrl = `**/api/customers/${customer.id}/uses`
+  //응답 붙잡기 - release() 부를 때까지 서버로 안 보냄 , 가로채기는 첫 클릭 전에 걸기.
+  let release!: () => void
+  const released = new Promise<void>((resolve) => { release = resolve })
+  const sentKeys: string[] = []
+  await page.route(usesUrl, async (route) => {
+    sentKeys.push(route.request().headers()['idempotency-key'])
+    await released        // 여기서 멈춰 있다(빨간불)
+    await route.continue() // release() 하면 그제야 서버로 보냄(초록불)
+  })
+
+  //고객 상세 화면 , 사용 모달
+  const detail = new CustomerDetailPage(page)
+  const useDialog = new UseDialog(page)
+  await detail.goto(customer.id)
+  await detail.expectBalance(10_000)
+
+  await test.step('1. [사용] → 3,000원 → [확인] 1회 클릭 -> 버튼 비활성화 확인', async () => {
+    //고객 상세 - 사용 버튼 클릭
+    await detail.useButton.click()
+    //사용 모달 - 3,000원 입력 → 사용 클릭 → 확인 화면 → 확인 클릭
+    await useDialog.expectStep('input')
+    await useDialog.fillAmount(3_000)
+    await useDialog.nextButton.click()
+    await useDialog.expectStep('confirm')
+    await useDialog.confirmButton.click()
+    await expect(useDialog.confirmButton).toBeDisabled()
+  })
+
+  await test.step('2. 강제로 [확인] 2번째 클릭 → 사용 요청 1건만 나갔는지 확인 → 응답 풀기', async () => {
+    //사용 모달 - 확인 화면 → 확인 클릭 2번째
+    await useDialog.confirmButton.click({ force: true }) //비활성 버튼을 강제로 한 번 더 클릭(force)
+    //첫 요청이 도착할 때까지 기다렸다가 1건인지 확인
+    await expect.poll(() => sentKeys.length).toBe(1)
+    release() // 초록불 : 서버 부르기
+  })
+
+  await test.step('3. 모달 닫힘 → 잔액 7,000원·USE 1건', async () => {
+    //모달 화면 닫힘
+    await expect(useDialog.root).toBeHidden()
+    //고객 상세 화면 확인 - 3,000원만 빠짐
+    await detail.expectBalance(7_000)
+
+    //서버쪽 확인. 잔액 7,000원, 사용 거래 1건 (최신순이라 USE → CHARGE)
+    const after = await getCustomerDetail(page.request, customer.id)
+    expect(after.balance).toBe(7_000)
+    expect(after.recentEntries.map((e) => e.type)).toEqual(['USE', 'CHARGE'])
+    //다 끝난 뒤에도 사용 요청은 1건뿐 (두 번째 클릭이 늦게 나가지 않았는지)
+    expect(sentKeys).toHaveLength(1)
+  })
+})
+
+// TC-15 시나리오 B
 test('사용 확인 — 응답만 끊긴 뒤 다시 [확인]해도 1건만 차감 E2E @TC-15', async ({ page }) => {
   // 사전조건 — STAFF 로그인, 잔액 10,000원 고객 1명 (API로 빠르게 준비)
   await loginByApi(page.request, staffAccount())
   const customer = await createCustomer(page.request, 'E2E응답끊김')
   await chargeByApi(page.request, customer.id, 10_000)
-
   //사용 요청 가로채기 - 서버에는 보내서 처리시키고(route.fetch), 화면에는 응답 대신 연결 끊김(route.abort)
   const usesUrl = `**/api/customers/${customer.id}/uses`
   const firstKeys: string[] = [] // 가로챈 요청의 멱등키 — 4번에서 비교
