@@ -230,6 +230,8 @@ class UseCancelApiIntegrationTest {
 	@Test
 	@DisplayName("다른 계좌의 사용 건은 취소할 수 없다 — 400 INVALID_CANCEL_TARGET, 두 고객 장부 그대로")
 	@Tag("TC-42")
+	@Tag("REQ-27")
+	@Tag("TC-21")
 	void cancel_of_other_customers_use_is_rejected_with_400() throws Exception {
 		// given — 고객 A·B 각각 잔액 7,000원, B의 사용 거래 ID
 		Cookie session = loginAsNewStaff("tc42-idor-staff");
