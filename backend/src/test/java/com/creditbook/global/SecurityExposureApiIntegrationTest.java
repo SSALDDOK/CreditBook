@@ -170,6 +170,7 @@ class SecurityExposureApiIntegrationTest {
 	}
 
 	@Test
+	@Tag("TC-55")
 	@DisplayName("충전 요청에 balance 를 끼워 넣으면 400 INVALID_INPUT 로 거절하고, 잔액은 그대로이며 시도가 WARN 로그에 남는다")
 	void unknown_field_in_request_is_rejected_and_logged(CapturedOutput output) throws Exception {
 		// given 직원 로그인, 고객 1명 10,000원 충전
