@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Response } from '@playwright/test'
 import { chargeByApi, createCustomer, getCustomerDetail, loginByApi } from './support/api'
 import { staffAccount } from './support/credentials'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
 import { UseDialog } from './pages/UseDialog'
 
-// 사용 모달(SCR-7) E2E — 잔액 부족(TC-14), 메모 문구 칩(TC-28)
+// 사용 모달(SCR-7) E2E — 잔액 부족(TC-14), 메모 문구 칩(TC-28), 같은 요청 두 번 와도 1건(TC-15)
 test('잔액 부족 사용 시도 시 오류 메시지 노출 E2E @TC-14', async ({ page }) => {
   // 사전조건 — STAFF 로그인, 잔액 3,000원 고객 1명 (API로 빠르게 준비)
   await loginByApi(page.request, staffAccount())
@@ -137,5 +137,80 @@ test('주문 메모 문구 칩 — 채움 · 이어붙기 · 토글 · 길이 �
     //거래 이력 화면 - 사용 행 메모가 200자 그대로 (칸이 좁아 화면엔 … 으로 보이지만 글자는 다 들어 있음)
     const useRow = transactionsPage.locator('[data-testid="transaction-row"][data-type="USE"]')
     await expect(useRow.getByTestId('transaction-memo')).toHaveText(memoAt200)
+  })
+})
+
+// TC-15 시나리오 A(더블클릭)는 이 위에 직접 작성 — 아래 B의 route 핸들러 방식을 따른다
+
+test('사용 확인 — 응답만 끊긴 뒤 다시 [확인]해도 1건만 차감 E2E @TC-15', async ({ page }) => {
+  // 사전조건 — STAFF 로그인, 잔액 10,000원 고객 1명 (API로 빠르게 준비)
+  await loginByApi(page.request, staffAccount())
+  const customer = await createCustomer(page.request, 'E2E응답끊김')
+  await chargeByApi(page.request, customer.id, 10_000)
+
+  //사용 요청 가로채기 - 서버에는 보내서 처리시키고(route.fetch), 화면에는 응답 대신 연결 끊김(route.abort)
+  const usesUrl = `**/api/customers/${customer.id}/uses`
+  const firstKeys: string[] = [] // 가로챈 요청의 멱등키 — 4번에서 비교
+  await page.route(usesUrl, async (route) => {
+    firstKeys.push(route.request().headers()['idempotency-key'])
+    await route.fetch() // 서버는 사용을 기록한다
+    await route.abort('failed') // 화면은 응답을 못 받는다 - 연결 끊김
+  })
+
+  //고객 상세 화면 , 사용 모달
+  const detail = new CustomerDetailPage(page)
+  const useDialog = new UseDialog(page)
+  await detail.goto(customer.id)
+  await detail.expectBalance(10_000)
+
+  await test.step('1. [사용] → 3,000원 → [확인] — 서버는 기록하고, 화면은 응답을 못 받는다', async () => {
+    //고객 상세 - 사용 버튼 클릭
+    await detail.useButton.click()
+    //사용 모달 - 3,000원 입력 → 사용 클릭 → 확인 화면 → 확인 클릭
+    await useDialog.expectStep('input')
+    await useDialog.fillAmount(3_000)
+    await useDialog.nextButton.click()
+    await useDialog.expectStep('confirm')
+    await useDialog.confirmButton.click()
+  })
+
+  await test.step('2. 모달이 닫히지 않고 확인 화면 그대로, 다시 보내기 안내', async () => {
+    //사용 모달 - 오류 띠에 안내 문구, 확인 화면 그대로
+    await expect(useDialog.formError).toHaveText(
+      '네트워크 연결을 확인해 주세요. [확인]을 다시 누르면 같은 요청으로 다시 보냅니다.',
+    )
+    await useDialog.expectStep('confirm')
+
+    //서버쪽 확인. 이미 1건 기록됨 — 오프라인(요청이 안 닿음)이 아니라 '응답만 끊김'인지 확인
+    const middle = await getCustomerDetail(page.request, customer.id)
+    expect(middle.balance).toBe(7_000)
+  })
+
+  let retry: Response | undefined // 다시 보낸 요청의 응답 — 4번에서 키·헤더 비교
+  await test.step('3. 가로채기를 풀고 [확인] 다시 → 모달 닫힘, 잔액 7,000원, 사용 1건', async () => {
+    await page.unroute(usesUrl)
+    //사용 모달 - 확인 다시 클릭 (응답을 기다렸다가 받아 둔다)
+    const retryResponse = page.waitForResponse(usesUrl)
+    await useDialog.confirmButton.click()
+    retry = await retryResponse
+
+    //모달 화면 닫힘
+    await expect(useDialog.root).toBeHidden()
+    //고객 상세 화면 확인 - 3,000원만 빠짐
+    await detail.expectBalance(7_000)
+
+    //서버쪽 확인. 잔액 7,000원, 사용 거래 1건 (최신순이라 USE → CHARGE)
+    const after = await getCustomerDetail(page.request, customer.id)
+    expect(after.balance).toBe(7_000)
+    expect(after.recentEntries.map((e) => e.type)).toEqual(['USE', 'CHARGE'])
+  })
+
+  await test.step('4. 두 요청의 멱등키가 같고, 두 번째는 저장된 응답을 다시 준 것', async () => {
+    //가로챈 요청은 1번뿐, 다시 보낸 요청이 같은 키
+    expect(firstKeys).toHaveLength(1)
+    expect(retry?.request().headers()['idempotency-key']).toBe(firstKeys[0])
+    //서버쪽 확인. 새로 처리하지 않고 저장된 응답(201 + Idempotent-Replayed: true)
+    expect(retry?.status()).toBe(201)
+    expect(retry?.headers()['idempotent-replayed']).toBe('true')
   })
 })
