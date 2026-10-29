@@ -153,38 +153,35 @@ class UsageControllerTest {
 
 	@Test
 	@Tag("REQ-20")
-	@DisplayName("처리 직원은 요청 본문이 아니라 현재 직원에서 정해진다")
-	void performer_comes_from_current_employee_not_request_body() throws Exception {
-		// given
+	@Tag("REQ-27")
+	@DisplayName("요청 본문에 처리 직원을 끼워 넣으면 400 INVALID_INPUT 로 거절하고 사용하지 않는다")
+	void performer_in_request_body_is_rejected() throws Exception {
+		// given 다른 직원 ID
 		UUID forged = UUID.randomUUID();
-		given(usageService.use(any(), any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
 
-		// when
+		// when / then 처리 직원은 현재 직원에서만 정해진다 — 본문에 넣으면 받지 않는 항목으로 거절
 		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000, \"performedBy\": \"" + forged + "\"}"))
-				.andExpect(status().isCreated());
-
-		// then
-		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@Test
 	@Tag("REQ-20")
-	@DisplayName("요청 본문에 클라이언트 시각을 넣어도 무시되고 서버 시각이 기록된다")
-	void performed_at_comes_from_server_clock_not_request_body() throws Exception {
-		// given
-		given(usageService.use(any(), any(), any(), any(), any())).willReturn(used(1_000, 9_000, null));
-
-		// when
+	@Tag("REQ-27")
+	@DisplayName("요청 본문에 클라이언트 시각을 넣으면 400 INVALID_INPUT 로 거절하고 사용하지 않는다")
+	void performed_at_in_request_body_is_rejected() throws Exception {
+		// when / then 처리 시각은 서버 시계에서만 정해진다 — 본문에 넣으면 받지 않는 항목으로 거절
 		mockMvc.perform(post(URL).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"amount\": 1000, \"performedAt\": \"2020-01-01T00:00:00Z\"}"))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.performedAt").value("2026-10-01T01:00:00Z"));
-
-		// then
-		verify(usageService).use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedAt"));
+		verify(usageService, never()).use(any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] 잔액 {0}원, 사용 {1}원 → 부족액 {2}원")

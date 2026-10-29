@@ -202,6 +202,8 @@ class ChargeCancelRejectionApiIntegrationTest {
 	@Test
 	@DisplayName("다른 계좌의 충전 건은 취소할 수 없다 — 400 INVALID_CANCEL_TARGET, 두 고객 장부 그대로")
 	@Tag("TC-44")
+	@Tag("REQ-27")
+	@Tag("TC-21")
 	void cancel_of_other_customers_charge_is_rejected_with_400() throws Exception {
 		// given — 고객 A·B 각각 오늘 10,000원 충전, B의 충전 거래 ID
 		Cookie session = loginAsNewStaff("tc44-idor-staff");

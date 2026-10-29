@@ -17,6 +17,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson:
+    deserialization:
+      # 요청 본문에 받지 않는 항목(balance·active 등)이 있으면 무시하지 않고 400 INVALID_INPUT (REQ-27)
+      fail-on-unknown-properties: true
 
 logging:
   pattern:
