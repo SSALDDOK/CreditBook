@@ -404,17 +404,15 @@ class CancelControllerTest {
 
 	@Test
 	@Tag("REQ-20")
-	@DisplayName("처리 직원은 요청 본문이 아니라 현재 직원에서 정해진다")
-	void performer_comes_from_current_employee_not_request_body() throws Exception {
-		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any())).willReturn(cancelled(REASON, false));
-
-		// when
+	@Tag("REQ-27")
+	@DisplayName("요청 본문에 처리 직원을 끼워 넣으면 400 INVALID_INPUT 로 거절하고 사용 취소하지 않는다")
+	void performer_in_request_body_is_rejected() throws Exception {
+		// when / then 처리 직원은 현재 직원에서만 정해진다 — 본문에 넣으면 받지 않는 항목으로 거절
 		mockMvc.perform(cancelRequest("{\"reason\": \"주문 착오\", \"performedBy\": \"" + UUID.randomUUID() + "\"}"))
-				.andExpect(status().isCreated());
-
-		// then
-		verify(cancelService).cancelUse(CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY);
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
 	}
 
 }

@@ -206,9 +206,10 @@ class AuthApiIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("충전·사용 거래에 실행 직원과 서버 시각 기록 — 요청에 끼워 넣은 시각·직원 ID는 무시")
+	@DisplayName("충전·사용 거래에 실행 직원과 서버 시각 기록 — 요청에 시각·직원 ID를 끼워 넣으면 400으로 거절하고 저장하지 않는다")
 	@Tag("TC-31")
 	@Tag("REQ-20")
+	@Tag("REQ-27")
 	void ledger_entries_record_authenticated_employee_and_server_time() throws Exception {
 		// given — 직원 A로 로그인, 다른 직원 B, 고객 1명
 		Employee employeeA = saveEmployee("tc31-a", Role.STAFF);
@@ -216,15 +217,24 @@ class AuthApiIntegrationTest {
 		Cookie sessionA = sessionCookie(jwtTokenService.issue(employeeA.getId()).value());
 		RegisteredCustomer customer = customerService.register("감사로그TC31", "01031310031");
 
-		// when — 충전 요청에 가짜 시각·다른 직원 ID를 끼워 넣고, 사용은 정상 호출
+		// when — 충전 요청에 가짜 시각·다른 직원 ID를 끼워 넣으면 받지 않는 항목으로 거절된다
 		// (멱등키 헤더는 충전·사용 API 필수라 넣음 — 없으면 400)
 		mockMvc.perform(post("/api/customers/{id}/charges", customer.customerId())
 				.cookie(sessionA)
-				.header("Idempotency-Key", "tc31-charge")
+				.header("Idempotency-Key", "tc31-forged")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"amount": 10000, "performedAt": "2020-01-01T00:00:00Z", "employeeId": "%s"}
 						""".formatted(employeeB.getId())))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+
+		// when — 충전·사용 정상 호출
+		mockMvc.perform(post("/api/customers/{id}/charges", customer.customerId())
+				.cookie(sessionA)
+				.header("Idempotency-Key", "tc31-charge")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\": 10000}"))
 				.andExpect(status().isCreated());
 
 		mockMvc.perform(post("/api/customers/{id}/uses", customer.customerId())
@@ -246,10 +256,10 @@ class AuthApiIntegrationTest {
 						rs.getObject("performed_at", OffsetDateTime.class).toInstant()),
 				customer.accountId());                                           // ? 자리에 들어갈 값
 
-		assertThat(rows).extracting(LedgerRow::type).containsExactly("CHARGE", "USE"); // 충전·사용 2건이 이 순서로
+		assertThat(rows).extracting(LedgerRow::type).containsExactly("CHARGE", "USE"); // 정상 충전·사용 2건만 (거절된 요청은 저장 안 됨)
 		assertThat(rows).allSatisfy(row -> {                                             // 모든 행이
-			assertThat(row.performedBy()).isEqualTo(employeeA.getId());                  // 로그인한 A로 기록 (끼워 넣은 B 무시)
-			assertThat(row.performedAt()).isCloseTo(clock.instant(), within(5, ChronoUnit.SECONDS)); // 지금 시각 ±5초 (2020년 무시)
+			assertThat(row.performedBy()).isEqualTo(employeeA.getId());                  // 로그인한 A로 기록
+			assertThat(row.performedAt()).isCloseTo(clock.instant(), within(5, ChronoUnit.SECONDS)); // 지금 시각 ±5초
 		});
 	}
 

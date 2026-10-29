@@ -40,6 +40,8 @@ import com.creditbook.prepaid.domain.PrepaidDomainException;
 import com.creditbook.prepaid.domain.ReversalConflictException;
 
 import jakarta.persistence.OptimisticLockException;
+import jakarta.servlet.http.HttpServletRequest;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
 
 /**
  * 예외를 {@link ErrorResponse} 로 바꾼다. 응답에는 스택트레이스를 넣지 않고, 예상하지 못한 예외만 ERROR 로 스택트레이스를 로그에 남긴다.
@@ -82,11 +84,37 @@ public class GlobalExceptionHandler {
 				List.of(new ErrorResponse.FieldError(ex.getName(), "형식이 올바르지 않습니다."))));
 	}
 
-	/** JSON 문법 오류, 타입 불일치 등 본문을 읽지 못한 경우. */
+	/**
+	 * JSON 문법 오류, 타입 불일치 등 본문을 읽지 못한 경우.
+	 * 받지 않는 항목(예: 충전 요청의 balance)이면 INVALID_INPUT + fieldErrors 에 그 항목 이름으로 거절하고 (REQ-27),
+	 * 잔액·처리 직원 같은 값을 끼워 넣는 시도로 보고 WARN 으로 남긴다 — 값은 남기지 않는다.
+	 */
 	@ExceptionHandler(HttpMessageNotReadableException.class)
-	ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+	ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+		UnrecognizedPropertyException unknown = findCause(ex, UnrecognizedPropertyException.class);
+		if (unknown != null) {
+			String field = loggableFieldName(unknown.getPropertyName());
+			log.warn("unknown field rejected: method={} path={} field={}", request.getMethod(), request.getRequestURI(),
+					field);
+			return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT,
+					List.of(new ErrorResponse.FieldError(field, "알 수 없는 항목입니다."))));
+		}
 		log.debug("request body not readable");
 		return respond(ErrorCode.MALFORMED_REQUEST, ErrorResponse.of(ErrorCode.MALFORMED_REQUEST));
+	}
+
+	// 항목 이름도 요청이 보낸 글자다 — 줄바꿈·긴 문자열이 로그·응답에 그대로 들어가지 않게 영문·숫자·_ 64자까지만
+	private static String loggableFieldName(String name) {
+		return name != null && name.matches("[A-Za-z0-9_]{1,64}") ? name : "(invalid)";
+	}
+
+	private static <T extends Throwable> T findCause(Throwable ex, Class<T> type) {
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (type.isInstance(cause)) {
+				return type.cast(cause);
+			}
+		}
+		return null;
 	}
 
 	@ExceptionHandler(InvalidCustomerNameException.class)
