@@ -13,6 +13,7 @@ export class UseDialog {
   readonly cancelButton: Locator // [취소] — 모달 닫기
   // 확인 화면
   readonly confirmButton: Locator // [확인]
+  readonly formError: Locator // 모달 아래 오류 띠(네트워크 오류·409 등)
 
   constructor(page: Page) {
     this.root = page.getByTestId('use-dialog')
@@ -24,6 +25,7 @@ export class UseDialog {
     this.nextButton = this.root.getByTestId('use-next')
     this.cancelButton = this.root.getByTestId('use-cancel')
     this.confirmButton = this.root.getByTestId('use-confirm')
+    this.formError = this.root.getByTestId('use-error')
   }
 
   /** 지금 어느 단계인지 확인 — 'input'(입력) 또는 'confirm'(확인) */
