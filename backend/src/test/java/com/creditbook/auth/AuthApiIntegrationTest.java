@@ -227,7 +227,8 @@ class AuthApiIntegrationTest {
 						{"amount": 10000, "performedAt": "2020-01-01T00:00:00Z", "employeeId": "%s"}
 						""".formatted(employeeB.getId())))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedAt")); // 끼운 항목 때문에 거절 (첫 번째 모르는 항목)
 
 		// when — 충전·사용 정상 호출
 		mockMvc.perform(post("/api/customers/{id}/charges", customer.customerId())

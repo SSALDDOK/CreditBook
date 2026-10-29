@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -54,9 +55,9 @@ import jakarta.servlet.http.Cookie;
 @Tag("REQ-27")
 class SecurityExposureApiIntegrationTest {
 
-	// 응답 본문에 있으면 안 되는 내부 정보 흔적
+	// 응답 본문에 있으면 안 되는 내부 정보 흔적 — 대소문자 무시로 찾는다 (Hibernate SQL 은 소문자 select·insert)
 	private static final List<String> INTERNAL_TRACES = List.of(
-			"Exception", "at com.", "at org.", "SELECT", "INSERT", ".java", "creditbook/", "trace");
+			"exception", "at com.", "at org.", "select", "insert", ".java", "creditbook/", "\\", "trace");
 
 	@Autowired
 	MockMvc mockMvc;
@@ -101,14 +102,18 @@ class SecurityExposureApiIntegrationTest {
 		// then 어느 응답에도 금지 항목이 없다
 		for (String body : bodies) {
 			assertThat(body)
-					.doesNotContain("\"password\"", "passwordHash", "$2a$", "secret", "\"token\"", "\"version\"")
-					.doesNotContain(staff.getPasswordHash()) // 이 직원의 실제 해시값
+					.doesNotContainIgnoringCase("\"password\"", "passwordHash", "secret", "\"token\"", "\"version\"")
+					.doesNotContain("$2a$", staff.getPasswordHash()) // BCrypt 접두사, 이 직원의 실제 해시값
+					.doesNotContain(session.getValue(), "eyJ") // 로그인 토큰 값 자체, JWT 머리
 					.doesNotContain("01012342323", "010-1234-2323") // 연락처 원문 (하이픈 있든 없든)
 					.doesNotContainPattern("\"01[0-9]{8,9}\""); // 값 전체가 연락처 원문인 칸
 		}
 		// 목록·상세에는 가린 번호만 나간다
 		assertThat(bodies.get(1)).contains("010-****-2323");
 		assertThat(bodies.get(2)).contains("010-****-2323");
+		// 빈 응답이라 통과한 게 아니다 — 거래 이력·설정에 실제 내용이 있다
+		assertThat(bodies.get(3)).contains("\"CHARGE\"");
+		assertThat(bodies.get(4)).contains("chargeMaxAmount");
 	}
 
 	@Test
@@ -131,7 +136,8 @@ class SecurityExposureApiIntegrationTest {
 		String wrongType = errorBodyOf(
 				chargeRequest(session, customer.customerId(), "{\"amount\":\"abc\"}")
 						.andExpect(status().isBadRequest())
-						.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST")));
+						.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
+						.andExpect(jsonPath("$.message").value("요청 본문을 읽을 수 없습니다.")));
 
 		// when·then 없는 경로 → 404 NOT_FOUND
 		String noPath = errorBodyOf(
@@ -142,7 +148,7 @@ class SecurityExposureApiIntegrationTest {
 
 		// then 세 응답 모두 내부 정보 흔적이 없다
 		for (String body : List.of(brokenJson, wrongType, noPath)) {
-			assertThat(body).doesNotContain(INTERNAL_TRACES);
+			assertThat(body).doesNotContainIgnoringCase(INTERNAL_TRACES.toArray(String[]::new));
 		}
 	}
 
@@ -161,7 +167,8 @@ class SecurityExposureApiIntegrationTest {
 						.andExpect(jsonPath("$.message").value("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")));
 
 		// then 응답에는 예외 이름·메시지·스택이 없다
-		assertThat(body).doesNotContain(INTERNAL_TRACES).doesNotContain(BoomController.SECRET_DETAIL);
+		assertThat(body).doesNotContainIgnoringCase(INTERNAL_TRACES.toArray(String[]::new))
+				.doesNotContain(BoomController.SECRET_DETAIL);
 		// then 서버 로그에는 같은 예외가 스택트레이스와 함께 남아 있다
 		assertThat(output.getOut())
 				.contains("unexpected error")
@@ -179,8 +186,8 @@ class SecurityExposureApiIntegrationTest {
 		charge(session, customer.customerId());
 		entityManager.flush();
 
-		// when 충전 본문에 balance 를 끼워 보낸다
-		chargeRequest(session, customer.customerId(), "{\"amount\": 1000, \"balance\": 999999}")
+		// when 충전 본문에 balance 를 끼워 보낸다 (값은 UUID 에 나올 수 없는 글자 — 로그에 없는지 볼 때 우연히 걸리지 않게)
+		chargeRequest(session, customer.customerId(), "{\"amount\": 1000, \"balance\": \"INJECTED_zz\"}")
 				// then 400 INVALID_INPUT, 어느 항목인지 알려 준다
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
@@ -190,10 +197,11 @@ class SecurityExposureApiIntegrationTest {
 		mockMvc.perform(withSession(get("/api/customers/{id}", customer.customerId()), session))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.balance").value(10000));
-		// then 서버 로그에 시도가 남는다 — 항목 이름만, 끼운 값은 없다
+		// then 서버 로그에 WARN 으로 시도가 남는다 — 항목 이름만, 끼운 값은 없다
 		assertThat(output.getOut())
-				.contains("unknown field rejected: method=POST path=/api/customers/" + customer.customerId() + "/charges field=balance")
-				.doesNotContain("999999");
+				.containsPattern("WARN .*" + Pattern.quote("unknown field rejected: method=POST path=/api/customers/"
+						+ customer.customerId() + "/charges field=balance"))
+				.doesNotContain("INJECTED_zz");
 	}
 
 	// 테스트에서만 등록되는 경로 — 운영 코드에는 없다
