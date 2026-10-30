@@ -8,10 +8,13 @@ import java.util.UUID;
  */
 public interface EmployeeRepository {
 
-	/** 새 직원을 추가한다 (INSERT). */
+	/** 새 직원을 추가하고 바로 DB 에 보낸다 (INSERT + flush). */
 	void add(Employee employee);
 
 	Optional<Employee> findById(UUID id);
+
+	/** 직원 계정이 하나라도 있는가 (비활성 직원 포함). 매장 개설은 계정이 하나도 없을 때만 열린다 (REQ-29). */
+	boolean existsAny();
 
 	Optional<Employee> findByLoginId(String loginId);
 

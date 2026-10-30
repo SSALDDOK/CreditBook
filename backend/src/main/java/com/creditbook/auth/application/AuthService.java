@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.auth.domain.Employee;
+import com.creditbook.auth.domain.EmployeeCredentialRules;
 import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.auth.domain.RevokedTokenRepository;
@@ -32,7 +33,7 @@ public class AuthService {
 	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
 	/** BCrypt 는 72바이트까지만 쓴다. 넘으면 IllegalArgumentException(500)이 되므로 대조 전에 거른다. */
-	static final int BCRYPT_MAX_PASSWORD_BYTES = 72;
+	static final int BCRYPT_MAX_PASSWORD_BYTES = EmployeeCredentialRules.PASSWORD_MAX_BYTES;
 
 	private static final String DUMMY_PASSWORD = "dummy-password-for-timing";
 

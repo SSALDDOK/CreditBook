@@ -34,7 +34,7 @@ public class Employee {
 	@Column(name = "password_hash", nullable = false, length = 100)
 	private String passwordHash;
 
-	@Column(name = "name", nullable = false, length = 50)
+	@Column(name = "name", nullable = false, length = EmployeeCredentialRules.NAME_MAX_LENGTH)
 	private String name;
 
 	@Enumerated(EnumType.STRING)
@@ -65,7 +65,7 @@ public class Employee {
 		this.id = UUID.randomUUID();
 		this.loginId = requireText(loginId, "loginId");
 		this.passwordHash = requireText(passwordHash, "passwordHash");
-		this.name = requireText(name, "name");
+		this.name = requireValidName(name);
 		this.role = Objects.requireNonNull(role, "role");
 		this.active = true;
 		// 처음 받은 비밀번호는 바꾸게 한다 (employees.must_change_password 기본값과 같음)
@@ -77,7 +77,9 @@ public class Employee {
 	/**
 	 * 새 직원을 만든다. 비밀번호는 이미 해시된 값을 받는다 (해시는 애플리케이션 계층의 PasswordEncoder 가 한다).
 	 *
-	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있을 때
+	 * 이름은 앞뒤 공백을 빼고 저장한다.
+	 *
+	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있거나, 이름이 {@value EmployeeCredentialRules#NAME_MAX_LENGTH}자를 넘을 때
 	 */
 	public static Employee create(String loginId, String passwordHash, String name, Role role, Instant createdAt) {
 		return new Employee(loginId, passwordHash, name, role, createdAt);
@@ -88,6 +90,15 @@ public class Employee {
 			throw new IllegalArgumentException(field + " must not be blank");
 		}
 		return value;
+	}
+
+	/** 앞뒤 공백을 뺀 이름. 글자 수는 코드 포인트로 센다 (PostgreSQL VARCHAR 의 글자 수와 같다). */
+	private static String requireValidName(String name) {
+		String stripped = requireText(name, "name").strip();
+		if (stripped.codePointCount(0, stripped.length()) > EmployeeCredentialRules.NAME_MAX_LENGTH) {
+			throw new IllegalArgumentException("name must be at most " + EmployeeCredentialRules.NAME_MAX_LENGTH + " characters");
+		}
+		return stripped;
 	}
 
 	/** 로그인할 수 있는 직원인가. 비활성 직원은 비밀번호가 맞아도 로그인할 수 없다. */

@@ -33,6 +33,8 @@ public enum ErrorCode {
 
 	// 403 — 권한
 	FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
+	/** 직원 계정이 이미 있는데 매장 개설 요청 (REQ-29). 매장 개설은 계정이 하나도 없을 때만 열린다. */
+	SETUP_ALREADY_COMPLETED(HttpStatus.FORBIDDEN, "이미 개설된 매장입니다. 로그인해 주세요."),
 
 	// 404 — 대상 없음
 	CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "고객을 찾을 수 없습니다."),
