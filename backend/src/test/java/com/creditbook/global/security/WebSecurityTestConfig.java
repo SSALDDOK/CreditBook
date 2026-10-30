@@ -42,6 +42,11 @@ public class WebSecurityTestConfig {
 			}
 
 			@Override
+			public boolean existsAny() {
+				return false;
+			}
+
+			@Override
 			public Optional<Employee> findByLoginId(String loginId) {
 				return Optional.empty();
 			}

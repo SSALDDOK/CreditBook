@@ -116,7 +116,8 @@ class SecurityComponentsTest {
 	}
 
 	@ParameterizedTest(name = "[{index}] {0} {1}")
-	@CsvSource({ "POST, /api/auth/login", "POST, /api/auth/logout", "GET, /actuator/health" })
+	@CsvSource({ "POST, /api/auth/login", "POST, /api/auth/logout", "GET, /actuator/health", "GET, /api/setup/status",
+			"POST, /api/setup" })
 	@DisplayName("인증이 필요 없는 경로에서는 쿠키가 있어도 토큰을 읽지 않는다")
 	void resolver_skips_public_endpoints(String method, String path) {
 		// given

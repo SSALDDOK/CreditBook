@@ -38,6 +38,8 @@ import com.creditbook.prepaid.domain.LedgerEntryNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidDomainException;
 import com.creditbook.prepaid.domain.ReversalConflictException;
+import com.creditbook.store.domain.InvalidStoreNameException;
+import com.creditbook.store.domain.SetupAlreadyCompletedException;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -288,6 +290,27 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidCredentialsException.class)
 	ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
 		return respond(ErrorCode.INVALID_CREDENTIALS, ErrorResponse.of(ErrorCode.INVALID_CREDENTIALS));
+	}
+
+	/**
+	 * 매장명 규칙 위반 (REQ-29). 요청 DTO 검증이 먼저 막으므로 여기까지 오는 것은 방어선이다.
+	 * 다른 입력 형식 오류와 같은 모양(INVALID_INPUT, fieldErrors 에 storeName)으로 응답한다. 입력값은 응답·로그에 남기지 않는다.
+	 */
+	@ExceptionHandler(InvalidStoreNameException.class)
+	ResponseEntity<ErrorResponse> handleInvalidStoreName(InvalidStoreNameException ex) {
+		log.debug("request validation failed: fields=[storeName]");
+		return respond(ErrorCode.INVALID_INPUT, ErrorResponse.of(ErrorCode.INVALID_INPUT,
+				List.of(new ErrorResponse.FieldError("storeName", ex.getMessage()))));
+	}
+
+	/**
+	 * 이미 개설된 매장에 개설 요청 (REQ-29) — 계정이 있거나, 동시 요청이 매장 행을 먼저 만들었을 때.
+	 * 로그인 없이 부르는 경로라 정상적인 거절이어도 시도 자체를 WARN 으로 남긴다. 매장명·아이디·이름은 남기지 않는다.
+	 */
+	@ExceptionHandler(SetupAlreadyCompletedException.class)
+	ResponseEntity<ErrorResponse> handleSetupAlreadyCompleted(SetupAlreadyCompletedException ex) {
+		log.warn("setup rejected: already completed");
+		return respond(ErrorCode.SETUP_ALREADY_COMPLETED, ErrorResponse.of(ErrorCode.SETUP_ALREADY_COMPLETED));
 	}
 
 	/**

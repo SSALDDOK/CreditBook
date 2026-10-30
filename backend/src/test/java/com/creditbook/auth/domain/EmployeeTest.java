@@ -79,6 +79,30 @@ class EmployeeTest {
 	}
 
 	@Test
+	@Tag("REQ-29")
+	@DisplayName("이름은 앞뒤 공백을 빼고 저장된다")
+	void name_is_stripped() {
+		// when
+		Employee employee = Employee.create("kim.owner", HASH, "  김사장 ", Role.ADMIN, CREATED_AT);
+
+		// then
+		assertThat(employee.getName()).isEqualTo("김사장");
+	}
+
+	@Test
+	@Tag("REQ-29")
+	@DisplayName("이름은 앞뒤 공백 제거 후 50자까지 저장되고 51자이면 직원을 만들 수 없다")
+	void name_longer_than_50_is_rejected() {
+		// given
+		String fifty = " " + "가".repeat(50) + " ";
+
+		// when / then
+		assertThat(Employee.create("kim.owner", HASH, fifty, Role.ADMIN, CREATED_AT).getName()).hasSize(50);
+		assertThatThrownBy(() -> Employee.create("kim.owner", HASH, "가".repeat(51), Role.ADMIN, CREATED_AT))
+				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
 	@DisplayName("역할·생성 시각이 없으면 직원을 만들 수 없다")
 	void null_role_or_time_is_rejected() {
 		assertThatThrownBy(() -> Employee.create("owner", HASH, "김사장", null, CREATED_AT))

@@ -46,6 +46,9 @@ public class SecurityConfig {
 	static final RequestMatcher PUBLIC_ENDPOINTS = new OrRequestMatcher(
 			pathPattern(HttpMethod.POST, "/api/auth/login"),
 			pathPattern(HttpMethod.POST, "/api/auth/logout"),
+			// 매장 개설 (REQ-29) — 계정이 하나도 없을 때만 열리므로 로그인 전에 부른다. 계정이 있으면 서비스가 403 으로 막는다
+			pathPattern(HttpMethod.GET, "/api/setup/status"),
+			pathPattern(HttpMethod.POST, "/api/setup"),
 			pathPattern(HttpMethod.GET, "/actuator/health"),
 			pathPattern("/error"));
 
