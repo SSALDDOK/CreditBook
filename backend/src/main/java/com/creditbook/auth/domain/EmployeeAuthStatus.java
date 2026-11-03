@@ -8,8 +8,9 @@ import java.util.Objects;
  * @param active 직원 활성 여부
  * @param role DB 에 저장된 역할
  * @param tokenRevoked 이 토큰(jti)이 로그아웃으로 폐기됐는가
+ * @param mustChangePassword 비밀번호를 바꿔야 하는 계정인가 (REQ-30). 참이면 비밀번호 변경·세션 조회·로그아웃 말고는 쓸 수 없다
  */
-public record EmployeeAuthStatus(boolean active, Role role, boolean tokenRevoked) {
+public record EmployeeAuthStatus(boolean active, Role role, boolean tokenRevoked, boolean mustChangePassword) {
 
 	public EmployeeAuthStatus {
 		Objects.requireNonNull(role, "role");

@@ -20,6 +20,8 @@ import com.creditbook.auth.domain.EmployeeRepository;
  * <li>직원이 있고 활성 상태인가 (비활성화되면 이미 받은 토큰도 다음 요청부터 401)</li>
  * <li>로그아웃으로 폐기된 토큰이 아닌가</li>
  * <li>권한(ROLE_ADMIN/ROLE_STAFF)은 토큰이 아니라 이 조회의 DB 역할로 붙인다</li>
+ * <li>비밀번호를 바꿔야 하는 계정(REQ-30)에는 역할 대신 {@value #PASSWORD_CHANGE_REQUIRED_AUTHORITY} 권한만 붙인다 —
+ * 보안 구성이 비밀번호 변경·세션 조회만 열어 두고 나머지는 403 PASSWORD_CHANGE_REQUIRED 로 막는다</li>
  * </ul>
  * 검증과 권한 부여를 같은 조회 결과로 해야 요청당 1쿼리가 되므로 별도 토큰 검증기 대신 여기서 확인한다.
  * 거절은 {@link InvalidBearerTokenException} 으로 던져 401 이 된다 — sub·jti 가 UUID 가 아니어도 500 이 아니라 401 이다.
@@ -27,6 +29,9 @@ import com.creditbook.auth.domain.EmployeeRepository;
  */
 @Component
 public class EmployeeJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+
+	/** 비밀번호를 바꿔야 하는 계정에 붙이는 유일한 권한 (ROLE_ 접두사 없음 — 역할 검사에 걸리지 않게). */
+	public static final String PASSWORD_CHANGE_REQUIRED_AUTHORITY = "PASSWORD_CHANGE_REQUIRED";
 
 	private final EmployeeRepository employeeRepository;
 
@@ -46,8 +51,8 @@ public class EmployeeJwtAuthenticationConverter implements Converter<Jwt, Abstra
 		if (status.tokenRevoked()) {
 			throw new InvalidBearerTokenException("token revoked");
 		}
-		return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(status.role().authority())),
-				employeeId.toString());
+		String authority = status.mustChangePassword() ? PASSWORD_CHANGE_REQUIRED_AUTHORITY : status.role().authority();
+		return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(authority)), employeeId.toString());
 	}
 
 	private static UUID parseUuid(String value, String claim) {

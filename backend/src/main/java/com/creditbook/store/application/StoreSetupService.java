@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.store.domain.SetupAlreadyCompletedException;
 import com.creditbook.store.domain.StoreProfile;
 import com.creditbook.store.domain.StoreProfileRepository;
@@ -63,7 +62,7 @@ public class StoreSetupService {
 		StoreProfile store = StoreProfile.open(storeName, now);
 		storeProfileRepository.add(store);
 
-		Employee admin = Employee.create(loginId, passwordEncoder.encode(rawPassword), ownerName, Role.ADMIN, now);
+		Employee admin = Employee.createOwner(loginId, passwordEncoder.encode(rawPassword), ownerName, now);
 		employeeRepository.add(admin);
 
 		log.info("store setup completed: adminEmployeeId={}", admin.getId());

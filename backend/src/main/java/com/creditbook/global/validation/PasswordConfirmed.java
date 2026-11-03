@@ -10,8 +10,8 @@ import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 
 /**
- * 비밀번호 확인이 비밀번호와 같은지 본다 (클래스 단위 제약). 다르면 위반을 {@code passwordConfirm} 항목에 붙인다 —
- * 응답의 fieldErrors[].field 가 "passwordConfirm" 이 된다. 둘 중 하나가 null 이면 각 항목의 {@code @NotNull} 에 맡기고 통과시킨다.
+ * 비밀번호 확인이 비밀번호와 같은지 본다 (클래스 단위 제약). 다르면 위반을 {@link #field()} 항목(기본 {@code passwordConfirm})에
+ * 붙인다 — 응답의 fieldErrors[].field 가 그 이름이 된다. 둘 중 하나가 null 이면 각 항목의 {@code @NotNull} 에 맡기고 통과시킨다.
  */
 @Documented
 @Constraint(validatedBy = PasswordConfirmedValidator.class)
@@ -20,6 +20,9 @@ import jakarta.validation.Payload;
 public @interface PasswordConfirmed {
 
 	String message() default "비밀번호 확인이 일치하지 않습니다.";
+
+	/** 위반을 붙일 요청 항목 이름. 비밀번호 변경 요청처럼 확인 항목 이름이 다르면 그 이름을 적는다. */
+	String field() default "passwordConfirm";
 
 	Class<?>[] groups() default {};
 

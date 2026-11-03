@@ -50,7 +50,7 @@ class EmployeeJwtAuthenticationConverterTest {
 	@DisplayName("활성 직원의 폐기되지 않은 토큰이면 DB 역할로 권한을 붙여 인증한다")
 	void active_employee_is_authenticated_with_db_role(Role role, String authority) {
 		// given
-		given(repository.findAuthStatus(EMPLOYEE_ID, JTI)).willReturn(Optional.of(new EmployeeAuthStatus(true, role, false)));
+		given(repository.findAuthStatus(EMPLOYEE_ID, JTI)).willReturn(Optional.of(new EmployeeAuthStatus(true, role, false, false)));
 
 		// when
 		AbstractAuthenticationToken authentication = converter.convert(jwt(EMPLOYEE_ID.toString(), JTI.toString()));
@@ -61,12 +61,31 @@ class EmployeeJwtAuthenticationConverterTest {
 		assertThat(authentication.getAuthorities()).extracting(GrantedAuthority::getAuthority).containsExactly(authority);
 	}
 
+	@ParameterizedTest(name = "[{index}] {0}")
+	@CsvSource({ "ADMIN", "STAFF" })
+	@Tag("REQ-30")
+	@DisplayName("비밀번호를 바꿔야 하는 계정은 역할 대신 비밀번호 변경 필요 권한만 받는다")
+	void must_change_password_employee_gets_only_password_change_authority(Role role) {
+		// given
+		given(repository.findAuthStatus(EMPLOYEE_ID, JTI))
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, role, false, true)));
+
+		// when
+		AbstractAuthenticationToken authentication = converter.convert(jwt(EMPLOYEE_ID.toString(), JTI.toString()));
+
+		// then
+		assertThat(authentication.isAuthenticated()).isTrue();
+		assertThat(authentication.getName()).isEqualTo(EMPLOYEE_ID.toString());
+		assertThat(authentication.getAuthorities()).extracting(GrantedAuthority::getAuthority)
+				.containsExactly(EmployeeJwtAuthenticationConverter.PASSWORD_CHANGE_REQUIRED_AUTHORITY);
+	}
+
 	@Test
 	@DisplayName("비활성 직원의 토큰은 거절한다")
 	void inactive_employee_is_rejected() {
 		// given
 		given(repository.findAuthStatus(EMPLOYEE_ID, JTI))
-				.willReturn(Optional.of(new EmployeeAuthStatus(false, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(false, Role.ADMIN, false, false)));
 
 		// when / then
 		assertThatThrownBy(() -> converter.convert(jwt(EMPLOYEE_ID.toString(), JTI.toString())))
@@ -78,7 +97,7 @@ class EmployeeJwtAuthenticationConverterTest {
 	void revoked_token_is_rejected() {
 		// given
 		given(repository.findAuthStatus(EMPLOYEE_ID, JTI))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.STAFF, true)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.STAFF, true, false)));
 
 		// when / then
 		assertThatThrownBy(() -> converter.convert(jwt(EMPLOYEE_ID.toString(), JTI.toString())))

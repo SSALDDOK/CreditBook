@@ -3,6 +3,7 @@ package com.creditbook.auth.application;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,13 +18,15 @@ import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeCredentialRules;
 import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.InvalidCredentialsException;
+import com.creditbook.auth.domain.InvalidCurrentPasswordException;
+import com.creditbook.auth.domain.PasswordUnchangedException;
 import com.creditbook.auth.domain.RevokedTokenRepository;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.JwtTokenService.IssuedToken;
 import com.creditbook.global.security.UnauthenticatedException;
 
 /**
- * 직원 로그인·로그아웃·세션 조회 (REQ-15·22, CB-42), 로그인 잠금 (REQ-15, CB-15).
+ * 직원 로그인·로그아웃·세션 조회 (REQ-15·22, CB-42), 로그인 잠금 (REQ-15, CB-15), 비밀번호 변경 (REQ-30, CB-45).
  * <p>
  * 로그인 실패는 사유(아이디 없음·비밀번호 틀림·비활성·비밀번호 72바이트 초과)를 응답에서 구분하지 않는다. 다만 있는 계정이
  * 연속 실패로 잠기면 423 으로 따로 알린다 — 잠금을 알려야 직원이 기다릴 수 있다. 응답 시간으로도 구분되지 않도록
@@ -130,6 +133,53 @@ public class AuthService {
 			revokedTokenRepository.revoke(token.jti(), token.employeeId(), token.expiresAt(), clock.instant());
 			log.info("logout: employeeId={}", token.employeeId());
 		}, () -> log.debug("logout without a valid token"));
+	}
+
+	/**
+	 * 로그인한 직원이 자기 비밀번호를 바꾼다 (REQ-30). 첫 로그인 강제 변경과 스스로 바꾸기에 같이 쓴다.
+	 * 바꾸면 비밀번호 변경 필요 표시를 내리고 연속 실패 횟수·잠금을 푼다. 다른 세션(토큰)은 끊지 않는다.
+	 * <p>
+	 * 순서: 직원 행 잠금 조회(없거나 비활성이면 401) → 잠겨 있으면 거절(현재 비밀번호를 대조하지 않는다) → 현재 비밀번호 대조 →
+	 * 틀리면 로그인 실패와 같은 횟수로 세고 기준 횟수째면 잠근다(REQ-15, 그 응답부터 423) → 새 비밀번호가 현재와 같으면 거절 → 변경.
+	 * 입력 형식(길이·72바이트·확인 일치)은 요청 DTO 가 이미 검사했다.
+	 * <p>
+	 * 실패로 끝나도 실패 횟수·잠금은 커밋돼야 하므로 두 실패 예외에는 롤백하지 않는다 ({@link #login} 과 같다).
+	 *
+	 * @throws UnauthenticatedException 직원이 없거나 비활성일 때
+	 * @throws AccountLockedException 잠긴 계정이거나, 이번 실패로 잠겼을 때
+	 * @throws InvalidCurrentPasswordException 현재 비밀번호가 틀렸을 때
+	 * @throws PasswordUnchangedException 새 비밀번호가 현재 비밀번호와 같을 때
+	 */
+	@Transactional(noRollbackFor = { InvalidCurrentPasswordException.class, AccountLockedException.class })
+	public AuthenticatedEmployee changePassword(UUID employeeId, String currentPassword, String newPassword) {
+		Objects.requireNonNull(currentPassword, "currentPassword");
+		Objects.requireNonNull(newPassword, "newPassword");
+		Employee employee = Optional.ofNullable(employeeId)
+				.flatMap(employeeRepository::findByIdForUpdate)
+				.filter(Employee::canLogin)
+				.orElseThrow(UnauthenticatedException::new);
+		Instant now = clock.instant();
+		if (employee.isLocked(now)) {
+			log.warn("password change rejected: employeeId={} reason=account locked", employee.getId());
+			throw new AccountLockedException(employee.lockRemaining(now));
+		}
+		if (!passwordEncoder.matches(currentPassword, employee.getPasswordHash())) {
+			boolean locked = employee.recordLoginFailure(now, loginLockProperties.maxFailures(),
+					loginLockProperties.duration());
+			log.warn("password change failed: employeeId={} reason=current password mismatch", employee.getId());
+			if (locked) {
+				log.warn("account locked: employeeId={} duration={}", employee.getId(), loginLockProperties.duration());
+				throw new AccountLockedException(employee.lockRemaining(now));
+			}
+			throw new InvalidCurrentPasswordException();
+		}
+		if (newPassword.equals(currentPassword)) {
+			log.warn("password change rejected: employeeId={} reason=unchanged", employee.getId());
+			throw new PasswordUnchangedException();
+		}
+		employee.changePassword(passwordEncoder.encode(newPassword), now);
+		log.info("password changed: employeeId={}", employee.getId());
+		return AuthenticatedEmployee.from(employee);
 	}
 
 	/**

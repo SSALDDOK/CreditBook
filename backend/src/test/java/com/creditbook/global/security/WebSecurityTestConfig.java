@@ -1,5 +1,6 @@
 package com.creditbook.global.security;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,8 +43,23 @@ public class WebSecurityTestConfig {
 			}
 
 			@Override
+			public Optional<Employee> findByIdForUpdate(UUID id) {
+				return Optional.empty();
+			}
+
+			@Override
 			public boolean existsAny() {
 				return false;
+			}
+
+			@Override
+			public boolean existsByLoginId(String loginId) {
+				return false;
+			}
+
+			@Override
+			public List<Employee> findAllForManagement() {
+				return List.of();
 			}
 
 			@Override

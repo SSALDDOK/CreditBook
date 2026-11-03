@@ -26,7 +26,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * 웹 보안 구성 (CB-42). 기본은 거부 — 아래 공개 경로 말고는 모두 로그인이 필요하다 (없는 경로도 401).
  * <ul>
  * <li>공개: POST /api/auth/login, POST /api/auth/logout, GET /actuator/health, /error</li>
- * <li>ADMIN 전용: {@link #ADMIN_ENDPOINTS} (REQ-16). STAFF 가 부르면 403</li>
+ * <li>비밀번호를 바꿔야 하는 계정(REQ-30)은 {@link #PASSWORD_CHANGE_ALLOWED_ENDPOINTS} 와 로그아웃만 쓸 수 있다.
+ * 그 밖은 403 PASSWORD_CHANGE_REQUIRED — 이 계정은 역할 대신 비밀번호 변경 필요 권한만 받으므로 역할 검사에서 걸린다</li>
+ * <li>ADMIN 전용: {@link #ADMIN_ENDPOINTS} (REQ-16·30). STAFF 가 부르면 403</li>
+ * <li>그 밖의 경로는 ADMIN·STAFF 역할이 있어야 한다 (로그인하지 않았으면 401)</li>
  * <li>리소스 서버 DSL 이 자동으로 여는 메타데이터 경로는 {@link ProtectedResourceMetadataBlockingFilter} 가 401 로 막는다</li>
  * <li>인증: {@value SessionCookies#NAME} 쿠키의 JWT 만 받는다 (Authorization 헤더 미사용). 서버 세션 없음(STATELESS)</li>
  * <li>로그인 IP 레이트 리밋: {@link LoginRateLimitFilter} 가 POST /api/auth/login 을 IP 별로 세어 넘으면 429 (REQ-15).
@@ -36,8 +39,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * </ul>
  * <p>
  * <b>CSRF 보호를 끄는 근거</b>: 세션 쿠키가 SameSite=Strict 라 다른 사이트에서 시작한 요청에는 실리지 않고, 프런트는 같은 출처(프록시)로
- * 배포하며, 상태를 바꾸는 API 는 JSON 본문(@RequestBody, application/json)을 받거나 PATCH 다 — 폼 전송(GET·POST 만 가능)으로는
- * 만들 수 없는 요청이다.
+ * 배포하며, 상태를 바꾸는 API 는 대부분 JSON 본문(@RequestBody, application/json)을 받거나 PATCH·PUT 이다 — 폼 전송(GET·POST 만
+ * 가능)으로는 만들 수 없는 요청이다. 본문 없는 POST(직원 비밀번호 초기화)는 폼으로 보낼 수 있지만 SameSite=Strict 쿠키가 실리지 않아
+ * 401 이 되고, 응답(초기 비밀번호)은 다른 출처에서 읽을 수 없다.
  * 켜 두면 CSRF 토큰이 없는 로그인 POST 부터 403 이 된다.
  */
 @Configuration(proxyBeanMethods = false)
@@ -55,9 +59,19 @@ public class SecurityConfig {
 			pathPattern(HttpMethod.GET, "/actuator/health"),
 			pathPattern("/error"));
 
-	/** 사장(ADMIN)만 부를 수 있는 경로 (REQ-16). 그 밖의 로그인 필요 경로는 ADMIN·STAFF 모두 쓴다. */
+	/**
+	 * 비밀번호를 바꿔야 하는 계정도 쓸 수 있는 경로 (REQ-30). 로그인만 확인하고 역할은 보지 않는다 — 세션 조회는 화면이 변경 필요 여부를
+	 * 알아야 해서, 비밀번호 변경은 그 계정이 할 수 있는 유일한 일이라서 연다. 로그아웃은 공개 경로라 따로 적지 않는다.
+	 */
+	static final RequestMatcher PASSWORD_CHANGE_ALLOWED_ENDPOINTS = new OrRequestMatcher(
+			pathPattern(HttpMethod.GET, "/api/auth/session"),
+			pathPattern(HttpMethod.PUT, "/api/auth/password"));
+
+	/** 사장(ADMIN)만 부를 수 있는 경로 (REQ-16·30). 그 밖의 로그인 필요 경로는 ADMIN·STAFF 모두 쓴다. */
 	static final RequestMatcher ADMIN_ENDPOINTS = new OrRequestMatcher(
-			pathPattern(HttpMethod.PATCH, "/api/customers/{id}/deactivate"));
+			pathPattern(HttpMethod.PATCH, "/api/customers/{id}/deactivate"),
+			// 직원 계정 관리 (REQ-30) — 목록·추가·비밀번호 초기화·비활성화 모두. 방식을 정하지 않아 새 경로도 자동으로 ADMIN 전용이다
+			pathPattern("/api/employees/**"));
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, EmployeeJwtAuthenticationConverter authenticationConverter,
@@ -73,8 +87,9 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+						.requestMatchers(PASSWORD_CHANGE_ALLOWED_ENDPOINTS).authenticated()
 						.requestMatchers(ADMIN_ENDPOINTS).hasRole("ADMIN")
-						.anyRequest().authenticated())
+						.anyRequest().hasAnyRole("ADMIN", "STAFF"))
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(authenticationEntryPoint)
 						.accessDeniedHandler(accessDeniedHandler))
@@ -109,7 +124,7 @@ public class SecurityConfig {
 	private static UrlBasedCorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(properties.allowedOrigins());
-		configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "OPTIONS"));
 		configuration.setAllowedHeaders(List.of("Content-Type", "Idempotency-Key"));
 		configuration.setAllowCredentials(true);
 		configuration.setMaxAge(3600L);

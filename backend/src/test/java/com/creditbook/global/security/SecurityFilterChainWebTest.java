@@ -62,7 +62,7 @@ class SecurityFilterChainWebTest {
 	void issueValidToken() {
 		validToken = tokenService.issue(EMPLOYEE_ID).value();
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		given(authService.session(EMPLOYEE_ID))
 				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false));
 	}
