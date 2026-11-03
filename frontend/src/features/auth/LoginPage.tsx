@@ -58,12 +58,11 @@ function formatRemaining(totalSeconds: number): string {
 /** SCR-1 로그인. 성공하면 next(원래 가려던·보던 화면, 같은 출처만) 또는 고객 목록으로 replace 이동한다. */
 export function LoginPage() {
   const { state, login } = useAuth()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const next = safeNextPath(params.get('next'))
-  // 세션 만료 안내는 제출 전·제출 중에만 보인다. 로그인에 실패하면 그 실패 안내만 남기려고 상태로 숨긴다
-  // (주소의 reason 은 그대로 둔다 — 새로고침하면 다시 보여도 된다)
-  const [expiredDismissed, setExpiredDismissed] = useState(false)
-  const expired = params.get('reason') === 'expired' && !expiredDismissed
+  // 세션 만료 안내는 제출 전·제출 중에만 보인다. 로그인에 실패하면 주소에서 reason 을 지워(next 는 남김)
+  // 그 실패 안내만 남기고, 새로고침해도 다시 나오지 않게 한다
+  const expired = params.get('reason') === 'expired'
 
   const loginIdId = useId()
   const passwordId = useId()
@@ -110,7 +109,16 @@ export function LoginPage() {
       const at = Date.now()
       setNow(at)
       setFailure(toLoginFailure(err, at))
-      setExpiredDismissed(true)
+      if (expired) {
+        setParams(
+          (prev) => {
+            const updated = new URLSearchParams(prev)
+            updated.delete('reason')
+            return updated
+          },
+          { replace: true },
+        )
+      }
       setPending(false)
     }
   }
@@ -138,7 +146,14 @@ export function LoginPage() {
           >
             {/* 잠금 문구만 알림으로 한 번 읽힌다. 남은 시간 줄은 알림 영역 밖의 role="timer"(기본 aria-live 꺼짐)라
                 매초 바뀌어도 화면낭독기가 다시 읽지 않는다 */}
-            <p role="alert">{failure.message}</p>
+            {/* 문장마다 줄을 바꾼다 — '잠겼습니다. 잠시 후'가 한 줄에 붙지 않게 */}
+            <p role="alert">
+              {failure.message.split(/(?<=\.)\s+/).map((sentence) => (
+                <span key={sentence} className="block">
+                  {sentence}
+                </span>
+              ))}
+            </p>
             {locked && (
               <p role="timer" data-testid="login-locked-remaining" className="mt-1 tabular-nums">
                 {formatRemaining(remainingSeconds)}
