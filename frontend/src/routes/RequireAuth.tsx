@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router'
 import { toUserMessage } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/AuthContext'
-import { loginPath } from './redirect'
+import { loginPath, PASSWORD_PATH } from './redirect'
 
 /** 세션 확인 중 표시. 확인이 끝나면 사라진다 — E2E 는 data-testid="auth-checking" 이 사라지기를 기다리면 된다. */
 export function AuthChecking() {
@@ -22,6 +22,8 @@ export function AuthChecking() {
 /**
  * 보호 라우트(레이아웃 라우트). 로그인이 확인되기 전에는 자식 라우트(보호 화면)를 그리지 않는다 — 잠깐이라도 고객 정보가 보이지 않게.
  * 로그인 안 됐으면 로그인 화면으로 replace 이동한다(원래 가려던 주소를 next 로).
+ * 비밀번호를 바꿔야 하는 세션(REQ-30 첫 로그인·초기화 직후)이면 비밀번호 변경 화면 외의 보호 화면을 그리지 않고 그곳으로 replace 이동한다
+ * — 로그인 직후 next 로 가려던 화면도 여기서 걸린다. 서버도 그 밖의 API 를 403 PASSWORD_CHANGE_REQUIRED 로 막는다.
  */
 export function RequireAuth() {
   const { state, recheck } = useAuth()
@@ -44,6 +46,9 @@ export function RequireAuth() {
     case 'anonymous':
       return <Navigate to={state.loginTarget ?? loginPath({ next: pathname + search + hash })} replace />
     case 'authenticated':
+      if (state.session.mustChangePassword && pathname !== PASSWORD_PATH) {
+        return <Navigate to={PASSWORD_PATH} replace />
+      }
       return <Outlet />
   }
 }

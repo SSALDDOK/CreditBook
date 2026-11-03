@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { getSession, login as apiLogin, logout as apiLogout, type LoginRequest } from '@/api/auth'
-import { ApiError, setUnauthorizedHandler } from '@/api/client'
+import {
+  changePassword as apiChangePassword,
+  getSession,
+  login as apiLogin,
+  logout as apiLogout,
+  type ChangePasswordRequest,
+  type LoginRequest,
+} from '@/api/auth'
+import { ApiError, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api/client'
 import { clearAllLedgerDrafts, clearLedgerDraftsExcept } from '@/features/ledger-input/draftStorage'
 import { LOGIN_PATH, loginPath } from '@/routes/redirect'
 import { AuthContext, type AuthContextValue, type AuthState } from './AuthContext'
@@ -10,7 +17,9 @@ import { AuthContext, type AuthContextValue, type AuthState } from './AuthContex
  * 인증 상태를 가진다. 하는 일:
  * 1. 처음 열릴 때 GET /api/auth/session 으로 로그인 여부를 확인한다(쿠키는 화면이 읽을 수 없다)
  * 2. 보호 API 의 401 을 한 곳에서 받아 "세션 만료"로 로그인 화면에 보낸다(원래 보던 화면을 next 로)
- * 3. 뒤로가기 캐시(bfcache)에서 페이지가 되살아나면 그 자리에서 화면을 가리고 세션을 다시 확인한다
+ * 3. 보호 API 의 403 PASSWORD_CHANGE_REQUIRED(사장이 비밀번호를 초기화한 직후의 기존 세션 등)를 받으면 세션을 다시 확인한다 —
+ *    새 세션 응답의 mustChangePassword 가 true 라 보호 라우트가 비밀번호 변경 화면으로 보낸다
+ * 4. 뒤로가기 캐시(bfcache)에서 페이지가 되살아나면 그 자리에서 화면을 가리고 세션을 다시 확인한다
  *
  * 상태가 바뀔 때마다 세대(generation)를 올리고, 늦게 도착한 세션 확인 응답이 그 사이의 로그인·로그아웃을 덮어쓰지 않게 한다.
  */
@@ -65,7 +74,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [transition],
   )
 
-  // 3. bfcache 복원 — 로그아웃 뒤 뒤로가기로 예전 문서가 통째로 되살아나도 고객 정보가 남아 보이지 않게 한다.
+  // 3. 403 PASSWORD_CHANGE_REQUIRED → 세션 다시 확인. 로그인 상태이고 아직 변경 필요로 알고 있지 않을 때만
+  //    (여러 요청이 동시에 403 이어도 한 번만 — 확인 중에는 상태가 checking 이다)
+  useEffect(
+    () =>
+      setPasswordChangeRequiredHandler(() => {
+        const current = stateRef.current
+        if (current.status !== 'authenticated' || current.session.mustChangePassword) return
+        startCheck(transition({ status: 'checking' }))
+      }),
+    [transition, startCheck],
+  )
+
+  // 4. bfcache 복원 — 로그아웃 뒤 뒤로가기로 예전 문서가 통째로 되살아나도 고객 정보가 남아 보이지 않게 한다.
   //    flushSync 로 복원 직후 바로 보호 화면을 내리고(checking), 서버에 세션을 다시 묻는다
   useEffect(() => {
     function onPageShow(e: PageTransitionEvent) {
@@ -99,13 +120,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     transition({ status: 'anonymous', loginTarget: LOGIN_PATH })
   }, [transition])
 
+  const changePassword = useCallback(
+    async (request: ChangePasswordRequest) => {
+      const session = await apiChangePassword(request)
+      checkController.current?.abort()
+      transition({ status: 'authenticated', session })
+    },
+    [transition],
+  )
+
   const recheck = useCallback(() => {
     startCheck(transition({ status: 'checking' }))
   }, [transition, startCheck])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ state, login, logout, recheck }),
-    [state, login, logout, recheck],
+    () => ({ state, login, logout, changePassword, recheck }),
+    [state, login, logout, changePassword, recheck],
   )
   return <AuthContext value={value}>{children}</AuthContext>
 }
