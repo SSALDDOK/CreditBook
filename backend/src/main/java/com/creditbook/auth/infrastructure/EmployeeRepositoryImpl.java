@@ -1,10 +1,13 @@
 package com.creditbook.auth.infrastructure;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.stereotype.Repository;
 
+import com.creditbook.auth.domain.DuplicateLoginIdException;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeAuthStatus;
 import com.creditbook.auth.domain.EmployeeRepository;
@@ -12,12 +15,16 @@ import com.creditbook.auth.domain.Role;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PersistenceException;
 
 /**
  * {@link EmployeeRepository} 의 JPA 구현. id 를 도메인이 직접 할당하므로 추가는 persist 로 한다 (save 는 merge 로 동작).
  */
 @Repository
 class EmployeeRepositoryImpl implements EmployeeRepository {
+
+	/** V1__init.sql 의 로그인 아이디 유니크 제약. */
+	static final String LOGIN_ID_UNIQUE = "ux_employees_login_id";
 
 	@PersistenceContext
 	private EntityManager em;
@@ -30,17 +37,42 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 
 	/**
 	 * persist 후 바로 flush 한다 — INSERT 와 제약 위반(ux_employees_login_id 등)이 커밋 시점이 아니라 호출 안에서 드러나게 한다.
-	 * 매장 개설은 이 뒤에 성공 로그를 남기므로, 로그가 실제로 DB 가 받아들인 INSERT 뒤에 찍힌다.
+	 * 매장 개설·직원 추가는 이 뒤에 성공 로그를 남기므로, 로그가 실제로 DB 가 받아들인 INSERT 뒤에 찍힌다.
+	 * 같은 아이디로 동시에 추가해 사전 확인을 함께 지나간 늦은 쪽은 여기서 {@link DuplicateLoginIdException}(409)이 된다 (500 이 아니라).
+	 * 다른 제약 위반은 바꾸지 않고 그대로 다시 던진다.
 	 */
 	@Override
 	public void add(Employee employee) {
 		em.persist(employee);
-		em.flush();
+		try {
+			em.flush();
+		}
+		catch (PersistenceException ex) {
+			if (LOGIN_ID_UNIQUE.equals(violatedConstraint(ex))) {
+				throw new DuplicateLoginIdException(ex);
+			}
+			throw ex;
+		}
+	}
+
+	/** 원인 사슬에서 Hibernate 가 판별한 제약 이름. 제약 위반이 아니면 null. */
+	static String violatedConstraint(Throwable ex) {
+		for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+			if (cause instanceof ConstraintViolationException violation) {
+				return violation.getConstraintName();
+			}
+		}
+		return null;
 	}
 
 	@Override
 	public Optional<Employee> findById(UUID id) {
 		return jpaRepository.findById(id);
+	}
+
+	@Override
+	public Optional<Employee> findByIdForUpdate(UUID id) {
+		return jpaRepository.findByIdForUpdate(id);
 	}
 
 	/**
@@ -55,17 +87,29 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 	}
 
 	@Override
+	public boolean existsByLoginId(String loginId) {
+		return jpaRepository.existsByLoginId(loginId);
+	}
+
+	@Override
+	public List<Employee> findAllForManagement() {
+		return jpaRepository.findAllForManagement();
+	}
+
+	@Override
 	public Optional<Employee> findByLoginIdForUpdate(String loginId) {
 		return jpaRepository.findByLoginIdForUpdate(loginId);
 	}
 
+	/** 비밀번호 변경 필요 여부는 값을 못 읽으면(null) 참으로 본다 — 별칭이 어긋나도 차단이 조용히 꺼지지 않게 한다. */
 	@Override
 	public Optional<EmployeeAuthStatus> findAuthStatus(UUID employeeId, UUID jti) {
 		return jpaRepository.findAuthStatus(employeeId, jti)
 				.map(row -> new EmployeeAuthStatus(
 						Boolean.TRUE.equals(row.getActive()),
 						Role.valueOf(row.getRole()),
-						Boolean.TRUE.equals(row.getRevoked())));
+						Boolean.TRUE.equals(row.getRevoked()),
+						!Boolean.FALSE.equals(row.getMustChangePassword())));
 	}
 
 }

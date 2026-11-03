@@ -26,6 +26,12 @@ public enum ErrorCode {
 	/** 취소할 수 없는 거래 — 다른 고객의 거래, 유형이 맞지 않는 거래, 반제 거래 (REQ-34). 사유는 message 에 실린다. */
 	INVALID_CANCEL_TARGET(HttpStatus.BAD_REQUEST, "취소할 수 없는 거래입니다."),
 
+	// 400 — 비밀번호 변경 (REQ-30)
+	/** 비밀번호 변경 때 현재 비밀번호가 틀림. 로그인 실패와 같은 연속 실패 횟수로 센다 (기준 횟수째면 ACCOUNT_LOCKED). */
+	INVALID_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호가 올바르지 않습니다."),
+	/** 새 비밀번호가 현재 비밀번호와 같음. */
+	PASSWORD_UNCHANGED(HttpStatus.BAD_REQUEST, "현재 비밀번호와 다른 비밀번호를 입력해 주세요."),
+
 	// 401 — 인증
 	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
 	/** 로그인 실패. 아이디 없음·비밀번호 틀림·비활성 직원을 구분하지 않는다. */
@@ -35,10 +41,13 @@ public enum ErrorCode {
 	FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
 	/** 직원 계정이 이미 있는데 매장 개설 요청 (REQ-29). 매장 개설은 계정이 하나도 없을 때만 열린다. */
 	SETUP_ALREADY_COMPLETED(HttpStatus.FORBIDDEN, "이미 개설된 매장입니다. 로그인해 주세요."),
+	/** 비밀번호를 바꿔야 하는 계정이 비밀번호 변경·세션 조회·로그아웃 말고 다른 기능을 부름 (REQ-30). 보안 필터가 거절한다. */
+	PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 변경한 뒤 이용해 주세요."),
 
 	// 404 — 대상 없음
 	CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "고객을 찾을 수 없습니다."),
 	LEDGER_ENTRY_NOT_FOUND(HttpStatus.NOT_FOUND, "거래를 찾을 수 없습니다."),
+	EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "직원을 찾을 수 없습니다."),
 
 	// 4xx — Spring MVC 가 판단하는 요청 오류
 	NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
@@ -63,6 +72,11 @@ public enum ErrorCode {
 
 	/** 같은 연락처의 고객이 이미 있음 (REQ-1). 같은 번호 고객 id·이름·활성 여부는 응답의 details 에 실린다. 확인 표시로 다시 요청하면 등록된다. */
 	DUPLICATE_PHONE(HttpStatus.CONFLICT, "같은 번호의 고객이 있습니다."),
+
+	/** 직원 추가 때 같은 로그인 아이디가 이미 있음 (REQ-30). 비활성 직원 포함, 대소문자 구분 정확 일치. */
+	DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
+	/** 사장 계정이나 본인 계정을 비활성화·비밀번호 초기화 (REQ-30). 사장 교체·분실 복구는 운영자 절차로 한다. */
+	ADMIN_ACCOUNT_PROTECTED(HttpStatus.CONFLICT, "사장님 계정은 비활성화하거나 비밀번호를 초기화할 수 없습니다."),
 
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),

@@ -33,10 +33,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.global.security.JwtTestSupport.MutableClock;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 /**
  * 로그인 잠금(423)·IP 레이트 리밋(429) 통합 테스트 (REQ-15·TC-53).
@@ -376,7 +376,7 @@ class LoginLockApiIntegrationTest {
 	//테스트용 직원 (트랜잭션을 열어 저장하고 바로 커밋)
 	private void saveEmployee(String loginId) {
 		transactionTemplate.executeWithoutResult(status -> employeeRepository.add(
-				Employee.create(loginId, passwordEncoder.encode(PASSWORD), "잠금테스트", Role.STAFF, clock.instant())));
+				TestEmployees.readyStaff(loginId, passwordEncoder.encode(PASSWORD), "잠금테스트", clock.instant())));
 	}
 
 	//DB 칸 직접 읽기

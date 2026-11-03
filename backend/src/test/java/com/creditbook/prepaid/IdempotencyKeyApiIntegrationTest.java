@@ -29,12 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -114,7 +114,7 @@ class IdempotencyKeyApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = Employee.create(loginId, passwordEncoder.encode("test1234!"), "테스트직원", Role.STAFF,
+		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());
