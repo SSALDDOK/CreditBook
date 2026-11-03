@@ -29,7 +29,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 - **하루는 새벽 6시에 끝난다** (2026-10-26): 10-27 01시는 아직 10-26이다. 몇 일차인지, 처리 결과·Pass 보고·댓글 날짜는 이 기준으로 적되, Notion·Jira 본문에는 기준 자체를 쓰지 않는다
 - **제안마다 근거 줄** (2026-10-26): 제안·코워크 질문 답·범위 조정·위임 프롬프트 끝에 `확인한 근거: <REQ 경계 조건 · Jira 설명(결정 날짜) · 스프린트 카드 절 · TC/테스트 계획서 § · 코드 file:line> / 못 본 것: <…>`를 붙인다. "못 본 것"이 있으면 제안 전에 먼저 읽고, 읽을 수 없으면 그대로 적는다. 착수·위임·자르는 선을 정할 때는 REQ 경계 조건·Jira 결정 이력·스프린트 카드 조건을 먼저 읽고 Must를 앞에 둔다
 - **S6 타임박싱은 코워크 채팅에서 확정** (2026-11-02): 개발 쪽은 항목별 추정치·순서 의견만 `처리 결과`에 주고 표를 따로 만들지 않는다. 확정본은 S6 카드
-- **마이그레이션 메모** (2026-10-30 확인): `employees.must_change_password`는 V1에 이미 있어 CB-45는 마이그레이션이 필요 없다. V4는 CB-15 잠금 칸(연속 실패 횟수·잠금 끝 시각)만. Neon에는 V3도 아직 없으므로 배포 때 V3·V4를 함께 적용하는 순서를 배포 이슈에서 정한다
+- **마이그레이션 메모** (2026-10-30 확인): `employees.must_change_password`는 V1에 이미 있어 CB-45는 마이그레이션이 필요 없다. V4는 CB-15 잠금 칸(연속 실패 횟수·잠금 끝 시각)만(11-03 구현). Neon에는 V3도 아직 없으므로 배포 때 V3·V4를 함께 적용하는 순서를 배포 이슈에서 정한다
 
 ### 기술 설계는 리포가 먼저 (2026-09-28 사용자 결정 — "Notion이 먼저" 원칙의 예외)
 스키마·기술 설계(인덱스, 트리거, 권한, 제약조건, JPA 매핑 등)는 Claude Code가 설계하고, 코워크는 문서로 정리한다.
@@ -160,6 +160,7 @@ com.creditbook
 |---|---|
 | REQ-1 고객 등록 | 이름·연락처 필수, 메모 선택. 같은 연락처 고객(비활성 포함)이 있으면 `confirmDuplicatePhone`이 true가 아닐 때 저장하지 않고 409 `DUPLICATE_PHONE`(`details`에 기존 고객 id·이름·활성 여부) → 화면이 확인 창을 띄우고 다시 보낸다 (CB-51, S4 완료) |
 | REQ-7 충전 취소 | **당일**(Asia/Seoul, `LedgerEntry.isSameBusinessDay` 하나로 판단) 충전 건만, 사유 필수. 전액 취소만. `POST /api/customers/{customerId}/charges/{chargeEntryId}/cancel`. 검사 순서 대상 → 사유 → 당일 → 잔액. 당일이 아니면 409 `CHARGE_CANCEL_NOT_SAME_DAY`, 취소 후 잔액이 음수가 되면 409 `CHARGE_ALREADY_USED`("먼저 사용 건을 취소해 주세요" 안내), 이미 취소됐으면 409 `ALREADY_CANCELLED`(문구는 유형별) (CB-9, S4 완료) |
+| REQ-15 로그인 잠금·레이트 리밋 | 있는 계정만 연속 5회 실패 → 5분 잠금(늘리지 않음, 성공·만료 후 초기화, 없는 아이디는 저장 안 함). 5번째 실패 응답부터·잠긴 동안은 올바른 비밀번호도 423 `ACCOUNT_LOCKED`(`details.retryAfterSeconds` 올림 + `Retry-After`, 쿠키 없음). 실패 횟수는 실패 예외에서도 커밋(`noRollbackFor`), 로그인 조회는 행 잠금. 잠금보다 먼저 `POST /api/auth/login`을 IP별 고정 창(1분 10회)으로 세어 넘으면 429 `LOGIN_RATE_LIMITED` + `Retry-After`(details 없음, 화면은 남은 시간 표시 안 함). IP는 `forward-headers-strategy: native`로 바로잡은 `getRemoteAddr()`만 — 배포 때 프록시 뒤 실제 IP 확인 필요. 기준값은 `creditbook.auth.login-lock.*`·`login-rate-limit.*`, 테스트 설정·CI E2E는 레이트 리밋 한도를 올린다 (CB-15, 11-02 승인, TC-53) |
 | REQ-34 사용 취소 (Must) | **전액** 취소만, **기한 없음**, 사유 필수. `USE_CANCEL` 반제 행 추가로 잔액 복구 |
 | 반제 공통 | 원본 1건당 반제 1건(`ux_ledger_entries_reverses`). 반제 대상은 **같은 계좌**, 유형 대응(`CHARGE_CANCEL`→`CHARGE`, `USE_CANCEL`→`USE`), 반제 행은 다시 반제 불가 — DB 제약으로 표현 불가하므로 도메인에서 검증 |
 | REQ-4 고객 비활성화 | 잔액 0원인 고객만. 기본 목록에서 사라지되 거래 이력은 조회됨 (CB-38, S3 완료 — `PATCH /api/customers/{id}/deactivate`, ADMIN 전용, 잔액이 남으면 409 `CUSTOMER_BALANCE_NOT_ZERO`, 이미 비활성이면 204). 비활성 고객은 목록의 '비활성 포함' 토글(`includeInactive`)로 찾는다 |
@@ -180,14 +181,14 @@ com.creditbook
 | 테이블 | 핵심 제약·인덱스·트리거 (이름으로 대화할 때 참고) |
 |---|---|
 | `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` — 단일 매장 전제(여러 매장은 범위 밖, 2026-10-30) |
-| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role` |
+| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role`. V4(CB-15): `failed_login_count`·`locked_until`(NULL = 잠기지 않음), `ck_employees_failed_login_count`(>= 0, 상한은 설정값이라 두지 않음). **Neon 미적용** |
 | `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
 | `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version` — Optimistic Lock(낙관적 락) |
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
 | `revoked_tokens` (V3, CB-42) | 로그아웃한 토큰의 `jti` PK, `employee_id` FK, `ix_revoked_tokens_expires_at`(만료 지난 행 정리용). 인증 요청마다 직원 활성·역할과 함께 1쿼리로 조회. **Neon 미적용** |
 
-- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. V3(`revoked_tokens`, CB-42)는 로컬 Docker DB·Testcontainers에만 적용됐다. 다음 스키마 변경은 `V4__...sql`부터 새 파일로 만든다.
+- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. V3(`revoked_tokens`, CB-42)·V4(`employees` 로그인 잠금 칸, CB-15 — 2026-11-02 Neon 롤백 검증)는 로컬 Docker DB·Testcontainers에만 적용됐다. 다음 스키마 변경은 `V5__...sql`부터 새 파일로 만든다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
 - **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.

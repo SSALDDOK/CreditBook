@@ -42,6 +42,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import com.creditbook.auth.application.AuthService;
 import com.creditbook.auth.application.AuthenticatedEmployee;
 import com.creditbook.auth.application.LoginResult;
+import com.creditbook.auth.domain.AccountLockedException;
 import com.creditbook.auth.domain.EmployeeAuthStatus;
 import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.InvalidCredentialsException;
@@ -127,6 +128,24 @@ class AuthControllerTest {
 				.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
 				.andExpect(content().json("""
 						{"code":"INVALID_CREDENTIALS","message":"아이디 또는 비밀번호가 올바르지 않습니다.","fieldErrors":[]}
+						""", org.springframework.test.json.JsonCompareMode.STRICT));
+	}
+
+	@Test
+	@DisplayName("잠긴 계정이면 423 ACCOUNT_LOCKED 로 응답하고, 남은 초(올림)를 details 와 Retry-After 에 싣고 쿠키를 심지 않는다")
+	void locked_account_returns_423_with_retry_after() throws Exception {
+		// given — 남은 4분 59.2초 → 올림 300초
+		given(authService.login(anyString(), anyString()))
+				.willThrow(new AccountLockedException(Duration.ofSeconds(299, 200_000_000)));
+
+		// when / then
+		login("{\"loginId\":\"owner\",\"password\":\"correct\"}")
+				.andExpect(status().isLocked())
+				.andExpect(header().string(HttpHeaders.RETRY_AFTER, "300"))
+				.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+				.andExpect(content().json("""
+						{"code":"ACCOUNT_LOCKED","message":"로그인을 5회 실패해 계정이 잠겼습니다. 잠시 후 다시 시도해 주세요.",
+						 "fieldErrors":[],"details":{"retryAfterSeconds":300}}
 						""", org.springframework.test.json.JsonCompareMode.STRICT));
 	}
 

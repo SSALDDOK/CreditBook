@@ -79,6 +79,14 @@ public record ErrorResponse(
 
 	}
 
+	/**
+	 * 잠긴 계정(ACCOUNT_LOCKED)의 부가 정보. 화면이 언제 다시 시도할 수 있는지 안내할 수 있게 한다. Retry-After 헤더와 같은 값이다.
+	 *
+	 * @param retryAfterSeconds 잠금이 풀릴 때까지 남은 초 (올림, 1 이상)
+	 */
+	public record AccountLockedDetails(long retryAfterSeconds) {
+	}
+
 	public static ErrorResponse of(ErrorCode errorCode) {
 		return new ErrorResponse(errorCode.name(), errorCode.defaultMessage(), List.of(), null);
 	}

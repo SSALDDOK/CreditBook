@@ -2,6 +2,7 @@ package com.creditbook.global.security;
 
 import static org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher.pathPattern;
 
+import java.time.Clock;
 import java.util.List;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -28,6 +29,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * <li>ADMIN 전용: {@link #ADMIN_ENDPOINTS} (REQ-16). STAFF 가 부르면 403</li>
  * <li>리소스 서버 DSL 이 자동으로 여는 메타데이터 경로는 {@link ProtectedResourceMetadataBlockingFilter} 가 401 로 막는다</li>
  * <li>인증: {@value SessionCookies#NAME} 쿠키의 JWT 만 받는다 (Authorization 헤더 미사용). 서버 세션 없음(STATELESS)</li>
+ * <li>로그인 IP 레이트 리밋: {@link LoginRateLimitFilter} 가 POST /api/auth/login 을 IP 별로 세어 넘으면 429 (REQ-15).
+ * CORS·보안 헤더 필터 뒤, 인증 필터 앞이다</li>
  * <li>401·403 은 {@link RestAuthenticationEntryPoint}·{@link RestAccessDeniedHandler} 가 ErrorResponse 형식으로 응답한다.
  * 진입점은 일반 예외 처리와 리소스 서버(토큰 오류) 두 곳에 모두 지정한다 — 한쪽만 지정하면 토큰 오류가 기본 응답(빈 본문)으로 나간다</li>
  * </ul>
@@ -39,7 +42,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({ CorsProperties.class, LoginRateLimitProperties.class })
 public class SecurityConfig {
 
 	/** 로그인 없이 부를 수 있는 경로. 이 경로에서는 쿠키의 토큰을 읽지도 않는다 ({@link CookieBearerTokenResolver}). */
@@ -59,7 +62,8 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, EmployeeJwtAuthenticationConverter authenticationConverter,
 			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler,
-			CorsProperties corsProperties) throws Exception {
+			CorsProperties corsProperties, LoginRateLimitProperties loginRateLimitProperties, Clock clock,
+			SecurityErrorResponseWriter errorResponseWriter) throws Exception {
 		http
 				.csrf(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
@@ -81,6 +85,9 @@ public class SecurityConfig {
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter)));
 		// DSL 이 자동으로 여는 메타데이터 경로를 막는다. 메타데이터 필터(인증 필터 바로 앞)보다 확실히 앞에 두려고 LogoutFilter 자리를 기준으로 한다
 		http.addFilterBefore(new ProtectedResourceMetadataBlockingFilter(authenticationEntryPoint), LogoutFilter.class);
+		// 로그인 요청 수 제한 (REQ-15). CorsFilter·HeaderWriterFilter 뒤라 429 에도 CORS·보안 헤더가 붙고, 본문을 읽거나 DB 를 조회하기 전에 거절한다.
+		// 체인 빈이 하나라 필터 인스턴스(IP 별 횟수)도 하나다 — 서블릿 필터로 따로 등록되지 않게 빈으로 만들지 않는다
+		http.addFilterBefore(new LoginRateLimitFilter(loginRateLimitProperties, clock, errorResponseWriter), LogoutFilter.class);
 		if (corsProperties.isEnabled()) {
 			http.cors(cors -> cors.configurationSource(corsConfigurationSource(corsProperties)));
 		}

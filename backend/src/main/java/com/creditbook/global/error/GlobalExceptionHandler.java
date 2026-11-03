@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import com.creditbook.auth.domain.AccountLockedException;
 import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
 import com.creditbook.customer.domain.CustomerInactiveException;
@@ -290,6 +292,19 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(InvalidCredentialsException.class)
 	ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
 		return respond(ErrorCode.INVALID_CREDENTIALS, ErrorResponse.of(ErrorCode.INVALID_CREDENTIALS));
+	}
+
+	/**
+	 * 연속 로그인 실패로 잠긴 계정 (REQ-15). 남은 초(올림)를 details 와 Retry-After 헤더에 같은 값으로 싣는다. 세션 쿠키는 심지 않는다.
+	 * WARN 로그는 서비스가 직원 ID 와 함께 남기므로 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(AccountLockedException.class)
+	ResponseEntity<ErrorResponse> handleAccountLocked(AccountLockedException ex) {
+		long retryAfter = ex.getRetryAfterSeconds();
+		return ResponseEntity.status(ErrorCode.ACCOUNT_LOCKED.status())
+				.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfter))
+				.body(ErrorResponse.of(ErrorCode.ACCOUNT_LOCKED, ErrorCode.ACCOUNT_LOCKED.defaultMessage(),
+						new ErrorResponse.AccountLockedDetails(retryAfter)));
 	}
 
 	/**

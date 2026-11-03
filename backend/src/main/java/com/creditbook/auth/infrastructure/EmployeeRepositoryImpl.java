@@ -55,8 +55,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 	}
 
 	@Override
-	public Optional<Employee> findByLoginId(String loginId) {
-		return jpaRepository.findByLoginId(loginId);
+	public Optional<Employee> findByLoginIdForUpdate(String loginId) {
+		return jpaRepository.findByLoginIdForUpdate(loginId);
 	}
 
 	@Override

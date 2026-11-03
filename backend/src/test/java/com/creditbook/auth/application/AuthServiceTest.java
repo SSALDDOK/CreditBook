@@ -3,7 +3,9 @@ package com.creditbook.auth.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
@@ -13,7 +15,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,7 +30,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.creditbook.auth.domain.AccountLockedException;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.InvalidCredentialsException;
@@ -53,16 +59,20 @@ class AuthServiceTest {
 	private final PasswordEncoder passwordEncoder = spy(new BCryptPasswordEncoder(4));
 	private final MutableClock clock = new MutableClock(NOW);
 	private final JwtTokenService tokenService = JwtTestSupport.tokenService(JwtTestSupport.randomProperties(), clock);
+	private static final int MAX_FAILURES = 5;
+	private static final Duration LOCK = Duration.ofMinutes(5);
+	private final LoginLockProperties loginLockProperties = new LoginLockProperties(MAX_FAILURES, LOCK);
 
 	private AuthService authService;
 	private Employee owner;
 
 	@BeforeEach
 	void setUp() {
-		authService = new AuthService(employeeRepository, revokedTokenRepository, passwordEncoder, tokenService, clock);
+		authService = new AuthService(employeeRepository, revokedTokenRepository, passwordEncoder, tokenService, clock,
+				loginLockProperties);
 		owner = Employee.create("owner", passwordEncoder.encode(PASSWORD), "김사장", Role.ADMIN,
 				Instant.parse("2026-10-01T00:00:00Z"));
-		given(employeeRepository.findByLoginId("owner")).willReturn(Optional.of(owner));
+		given(employeeRepository.findByLoginIdForUpdate("owner")).willReturn(Optional.of(owner));
 		clearInvocations(passwordEncoder);
 	}
 
@@ -93,7 +103,7 @@ class AuthServiceTest {
 	@DisplayName("없는 아이디면 로그인에 실패하고, 응답 시간 차이를 없애려고 더미 해시와 한 번 대조한다")
 	void login_fails_with_unknown_login_id_after_dummy_compare() {
 		// given
-		given(employeeRepository.findByLoginId("nobody")).willReturn(Optional.empty());
+		given(employeeRepository.findByLoginIdForUpdate("nobody")).willReturn(Optional.empty());
 
 		// when / then
 		assertThatThrownBy(() -> authService.login("nobody", PASSWORD))
@@ -109,7 +119,7 @@ class AuthServiceTest {
 		given(inactive.getId()).willReturn(UUID.randomUUID());
 		given(inactive.getPasswordHash()).willReturn(owner.getPasswordHash());
 		given(inactive.canLogin()).willReturn(false);
-		given(employeeRepository.findByLoginId("retired")).willReturn(Optional.of(inactive));
+		given(employeeRepository.findByLoginIdForUpdate("retired")).willReturn(Optional.of(inactive));
 
 		// when / then
 		assertThatThrownBy(() -> authService.login("retired", PASSWORD))
@@ -137,7 +147,7 @@ class AuthServiceTest {
 		String password72 = "가".repeat(24);
 		assertThat(password72.getBytes(StandardCharsets.UTF_8)).hasSize(72);
 		Employee staff = Employee.create("staff1", passwordEncoder.encode(password72), "이직원", Role.STAFF, NOW);
-		given(employeeRepository.findByLoginId("staff1")).willReturn(Optional.of(staff));
+		given(employeeRepository.findByLoginIdForUpdate("staff1")).willReturn(Optional.of(staff));
 
 		// when
 		LoginResult result = authService.login("staff1", password72);
@@ -153,6 +163,150 @@ class AuthServiceTest {
 	void null_inputs_are_invalid_credentials() {
 		assertThatThrownBy(() -> authService.login(null, PASSWORD)).isInstanceOf(InvalidCredentialsException.class);
 		assertThatThrownBy(() -> authService.login("owner", null)).isInstanceOf(InvalidCredentialsException.class);
+	}
+
+	private void failLogin(int times) {
+		for (int i = 0; i < times; i++) {
+			assertThatThrownBy(() -> authService.login("owner", "wrong-password"))
+					.isInstanceOf(InvalidCredentialsException.class);
+		}
+	}
+
+	@Test
+	@DisplayName("4번째 실패까지는 401, 연속 5번째 실패 응답부터 계정이 잠겨 423 으로 거절하고 남은 시간은 5분이다")
+	void fifth_failure_locks_account() {
+		// given
+		failLogin(MAX_FAILURES - 1);
+
+		// when / then
+		assertThatThrownBy(() -> authService.login("owner", "wrong-password"))
+				.isInstanceOfSatisfying(AccountLockedException.class,
+						ex -> assertThat(ex.getRetryAfterSeconds()).isEqualTo(300));
+		assertThat(owner.isLocked(NOW)).isTrue();
+		assertThat(owner.getFailedLoginCount()).isEqualTo(MAX_FAILURES);
+	}
+
+	@Test
+	@DisplayName("잠긴 동안에는 올바른 비밀번호도 423 으로 거절하고, 비밀번호를 대조하지 않으며 토큰을 발급하지 않는다")
+	void locked_account_rejects_correct_password_without_compare() {
+		// given
+		failLogin(MAX_FAILURES - 1);
+		assertThatThrownBy(() -> authService.login("owner", "wrong-password")).isInstanceOf(AccountLockedException.class);
+		clock.set(NOW.plus(LOCK).minusSeconds(1));
+		clearInvocations(passwordEncoder);
+
+		// when / then
+		assertThatThrownBy(() -> authService.login("owner", PASSWORD))
+				.isInstanceOfSatisfying(AccountLockedException.class,
+						ex -> assertThat(ex.getRetryAfterSeconds()).isEqualTo(1));
+		verify(passwordEncoder, never()).matches(anyString(), anyString());
+		assertThat(owner.getLastLoginAt()).isNull();
+		assertThat(owner.getFailedLoginCount()).isEqualTo(MAX_FAILURES);
+	}
+
+	@Test
+	@DisplayName("잠금 5분이 지나면 올바른 비밀번호로 로그인되고 실패 횟수가 초기화된다")
+	void login_succeeds_after_lock_expires() {
+		// given
+		failLogin(MAX_FAILURES - 1);
+		assertThatThrownBy(() -> authService.login("owner", "wrong-password")).isInstanceOf(AccountLockedException.class);
+		clock.set(NOW.plus(LOCK));
+
+		// when
+		LoginResult result = authService.login("owner", PASSWORD);
+
+		// then
+		assertThat(result.employee().employeeId()).isEqualTo(owner.getId());
+		assertThat(owner.getFailedLoginCount()).isZero();
+		assertThat(owner.getLockedUntil()).isNull();
+	}
+
+	@Test
+	@DisplayName("성공하면 실패 횟수가 초기화돼, 그 뒤 4번 더 틀려도 잠기지 않는다")
+	void success_resets_failure_count() {
+		// given
+		failLogin(MAX_FAILURES - 1);
+		authService.login("owner", PASSWORD);
+
+		// when
+		failLogin(MAX_FAILURES - 1);
+
+		// then
+		assertThat(owner.isLocked(NOW)).isFalse();
+		assertThat(owner.getFailedLoginCount()).isEqualTo(MAX_FAILURES - 1);
+	}
+
+	@Test
+	@DisplayName("없는 아이디는 몇 번을 시도해도 항상 401 이고 저장소에 아무것도 쓰지 않는다")
+	void unknown_login_id_is_never_locked() {
+		// given
+		given(employeeRepository.findByLoginIdForUpdate("nobody")).willReturn(Optional.empty());
+
+		// when / then
+		for (int i = 0; i < MAX_FAILURES + 2; i++) {
+			assertThatThrownBy(() -> authService.login("nobody", PASSWORD))
+					.isInstanceOf(InvalidCredentialsException.class);
+		}
+		verify(employeeRepository, times(MAX_FAILURES + 2)).findByLoginIdForUpdate("nobody");
+		verify(employeeRepository, never()).add(any());
+	}
+
+	@Test
+	@DisplayName("비활성 직원의 틀린 비밀번호도 실패로 센다 — 계정이 있으므로")
+	void inactive_employee_wrong_password_counts_as_failure() {
+		// given
+		Employee inactive = mock(Employee.class);
+		given(inactive.getId()).willReturn(UUID.randomUUID());
+		given(inactive.getPasswordHash()).willReturn(owner.getPasswordHash());
+		given(inactive.canLogin()).willReturn(false);
+		given(employeeRepository.findByLoginIdForUpdate("retired")).willReturn(Optional.of(inactive));
+
+		// when / then
+		assertThatThrownBy(() -> authService.login("retired", "wrong-password"))
+				.isInstanceOf(InvalidCredentialsException.class);
+		verify(inactive).recordLoginFailure(eq(NOW), eq(MAX_FAILURES), eq(LOCK));
+	}
+
+	@Test
+	@DisplayName("비활성 직원이 비밀번호를 맞히면 401 이고 실패로 세지 않는다")
+	void inactive_employee_correct_password_is_not_counted() {
+		// given
+		Employee inactive = mock(Employee.class);
+		given(inactive.getId()).willReturn(UUID.randomUUID());
+		given(inactive.getPasswordHash()).willReturn(owner.getPasswordHash());
+		given(inactive.canLogin()).willReturn(false);
+		given(employeeRepository.findByLoginIdForUpdate("retired")).willReturn(Optional.of(inactive));
+
+		// when / then
+		assertThatThrownBy(() -> authService.login("retired", PASSWORD))
+				.isInstanceOf(InvalidCredentialsException.class);
+		verify(inactive, never()).recordLoginFailure(any(), anyInt(), any());
+	}
+
+	@Test
+	@DisplayName("72바이트를 넘는 비밀번호도 있는 계정이면 실패로 센다")
+	void too_long_password_counts_as_failure() {
+		// when
+		assertThatThrownBy(() -> authService.login("owner", "a".repeat(73)))
+				.isInstanceOf(InvalidCredentialsException.class);
+
+		// then
+		assertThat(owner.getFailedLoginCount()).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("로그인 실패·잠금 예외로 끝나도 트랜잭션을 롤백하지 않는다 — 실패 횟수·잠금이 커밋돼야 한다")
+	void login_transaction_commits_on_failure_exceptions() throws NoSuchMethodException {
+		// given
+		Method login = AuthService.class.getMethod("login", String.class, String.class);
+
+		// when
+		Transactional transactional = login.getAnnotation(Transactional.class);
+
+		// then
+		assertThat(transactional).isNotNull();
+		assertThat(transactional.noRollbackFor())
+				.contains(InvalidCredentialsException.class, AccountLockedException.class);
 	}
 
 	@Test

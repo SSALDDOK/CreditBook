@@ -47,7 +47,7 @@ public class WebSecurityTestConfig {
 			}
 
 			@Override
-			public Optional<Employee> findByLoginId(String loginId) {
+			public Optional<Employee> findByLoginIdForUpdate(String loginId) {
 				return Optional.empty();
 			}
 
