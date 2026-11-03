@@ -47,6 +47,9 @@ function toLoginFailure(e: unknown, now: number): LoginFailure {
   return { kind: 'field', message: NETWORK_ERROR_MESSAGE }
 }
 
+// 카드 위 안내 상자(만료·잠금·429) 공통. 글자는 화면설계 13px, 한글이 단어 중간에서 끊기지 않게 keep-all
+const NOTICE_TEXT = 'mt-6 rounded-xl border px-4 py-4 text-[13px] font-semibold break-keep'
+
 /** 남은 초를 '남은 시간 N분 N초'로. 1분 미만이어도 '0분 45초'로 쓴다(화면 문구 표 형식). */
 function formatRemaining(totalSeconds: number): string {
   return `남은 시간 ${Math.floor(totalSeconds / 60)}분 ${totalSeconds % 60}초`
@@ -55,8 +58,10 @@ function formatRemaining(totalSeconds: number): string {
 /** SCR-1 로그인. 성공하면 next(원래 가려던·보던 화면, 같은 출처만) 또는 고객 목록으로 replace 이동한다. */
 export function LoginPage() {
   const { state, login } = useAuth()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const next = safeNextPath(params.get('next'))
+  // 세션 만료 안내는 제출 전·제출 중에만 보인다. 로그인에 실패하면 주소에서 reason 을 지워(next 는 남김)
+  // 그 실패 안내만 남기고, 새로고침해도 다시 나오지 않게 한다
   const expired = params.get('reason') === 'expired'
 
   const loginIdId = useId()
@@ -104,13 +109,23 @@ export function LoginPage() {
       const at = Date.now()
       setNow(at)
       setFailure(toLoginFailure(err, at))
+      if (expired) {
+        setParams(
+          (prev) => {
+            const updated = new URLSearchParams(prev)
+            updated.delete('reason')
+            return updated
+          },
+          { replace: true },
+        )
+      }
       setPending(false)
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-sidebar px-6 py-12">
-      <main className="w-full max-w-[25rem] rounded-3xl bg-background px-8 py-10 shadow-sm sm:px-10">
+      <main className="w-full max-w-[26rem] rounded-3xl bg-background px-8 py-10 shadow-sm sm:px-10">
         <h1 className="text-4xl font-bold tracking-tight">CreditBook</h1>
         <p className="mt-2 text-lg text-muted-foreground">매장 선결제 장부</p>
 
@@ -118,7 +133,7 @@ export function LoginPage() {
           <p
             role="status"
             data-testid="login-expired-notice"
-            className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 font-semibold text-amber-800"
+            className={cn(NOTICE_TEXT, 'border-amber-300 bg-amber-50 text-amber-800')}
           >
             {SESSION_EXPIRED_MESSAGE}
           </p>
@@ -127,11 +142,18 @@ export function LoginPage() {
         {failure?.kind === 'locked' && (
           <div
             data-testid="login-locked-notice"
-            className="mt-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-4 font-semibold text-destructive"
+            className={cn(NOTICE_TEXT, 'border-destructive/30 bg-destructive/10 text-destructive')}
           >
             {/* 잠금 문구만 알림으로 한 번 읽힌다. 남은 시간 줄은 알림 영역 밖의 role="timer"(기본 aria-live 꺼짐)라
                 매초 바뀌어도 화면낭독기가 다시 읽지 않는다 */}
-            <p role="alert">{failure.message}</p>
+            {/* 문장마다 줄을 바꾼다 — '잠겼습니다. 잠시 후'가 한 줄에 붙지 않게 */}
+            <p role="alert">
+              {failure.message.split(/(?<=\.)\s+/).map((sentence) => (
+                <span key={sentence} className="block">
+                  {sentence}
+                </span>
+              ))}
+            </p>
             {locked && (
               <p role="timer" data-testid="login-locked-remaining" className="mt-1 tabular-nums">
                 {formatRemaining(remainingSeconds)}
@@ -144,7 +166,7 @@ export function LoginPage() {
           <p
             role="alert"
             data-testid="login-rate-limited-notice"
-            className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 font-semibold text-amber-800"
+            className={cn(NOTICE_TEXT, 'border-amber-300 bg-amber-50 text-amber-800')}
           >
             {LOGIN_RATE_LIMITED_MESSAGE}
           </p>
@@ -166,7 +188,12 @@ export function LoginPage() {
             name="loginId"
             type="text"
             value={loginId}
-            onChange={(e) => setLoginId(e.target.value)}
+            onChange={(e) => {
+              setLoginId(e.target.value)
+              // 잠금은 계정 단위라 아이디를 바꾸면 다른 직원이 바로 로그인할 수 있게 잠금 안내를 지운다.
+              // 잠긴 아이디로 다시 시도하면 서버가 다시 423 과 남은 시간을 준다
+              if (failure?.kind === 'locked') setFailure(null)
+            }}
             disabled={pending}
             autoComplete="username"
             autoCapitalize="none"
