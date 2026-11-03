@@ -67,6 +67,14 @@ public enum ErrorCode {
 	// 409 — 동시성
 	CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
 
+	// 423 — 로그인 잠금 (REQ-15)
+	/** 연속 로그인 실패로 잠긴 계정. 잠긴 동안은 비밀번호가 맞아도 거절한다. 남은 초는 details 와 Retry-After 헤더에 실린다. */
+	ACCOUNT_LOCKED(HttpStatus.LOCKED, "로그인을 5회 실패해 계정이 잠겼습니다. 잠시 후 다시 시도해 주세요."),
+
+	// 429 — 요청 수 제한 (REQ-15)
+	/** 같은 IP 의 로그인 요청이 너무 많음. 창이 끝날 때까지 남은 초는 Retry-After 헤더에 실린다 (details 없음). */
+	LOGIN_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
+
 	// 500
 	INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 

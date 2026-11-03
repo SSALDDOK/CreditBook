@@ -1,5 +1,6 @@
 package com.creditbook.auth.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -49,6 +50,14 @@ public class Employee {
 
 	@Column(name = "last_login_at")
 	private Instant lastLoginAt;
+
+	/** 연속 로그인 실패 횟수 (REQ-15). 성공하거나 잠금이 끝난 뒤 다시 틀리면 처음부터 센다. */
+	@Column(name = "failed_login_count", nullable = false)
+	private int failedLoginCount;
+
+	/** 잠금이 끝나는 시각. null 이면 잠기지 않았다. 이 시각부터는 풀린 것으로 본다. */
+	@Column(name = "locked_until")
+	private Instant lockedUntil;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -107,10 +116,59 @@ public class Employee {
 	}
 
 	/**
-	 * 로그인 성공을 기록한다. {@code updatedAt} 은 프로필 변경 시각이라 건드리지 않는다.
+	 * 로그인 성공을 기록하고 연속 실패 횟수·잠금을 초기화한다. {@code updatedAt} 은 프로필 변경 시각이라 건드리지 않는다.
 	 */
 	public void recordLogin(Instant loggedInAt) {
 		this.lastLoginAt = Objects.requireNonNull(loggedInAt, "loggedInAt");
+		this.failedLoginCount = 0;
+		this.lockedUntil = null;
+	}
+
+	/**
+	 * 지금 잠겨 있는가 (REQ-15). 잠금 끝 시각과 같거나 지났으면 풀린 것으로 본다.
+	 * 잠긴 동안은 비밀번호가 맞아도 로그인할 수 없다.
+	 */
+	public boolean isLocked(Instant now) {
+		Objects.requireNonNull(now, "now");
+		return lockedUntil != null && now.isBefore(lockedUntil);
+	}
+
+	/** 잠금이 풀릴 때까지 남은 시간. 잠겨 있지 않으면 0. */
+	public Duration lockRemaining(Instant now) {
+		return isLocked(now) ? Duration.between(now, lockedUntil) : Duration.ZERO;
+	}
+
+	/**
+	 * 로그인 실패(비밀번호 틀림)를 기록한다 (REQ-15). 연속 실패가 {@code maxFailures} 번이 되면 {@code lockDuration} 동안 잠근다.
+	 * 잠금 시간은 늘리지 않는다. 잠금이 끝난 뒤의 실패는 횟수를 1부터 다시 센다.
+	 * {@code updatedAt} 은 프로필 변경 시각이라 건드리지 않는다.
+	 *
+	 * @return 이 실패로 계정이 잠겼으면 true
+	 * @throws IllegalStateException 이미 잠긴 계정 — 잠긴 동안은 비밀번호를 대조하지 않으므로 실패도 기록하지 않는다
+	 * @throws IllegalArgumentException 기준 횟수가 1 미만이거나 잠금 시간이 0 이하일 때
+	 */
+	public boolean recordLoginFailure(Instant now, int maxFailures, Duration lockDuration) {
+		Objects.requireNonNull(lockDuration, "lockDuration");
+		if (maxFailures < 1) {
+			throw new IllegalArgumentException("maxFailures must be at least 1");
+		}
+		if (lockDuration.isNegative() || lockDuration.isZero()) {
+			throw new IllegalArgumentException("lockDuration must be positive");
+		}
+		if (isLocked(now)) {
+			throw new IllegalStateException("account is locked");
+		}
+		if (lockedUntil != null) {
+			// 잠금이 끝났다 — 횟수를 처음부터 센다
+			this.failedLoginCount = 0;
+			this.lockedUntil = null;
+		}
+		this.failedLoginCount++;
+		if (failedLoginCount >= maxFailures) {
+			this.lockedUntil = now.plus(lockDuration);
+			return true;
+		}
+		return false;
 	}
 
 	public UUID getId() {
@@ -144,6 +202,15 @@ public class Employee {
 
 	public Instant getLastLoginAt() {
 		return lastLoginAt;
+	}
+
+	public int getFailedLoginCount() {
+		return failedLoginCount;
+	}
+
+	/** 잠금 끝 시각. 지난 시각일 수 있다 — 잠김 여부는 {@link #isLocked(Instant)} 로 본다. */
+	public Instant getLockedUntil() {
+		return lockedUntil;
 	}
 
 	public Instant getCreatedAt() {

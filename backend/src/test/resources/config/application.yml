@@ -1,0 +1,8 @@
+# 테스트 전용 설정 — classpath:/config/application.yml 은 main 의 classpath:/application.yml 보다 우선하고, 여기 없는 값은 main 값을 그대로 쓴다.
+# 테스트 클래스의 @SpringBootTest(properties = ...)·@TestPropertySource 는 이 파일보다 우선하므로 클래스마다 다시 덮을 수 있다.
+creditbook:
+  auth:
+    login-rate-limit:
+      # MockMvc 요청은 모두 같은 IP(127.0.0.1)라 운영 기준(1분 10회)이면 로그인을 여러 번 하는 테스트가 429 에 걸린다.
+      # 레이트 리밋 자체를 검증하는 테스트는 그 클래스에서 낮춰 쓴다
+      max-requests: 10000

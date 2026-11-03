@@ -87,7 +87,7 @@ npm run lint       # oxlint
 
 ### 로컬 실행
 
-1. 리포 루트에서 `docker compose up -d` → `backend/`에서 `./gradlew bootRun` (기본 프로필 `local-docker` — Neon 프로필 `local`로 돌리지 않는다)
+1. 리포 루트에서 `docker compose up -d` → `backend/`에서 `./gradlew bootRun` (기본 프로필 `local-docker` — Neon 프로필 `local`로 돌리지 않는다). E2E는 테스트마다 같은 IP에서 로그인하므로 로그인 IP 레이트 리밋(기본 1분 10회)을 올려서 띄운다: `bootRun` 전에 `$env:CREDITBOOK_AUTH_LOGINRATELIMIT_MAXREQUESTS='10000'`
 2. 처음 한 번 직원 시드: `backend/dev/seed-local.sql` 머리말의 명령. ADMIN `owner`, STAFF `staff`가 만들어진다
 3. 시드할 때 넣은 비밀번호를 환경변수로 넘겨 실행한다 (PowerShell)
    ```powershell
