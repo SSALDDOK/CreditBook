@@ -70,7 +70,7 @@ class AuthServiceTest {
 	void setUp() {
 		authService = new AuthService(employeeRepository, revokedTokenRepository, passwordEncoder, tokenService, clock,
 				loginLockProperties);
-		owner = Employee.create("owner", passwordEncoder.encode(PASSWORD), "김사장", Role.ADMIN,
+		owner = Employee.createOwner("owner", passwordEncoder.encode(PASSWORD), "김사장",
 				Instant.parse("2026-10-01T00:00:00Z"));
 		given(employeeRepository.findByLoginIdForUpdate("owner")).willReturn(Optional.of(owner));
 		clearInvocations(passwordEncoder);
@@ -83,7 +83,7 @@ class AuthServiceTest {
 		LoginResult result = authService.login("owner", PASSWORD);
 
 		// then
-		assertThat(result.employee()).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, true));
+		assertThat(result.employee()).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false));
 		assertThat(result.token().expiresAt()).isEqualTo(NOW.plus(JwtTestSupport.TTL));
 		assertThat(tokenService.verify(result.token().value()))
 				.get().extracting(VerifiedToken::employeeId).isEqualTo(owner.getId());
@@ -146,7 +146,7 @@ class AuthServiceTest {
 		// given
 		String password72 = "가".repeat(24);
 		assertThat(password72.getBytes(StandardCharsets.UTF_8)).hasSize(72);
-		Employee staff = Employee.create("staff1", passwordEncoder.encode(password72), "이직원", Role.STAFF, NOW);
+		Employee staff = Employee.createStaff("staff1", passwordEncoder.encode(password72), "이직원", NOW);
 		given(employeeRepository.findByLoginIdForUpdate("staff1")).willReturn(Optional.of(staff));
 
 		// when
@@ -356,7 +356,7 @@ class AuthServiceTest {
 		AuthenticatedEmployee employee = authService.session(owner.getId());
 
 		// then
-		assertThat(employee).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, true));
+		assertThat(employee).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false));
 	}
 
 	@Test

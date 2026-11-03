@@ -9,6 +9,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.creditbook.auth.application.AuthService;
 import com.creditbook.auth.application.AuthenticatedEmployee;
 import com.creditbook.auth.application.LoginResult;
+import com.creditbook.auth.controller.dto.ChangePasswordRequest;
 import com.creditbook.auth.controller.dto.LoginRequest;
 import com.creditbook.auth.controller.dto.SessionResponse;
 import com.creditbook.global.security.SessionCookies;
@@ -24,7 +26,7 @@ import com.creditbook.global.security.UnauthenticatedException;
 import jakarta.validation.Valid;
 
 /**
- * 직원 로그인·로그아웃·세션 조회 API (REQ-15·22). 토큰은 HttpOnly 쿠키로만 주고받고 응답 본문에는 싣지 않는다.
+ * 직원 로그인·로그아웃·세션 조회·비밀번호 변경 API (REQ-15·22·30). 토큰은 HttpOnly 쿠키로만 주고받고 응답 본문에는 싣지 않는다.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -63,6 +65,23 @@ public class AuthController {
 			throw new UnauthenticatedException();
 		}
 		AuthenticatedEmployee employee = authService.session(UUID.fromString(jwt.getSubject()));
+		return SessionResponse.of(employee, jwt.getExpiresAt());
+	}
+
+	/**
+	 * 로그인한 직원의 비밀번호 변경 (REQ-30). 첫 로그인 강제 변경과 스스로 바꾸기에 같이 쓴다 — 비밀번호를 바꿔야 하는 계정도 부를 수 있다.
+	 * 응답은 세션 조회와 같은 모양이고 만료 시각은 지금 토큰의 만료 시각이다 (토큰을 새로 발급하지 않는다).
+	 * 현재 비밀번호가 틀리면 400 INVALID_CURRENT_PASSWORD(로그인 실패와 같은 횟수로 센다, 기준 횟수째면 423 ACCOUNT_LOCKED),
+	 * 새 비밀번호가 현재와 같으면 400 PASSWORD_UNCHANGED.
+	 */
+	@PutMapping("/password")
+	public SessionResponse changePassword(@AuthenticationPrincipal Jwt jwt,
+			@Valid @RequestBody ChangePasswordRequest request) {
+		if (jwt == null) {
+			throw new UnauthenticatedException();
+		}
+		AuthenticatedEmployee employee = authService.changePassword(UUID.fromString(jwt.getSubject()),
+				request.currentPassword(), request.newPassword());
 		return SessionResponse.of(employee, jwt.getExpiresAt());
 	}
 

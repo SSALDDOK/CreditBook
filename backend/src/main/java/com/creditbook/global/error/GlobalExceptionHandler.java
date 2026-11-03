@@ -16,7 +16,12 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.creditbook.auth.domain.AccountLockedException;
+import com.creditbook.auth.domain.AdminAccountProtectedException;
+import com.creditbook.auth.domain.DuplicateLoginIdException;
+import com.creditbook.auth.domain.EmployeeNotFoundException;
 import com.creditbook.auth.domain.InvalidCredentialsException;
+import com.creditbook.auth.domain.InvalidCurrentPasswordException;
+import com.creditbook.auth.domain.PasswordUnchangedException;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
 import com.creditbook.customer.domain.CustomerInactiveException;
 import com.creditbook.customer.domain.CustomerNotFoundException;
@@ -305,6 +310,33 @@ public class GlobalExceptionHandler {
 				.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfter))
 				.body(ErrorResponse.of(ErrorCode.ACCOUNT_LOCKED, ErrorCode.ACCOUNT_LOCKED.defaultMessage(),
 						new ErrorResponse.AccountLockedDetails(retryAfter)));
+	}
+
+	// 직원 관리·비밀번호 변경 (REQ-30). 거절 WARN 로그는 서비스가 직원 ID 와 함께 남기므로 여기서는 다시 남기지 않는다
+
+	@ExceptionHandler(DuplicateLoginIdException.class)
+	ResponseEntity<ErrorResponse> handleDuplicateLoginId(DuplicateLoginIdException ex) {
+		return respond(ErrorCode.DUPLICATE_LOGIN_ID, ErrorResponse.of(ErrorCode.DUPLICATE_LOGIN_ID));
+	}
+
+	@ExceptionHandler(EmployeeNotFoundException.class)
+	ResponseEntity<ErrorResponse> handleEmployeeNotFound(EmployeeNotFoundException ex) {
+		return respond(ErrorCode.EMPLOYEE_NOT_FOUND, ErrorResponse.of(ErrorCode.EMPLOYEE_NOT_FOUND));
+	}
+
+	@ExceptionHandler(AdminAccountProtectedException.class)
+	ResponseEntity<ErrorResponse> handleAdminAccountProtected(AdminAccountProtectedException ex) {
+		return respond(ErrorCode.ADMIN_ACCOUNT_PROTECTED, ErrorResponse.of(ErrorCode.ADMIN_ACCOUNT_PROTECTED));
+	}
+
+	@ExceptionHandler(InvalidCurrentPasswordException.class)
+	ResponseEntity<ErrorResponse> handleInvalidCurrentPassword(InvalidCurrentPasswordException ex) {
+		return respond(ErrorCode.INVALID_CURRENT_PASSWORD, ErrorResponse.of(ErrorCode.INVALID_CURRENT_PASSWORD));
+	}
+
+	@ExceptionHandler(PasswordUnchangedException.class)
+	ResponseEntity<ErrorResponse> handlePasswordUnchanged(PasswordUnchangedException ex) {
+		return respond(ErrorCode.PASSWORD_UNCHANGED, ErrorResponse.of(ErrorCode.PASSWORD_UNCHANGED));
 	}
 
 	/**

@@ -31,12 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 import com.creditbook.support.WithMockEmployee;
 import com.jayway.jsonpath.JsonPath;
 
@@ -278,7 +278,7 @@ class CustomerSearchApiIntegrationTest {
 
     // ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
     private Employee saveAdmin(String loginId) {
-        Employee admin = Employee.create(loginId, passwordEncoder.encode("test5678!"), "테스트사장", Role.ADMIN,
+        Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
                 clock.instant());
         employeeRepository.add(admin);
         return admin;

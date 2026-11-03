@@ -21,10 +21,12 @@ class EmployeeTest {
 	private static final String HASH = "$2a$10$abcdefghijklmnopqrstuuJ8m0zW8V0u1Yy3s3b4c5d6e7f8g9h0i";
 
 	@Test
-	@DisplayName("새 직원은 활성 상태이고 처음 받은 비밀번호를 바꿔야 한다")
-	void new_employee_is_active_and_must_change_password() {
+	@Tag("REQ-29")
+	@Tag("REQ-30")
+	@DisplayName("매장 개설로 만든 사장 계정은 활성 상태이고 비밀번호를 바꾸라고 하지 않는다")
+	void owner_is_active_and_does_not_need_password_change() {
 		// when
-		Employee employee = Employee.create("owner", HASH, "김사장", Role.ADMIN, CREATED_AT);
+		Employee employee = Employee.createOwner("owner", HASH, "김사장", CREATED_AT);
 
 		// then
 		assertThat(employee.getId()).isNotNull();
@@ -34,8 +36,29 @@ class EmployeeTest {
 		assertThat(employee.getRole()).isEqualTo(Role.ADMIN);
 		assertThat(employee.isActive()).isTrue();
 		assertThat(employee.canLogin()).isTrue();
-		assertThat(employee.mustChangePassword()).isTrue();
+		assertThat(employee.mustChangePassword()).isFalse();
 		assertThat(employee.getLastLoginAt()).isNull();
+		assertThat(employee.getCreatedAt()).isEqualTo(CREATED_AT);
+		assertThat(employee.getUpdatedAt()).isEqualTo(CREATED_AT);
+	}
+
+	@Test
+	@Tag("REQ-30")
+	@DisplayName("사장이 추가한 직원은 STAFF 권한의 활성 계정이고 처음 받은 비밀번호를 바꿔야 한다")
+	void staff_is_active_and_must_change_password() {
+		// when
+		Employee employee = Employee.createStaff("staff1", HASH, "이직원", CREATED_AT);
+
+		// then
+		assertThat(employee.getId()).isNotNull();
+		assertThat(employee.getLoginId()).isEqualTo("staff1");
+		assertThat(employee.getPasswordHash()).isEqualTo(HASH);
+		assertThat(employee.getName()).isEqualTo("이직원");
+		assertThat(employee.getRole()).isEqualTo(Role.STAFF);
+		assertThat(employee.isActive()).isTrue();
+		assertThat(employee.mustChangePassword()).isTrue();
+		assertThat(employee.getFailedLoginCount()).isZero();
+		assertThat(employee.getLockedUntil()).isNull();
 		assertThat(employee.getCreatedAt()).isEqualTo(CREATED_AT);
 		assertThat(employee.getUpdatedAt()).isEqualTo(CREATED_AT);
 	}
@@ -44,7 +67,7 @@ class EmployeeTest {
 	@DisplayName("로그인에 성공하면 마지막 로그인 시각만 바뀌고 프로필 변경 시각은 그대로다")
 	void record_login_changes_only_last_login_at() {
 		// given
-		Employee employee = Employee.create("staff1", HASH, "이직원", Role.STAFF, CREATED_AT);
+		Employee employee = Employee.createStaff("staff1", HASH, "이직원", CREATED_AT);
 		Instant loggedInAt = Instant.parse("2026-10-07T09:00:00Z");
 
 		// when
@@ -59,7 +82,7 @@ class EmployeeTest {
 	@DisplayName("직원의 문자열 표현에는 비밀번호 해시와 로그인 아이디가 없다")
 	void to_string_hides_password_hash() {
 		// when
-		String text = Employee.create("owner", HASH, "김사장", Role.ADMIN, CREATED_AT).toString();
+		String text = Employee.createOwner("owner", HASH, "김사장", CREATED_AT).toString();
 
 		// then
 		assertThat(text).doesNotContain(HASH).doesNotContain("owner").contains("ADMIN");
@@ -70,11 +93,17 @@ class EmployeeTest {
 	@ValueSource(strings = { "  " })
 	@DisplayName("아이디·비밀번호 해시·이름이 비어 있으면 직원을 만들 수 없다")
 	void blank_fields_are_rejected(String blank) {
-		assertThatThrownBy(() -> Employee.create(blank, HASH, "김사장", Role.ADMIN, CREATED_AT))
+		assertThatThrownBy(() -> Employee.createOwner(blank, HASH, "김사장", CREATED_AT))
 				.isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> Employee.create("owner", blank, "김사장", Role.ADMIN, CREATED_AT))
+		assertThatThrownBy(() -> Employee.createOwner("owner", blank, "김사장", CREATED_AT))
 				.isInstanceOf(IllegalArgumentException.class);
-		assertThatThrownBy(() -> Employee.create("owner", HASH, blank, Role.ADMIN, CREATED_AT))
+		assertThatThrownBy(() -> Employee.createOwner("owner", HASH, blank, CREATED_AT))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Employee.createStaff(blank, HASH, "이직원", CREATED_AT))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Employee.createStaff("staff1", blank, "이직원", CREATED_AT))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> Employee.createStaff("staff1", HASH, blank, CREATED_AT))
 				.isInstanceOf(IllegalArgumentException.class);
 	}
 
@@ -83,7 +112,7 @@ class EmployeeTest {
 	@DisplayName("이름은 앞뒤 공백을 빼고 저장된다")
 	void name_is_stripped() {
 		// when
-		Employee employee = Employee.create("kim.owner", HASH, "  김사장 ", Role.ADMIN, CREATED_AT);
+		Employee employee = Employee.createOwner("kim.owner", HASH, "  김사장 ", CREATED_AT);
 
 		// then
 		assertThat(employee.getName()).isEqualTo("김사장");
@@ -97,17 +126,17 @@ class EmployeeTest {
 		String fifty = " " + "가".repeat(50) + " ";
 
 		// when / then
-		assertThat(Employee.create("kim.owner", HASH, fifty, Role.ADMIN, CREATED_AT).getName()).hasSize(50);
-		assertThatThrownBy(() -> Employee.create("kim.owner", HASH, "가".repeat(51), Role.ADMIN, CREATED_AT))
+		assertThat(Employee.createOwner("kim.owner", HASH, fifty, CREATED_AT).getName()).hasSize(50);
+		assertThatThrownBy(() -> Employee.createOwner("kim.owner", HASH, "가".repeat(51), CREATED_AT))
 				.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test
-	@DisplayName("역할·생성 시각이 없으면 직원을 만들 수 없다")
-	void null_role_or_time_is_rejected() {
-		assertThatThrownBy(() -> Employee.create("owner", HASH, "김사장", null, CREATED_AT))
+	@DisplayName("생성 시각이 없으면 직원을 만들 수 없다")
+	void null_time_is_rejected() {
+		assertThatThrownBy(() -> Employee.createOwner("owner", HASH, "김사장", null))
 				.isInstanceOf(NullPointerException.class);
-		assertThatThrownBy(() -> Employee.create("owner", HASH, "김사장", Role.ADMIN, null))
+		assertThatThrownBy(() -> Employee.createStaff("staff1", HASH, "이직원", null))
 				.isInstanceOf(NullPointerException.class);
 	}
 
@@ -122,7 +151,7 @@ class EmployeeTest {
 	@CsvSource({ "true, false, true", "false, false, false", "true, true, false", "false, true, false" })
 	@DisplayName("활성 직원의 폐기되지 않은 토큰만 인증할 수 있다")
 	void auth_status_can_authenticate(boolean active, boolean revoked, boolean expected) {
-		assertThat(new EmployeeAuthStatus(active, Role.STAFF, revoked).canAuthenticate()).isEqualTo(expected);
+		assertThat(new EmployeeAuthStatus(active, Role.STAFF, revoked, false).canAuthenticate()).isEqualTo(expected);
 	}
 
 	@Test

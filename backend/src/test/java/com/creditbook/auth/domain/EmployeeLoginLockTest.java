@@ -31,7 +31,7 @@ class EmployeeLoginLockTest {
 
 	@BeforeEach
 	void setUp() {
-		employee = Employee.create("staff1", HASH, "이직원", Role.STAFF, CREATED_AT);
+		employee = Employee.createStaff("staff1", HASH, "이직원", CREATED_AT);
 	}
 
 	private boolean fail(Instant at) {

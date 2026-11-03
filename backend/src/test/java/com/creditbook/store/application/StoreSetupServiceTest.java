@@ -86,6 +86,8 @@ class StoreSetupServiceTest {
 		assertThat(created.getName()).isEqualTo("김사장");
 		assertThat(created.getRole()).isEqualTo(Role.ADMIN);
 		assertThat(created.isActive()).isTrue();
+		// 사장이 직접 정한 비밀번호라 바꾸라고 하지 않는다 (REQ-30)
+		assertThat(created.mustChangePassword()).isFalse();
 		assertThat(created.getCreatedAt()).isEqualTo(NOW);
 		assertThat(created.getPasswordHash()).isNotEqualTo("s3cure-pass").startsWith("$2");
 		assertThat(passwordEncoder.matches("s3cure-pass", created.getPasswordHash())).isTrue();

@@ -70,28 +70,38 @@ public class Employee {
 		// JPA 전용
 	}
 
-	private Employee(String loginId, String passwordHash, String name, Role role, Instant createdAt) {
+	private Employee(String loginId, String passwordHash, String name, Role role, boolean mustChangePassword,
+			Instant createdAt) {
 		this.id = UUID.randomUUID();
 		this.loginId = requireText(loginId, "loginId");
 		this.passwordHash = requireText(passwordHash, "passwordHash");
 		this.name = requireValidName(name);
 		this.role = Objects.requireNonNull(role, "role");
 		this.active = true;
-		// 처음 받은 비밀번호는 바꾸게 한다 (employees.must_change_password 기본값과 같음)
-		this.mustChangePassword = true;
+		this.mustChangePassword = mustChangePassword;
 		this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
 		this.updatedAt = createdAt;
 	}
 
 	/**
-	 * 새 직원을 만든다. 비밀번호는 이미 해시된 값을 받는다 (해시는 애플리케이션 계층의 PasswordEncoder 가 한다).
-	 *
-	 * 이름은 앞뒤 공백을 빼고 저장한다.
+	 * 매장 개설로 사장(ADMIN) 계정을 만든다 (REQ-29·30). 사장이 직접 정한 비밀번호이므로 바꾸라고 하지 않는다
+	 * ({@code mustChangePassword = false}). ADMIN 은 이 경로로만 생긴다 — 앱에 권한 변경 기능이 없다.
+	 * 비밀번호는 이미 해시된 값을 받는다 (해시는 애플리케이션 계층의 PasswordEncoder 가 한다). 이름은 앞뒤 공백을 빼고 저장한다.
 	 *
 	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있거나, 이름이 {@value EmployeeCredentialRules#NAME_MAX_LENGTH}자를 넘을 때
 	 */
-	public static Employee create(String loginId, String passwordHash, String name, Role role, Instant createdAt) {
-		return new Employee(loginId, passwordHash, name, role, createdAt);
+	public static Employee createOwner(String loginId, String passwordHash, String name, Instant createdAt) {
+		return new Employee(loginId, passwordHash, name, Role.ADMIN, false, createdAt);
+	}
+
+	/**
+	 * 사장이 직원(STAFF) 계정을 추가한다 (REQ-30 — 직원 추가는 STAFF 로만). 초기 비밀번호는 사장이 건네주는 값이므로
+	 * 첫 로그인 뒤 바꾸게 한다 ({@code mustChangePassword = true}).
+	 *
+	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있거나, 이름이 {@value EmployeeCredentialRules#NAME_MAX_LENGTH}자를 넘을 때
+	 */
+	public static Employee createStaff(String loginId, String passwordHash, String name, Instant createdAt) {
+		return new Employee(loginId, passwordHash, name, Role.STAFF, true, createdAt);
 	}
 
 	private static String requireText(String value, String field) {
@@ -169,6 +179,74 @@ public class Employee {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * 사장이 이 계정을 관리(비밀번호 초기화·비활성화)할 수 있는지 확인한다 (REQ-30). 본인 계정과 사장(ADMIN) 계정은 관리 대상이 아니다 —
+	 * 사장 계정이 잠기거나 사라지면 매장을 운영할 사람이 없어진다. 사장 교체·분실 복구는 운영자 절차로만 한다.
+	 *
+	 * @param actorId 요청한 직원(사장) ID
+	 * @throws AdminAccountProtectedException 대상이 본인이거나 ADMIN 일 때
+	 */
+	public void requireManageableBy(UUID actorId) {
+		Objects.requireNonNull(actorId, "actorId");
+		if (id.equals(actorId) || role == Role.ADMIN) {
+			throw new AdminAccountProtectedException();
+		}
+	}
+
+	/**
+	 * 사장이 비밀번호를 초기화한다 (REQ-30). 새 초기 비밀번호(해시)로 바꾸고, 다음 로그인 뒤 다시 바꾸게 하며, 연속 실패 횟수·잠금을 푼다.
+	 * 비활성 직원도 초기화할 수 있다 (로그인은 여전히 막힌다).
+	 *
+	 * @throws AdminAccountProtectedException ADMIN 계정 — 사장 비밀번호는 앱에서 초기화하지 않는다
+	 * @throws IllegalArgumentException 해시가 비어 있을 때
+	 */
+	public void resetPassword(String newPasswordHash, Instant now) {
+		if (role == Role.ADMIN) {
+			throw new AdminAccountProtectedException();
+		}
+		replacePassword(newPasswordHash, now);
+		this.mustChangePassword = true;
+	}
+
+	/**
+	 * 본인이 비밀번호를 바꾼다 (REQ-30). 현재 비밀번호 대조와 '현재와 다른가' 검사는 원문이 필요하므로 애플리케이션 계층이 먼저 한다.
+	 * 바꾸면 비밀번호 변경 필요 표시를 내리고, 연속 실패 횟수·잠금을 푼다.
+	 *
+	 * @throws IllegalArgumentException 해시가 비어 있을 때
+	 */
+	public void changePassword(String newPasswordHash, Instant now) {
+		replacePassword(newPasswordHash, now);
+		this.mustChangePassword = false;
+	}
+
+	private void replacePassword(String newPasswordHash, Instant now) {
+		Objects.requireNonNull(now, "now");
+		this.passwordHash = requireText(newPasswordHash, "passwordHash");
+		this.failedLoginCount = 0;
+		this.lockedUntil = null;
+		this.updatedAt = now;
+	}
+
+	/**
+	 * 직원을 비활성화한다 (REQ-30). 비활성 직원은 로그인할 수 없고, 이미 받은 토큰도 다음 요청부터 거절된다. 거래 이력의 처리 직원은 그대로 남는다.
+	 * 이미 비활성이면 아무것도 바꾸지 않는다. 다시 활성화하는 기능은 없다.
+	 *
+	 * @return 이번에 비활성화했으면 true, 이미 비활성이었으면 false
+	 * @throws AdminAccountProtectedException ADMIN 계정 — 사장 계정은 비활성화하지 않는다
+	 */
+	public boolean deactivate(Instant now) {
+		Objects.requireNonNull(now, "now");
+		if (role == Role.ADMIN) {
+			throw new AdminAccountProtectedException();
+		}
+		if (!active) {
+			return false;
+		}
+		this.active = false;
+		this.updatedAt = now;
+		return true;
 	}
 
 	public UUID getId() {

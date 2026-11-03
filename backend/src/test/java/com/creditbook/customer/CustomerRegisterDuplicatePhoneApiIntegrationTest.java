@@ -29,12 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -260,7 +260,7 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 
 	// ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
 	private Employee saveAdmin(String loginId) {
-		Employee admin = Employee.create(loginId, passwordEncoder.encode("test5678!"), "테스트사장", Role.ADMIN,
+		Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
 				clock.instant());
 		employeeRepository.add(admin);
 		return admin;
@@ -268,7 +268,7 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = Employee.create(loginId, passwordEncoder.encode("test1234!"), "테스트직원", Role.STAFF,
+		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

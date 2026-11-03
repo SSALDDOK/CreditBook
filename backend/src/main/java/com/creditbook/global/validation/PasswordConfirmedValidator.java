@@ -3,10 +3,15 @@ package com.creditbook.global.validation;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-/** {@link PasswordConfirmed} 검사기. 위반을 객체 전체가 아니라 passwordConfirm 항목에 붙인다. */
+/** {@link PasswordConfirmed} 검사기. 위반을 객체 전체가 아니라 확인 항목({@link PasswordConfirmed#field()})에 붙인다. */
 public class PasswordConfirmedValidator implements ConstraintValidator<PasswordConfirmed, PasswordConfirmation> {
 
-	static final String FIELD = "passwordConfirm";
+	private String field = "passwordConfirm";
+
+	@Override
+	public void initialize(PasswordConfirmed annotation) {
+		this.field = annotation.field();
+	}
 
 	@Override
 	public boolean isValid(PasswordConfirmation value, ConstraintValidatorContext context) {
@@ -18,7 +23,7 @@ public class PasswordConfirmedValidator implements ConstraintValidator<PasswordC
 		}
 		context.disableDefaultConstraintViolation();
 		context.buildConstraintViolationWithTemplate(context.getDefaultConstraintMessageTemplate())
-				.addPropertyNode(FIELD)
+				.addPropertyNode(field)
 				.addConstraintViolation();
 		return false;
 	}

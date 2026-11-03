@@ -236,7 +236,7 @@ class AuthControllerTest {
 		// given
 		IssuedToken token = tokenService.issue(EMPLOYEE_ID);
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		given(authService.session(EMPLOYEE_ID)).willReturn(OWNER);
 
 		// when / then
@@ -267,7 +267,7 @@ class AuthControllerTest {
 		// given
 		IssuedToken token = tokenService.issue(EMPLOYEE_ID);
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(active, Role.STAFF, revoked)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(active, Role.STAFF, revoked, false)));
 
 		// when / then
 		mockMvc.perform(get("/api/auth/session").cookie(new Cookie("CB_SESSION", token.value())))
@@ -301,7 +301,7 @@ class AuthControllerTest {
 	void tampered_token_is_rejected_with_401() throws Exception {
 		// given
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		String value = tokenService.issue(EMPLOYEE_ID).value();
 		// 서명의 첫 글자를 바꾼다. 마지막 글자는 base64url 패딩 비트만 바뀌어 서명 바이트가 그대로일 수 있다
 		int signatureStart = value.lastIndexOf('.') + 1;
@@ -319,7 +319,7 @@ class AuthControllerTest {
 	void token_signed_with_other_key_is_rejected_with_401() throws Exception {
 		// given
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		String foreign = JwtTestSupport.tokenService(JwtTestSupport.randomProperties(), java.time.Clock.systemUTC())
 				.issue(EMPLOYEE_ID).value();
 
@@ -333,7 +333,7 @@ class AuthControllerTest {
 	void expired_token_is_rejected_with_401() throws Exception {
 		// given
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		Instant past = Instant.now().minus(Duration.ofHours(17));
 		String expired = encode(JwtClaimsSet.builder().subject(EMPLOYEE_ID.toString()).id(UUID.randomUUID().toString())
 				.issuedAt(past).expiresAt(past.plus(Duration.ofHours(16))).build());
@@ -362,7 +362,7 @@ class AuthControllerTest {
 	void bearer_header_is_not_accepted() throws Exception {
 		// given
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
 		String value = tokenService.issue(EMPLOYEE_ID).value();
 
 		// when / then

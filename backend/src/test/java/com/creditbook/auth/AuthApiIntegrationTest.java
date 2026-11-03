@@ -48,6 +48,7 @@ import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 /**
  * 인증 통합 테스트. 인증 자체를 검증하므로 @WithMockEmployee 로 주입하지 않고,
@@ -266,7 +267,7 @@ class AuthApiIntegrationTest {
 
 	//테스트용 직원
 	private Employee saveEmployee(String loginId, Role role) {
-		Employee employee = Employee.create(loginId, passwordEncoder.encode(PASSWORD), "테스트직원", role,
+		Employee employee = TestEmployees.ready(loginId, passwordEncoder.encode(PASSWORD), "테스트직원", role,
 				clock.instant());
 		employeeRepository.add(employee);
 		return employee;
