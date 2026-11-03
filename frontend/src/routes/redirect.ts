@@ -3,6 +3,10 @@
 
 export const LOGIN_PATH = '/login'
 export const DEFAULT_AFTER_LOGIN = '/customers'
+/** SCR-13 비밀번호 변경. 비밀번호를 바꿔야 하는 세션은 보호 화면 중 여기만 쓸 수 있다 */
+export const PASSWORD_PATH = '/password'
+/** SCR-12 직원 계정 관리 (사장 전용) */
+export const EMPLOYEES_PATH = '/settings/employees'
 
 /** 로그인 화면으로 오게 된 이유. expired 면 "로그인이 만료되었습니다" 안내를 띄운다. */
 export type LoginReason = 'expired'

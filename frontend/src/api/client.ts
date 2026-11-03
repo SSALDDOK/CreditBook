@@ -74,6 +74,26 @@ export function notifyUnauthorized(): void {
   unauthorizedHandler?.()
 }
 
+// 비밀번호를 바꿔야 하는 계정(REQ-30)이 다른 API 를 부르면 서버가 403 PASSWORD_CHANGE_REQUIRED 를 준다
+// (사장이 비밀번호를 초기화한 직후의 기존 세션 등). 401 처리처럼 한 곳으로 모은다 — AuthProvider 가 등록해
+// 세션을 다시 확인하고, 보호 라우트가 비밀번호 변경 화면으로 보낸다.
+let passwordChangeRequiredHandler: (() => void) | null = null
+
+/** 403 PASSWORD_CHANGE_REQUIRED 처리 함수를 등록하고, 해제 함수를 돌려준다. */
+export function setPasswordChangeRequiredHandler(handler: () => void): () => void {
+  passwordChangeRequiredHandler = handler
+  return () => {
+    if (passwordChangeRequiredHandler === handler) passwordChangeRequiredHandler = null
+  }
+}
+
+/** 서버가 403 PASSWORD_CHANGE_REQUIRED 를 줬을 때의 공통 처리. 목 API 도 이 함수를 쓴다. */
+export function notifyPasswordChangeRequired(): void {
+  passwordChangeRequiredHandler?.()
+}
+
+export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED'
+
 export type ApiRequestOptions = {
   /**
    * false 면 401 을 받아도 로그인 화면으로 보내지 않고 오류만 던진다.
@@ -102,6 +122,9 @@ export async function apiRequest<T>(
   }
 
   const body: unknown = await res.json().catch(() => null)
+  if (res.status === 403 && isErrorResponse(body) && body.code === PASSWORD_CHANGE_REQUIRED_CODE) {
+    notifyPasswordChangeRequired()
+  }
   if (isErrorResponse(body)) {
     throw new ApiError(res.status, body.code, body.message, body.fieldErrors ?? [], body.details)
   }
