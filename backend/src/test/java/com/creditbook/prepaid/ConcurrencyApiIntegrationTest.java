@@ -35,12 +35,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.JsonNode;
@@ -215,8 +215,8 @@ public class ConcurrencyApiIntegrationTest {
     // 직원은 트랜잭션 안에서 만들어야 커밋된다
     private Cookie loginAsNewStaff() {
         Employee employee = transactionTemplate.execute(status -> {
-            Employee e = Employee.create("tc40-" + UUID.randomUUID(), passwordEncoder.encode("test1234!"),
-                    "테스트직원", Role.STAFF, clock.instant());
+            Employee e = TestEmployees.readyStaff("tc40-" + UUID.randomUUID(), passwordEncoder.encode("test1234!"),
+                    "테스트직원", clock.instant());
             employeeRepository.add(e);
             return e;
         });

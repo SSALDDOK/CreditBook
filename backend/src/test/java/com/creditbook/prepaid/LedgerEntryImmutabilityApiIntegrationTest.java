@@ -30,13 +30,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.prepaid.application.ChargeResult;
 import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 import com.creditbook.support.WithMockEmployee;
 
 /**
@@ -89,7 +89,7 @@ class LedgerEntryImmutabilityApiIntegrationTest {
 	@Tag("TC-10")
 	void modifying_or_deleting_a_ledger_entry_is_rejected(String method, String path) throws Exception {
 		// given — 충전 거래 1건 (/api/ledger-entries/{id}는 충전 응답 Location 헤더가 가리키는 경로)
-		Employee employee = Employee.create("tc10-staff", passwordEncoder.encode("test1234!"), "테스트직원", Role.STAFF,
+		Employee employee = TestEmployees.readyStaff("tc10-staff", passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		RegisteredCustomer customer = customerService.register("불변성TC10", "01010100010");

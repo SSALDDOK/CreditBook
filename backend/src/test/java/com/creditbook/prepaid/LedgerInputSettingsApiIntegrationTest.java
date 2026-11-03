@@ -28,6 +28,7 @@ import com.creditbook.auth.domain.Role;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 import jakarta.servlet.http.Cookie;
 
@@ -92,7 +93,7 @@ class LedgerInputSettingsApiIntegrationTest {
 
 	// 역할만 다른 직원을 새로 만들어 세션 쿠키를 받는다
 	private Cookie loginAs(String loginId, Role role) {
-		Employee employee = Employee.create(loginId, passwordEncoder.encode("test1234!"), "테스트직원", role,
+		Employee employee = TestEmployees.ready(loginId, passwordEncoder.encode("test1234!"), "테스트직원", role,
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

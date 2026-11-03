@@ -30,8 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.auth.domain.Role;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestEmployees;
 
 /**
  * 매장 개설 API 통합 테스트 (REQ-29·TC-25). 가입 화면을 숨기는 것과 API를 막는 것은 다르므로, 비로그인으로 API를 직접 불러 본다.
@@ -75,8 +75,8 @@ class StoreSetupApiIntegrationTest {
 	@Tag("REQ-29")
 	void setup_is_rejected_when_an_account_already_exists() throws Exception {
 		// given — ADMIN 계정 1개 (매장 행은 없음: 매장 행이 아니라 계정 유무로 막는지 보려고)
-		employeeRepository.add(Employee.create("tc25.admin", passwordEncoder.encode("existing-pass"), "기존사장",
-				Role.ADMIN, clock.instant()));
+		employeeRepository.add(TestEmployees.owner("tc25.admin", passwordEncoder.encode("existing-pass"), "기존사장",
+				clock.instant()));
 
 		// when & then — 로그인 쿠키 없이 개설 요청 → 403
 		mockMvc.perform(post("/api/setup")
