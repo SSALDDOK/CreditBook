@@ -188,7 +188,12 @@ export function LoginPage() {
             name="loginId"
             type="text"
             value={loginId}
-            onChange={(e) => setLoginId(e.target.value)}
+            onChange={(e) => {
+              setLoginId(e.target.value)
+              // 잠금은 계정 단위라 아이디를 바꾸면 다른 직원이 바로 로그인할 수 있게 잠금 안내를 지운다.
+              // 잠긴 아이디로 다시 시도하면 서버가 다시 423 과 남은 시간을 준다
+              if (failure?.kind === 'locked') setFailure(null)
+            }}
             disabled={pending}
             autoComplete="username"
             autoCapitalize="none"
