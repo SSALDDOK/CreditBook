@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
+import com.creditbook.customer.application.CustomerService;
+import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
@@ -38,8 +41,10 @@ import com.creditbook.support.TestEmployees;
 import com.jayway.jsonpath.JsonPath;
 
 /**
- * 직원 계정 관리 API 통합 테스트 (REQ-30·REQ-16). 화면에서 메뉴를 숨기는 것은 보안이 아니므로 API를 직접 호출해 막히는지 본다.
- * 역할은 요청마다 DB에서 읽으므로 @WithMockEmployee 로 주입하지 않고, 실제로 발급한 토큰으로 보안 필터 체인 전체를 지나게 한다.
+ * 직원 계정 관리 API 통합 테스트 (REQ-30·REQ-16). 화면에서 메뉴를 숨기는 것은 보안이 아니므로 API를 직접 호출해
+ * 막히는지 본다.
+ * 역할은 요청마다 DB에서 읽으므로 @WithMockEmployee 로 주입하지 않고, 실제로 발급한 토큰으로 보안 필터 체인 전체를 지나게
+ * 한다.
  * 직원 데이터는 클래스 @Transactional 로 테스트마다 롤백된다.
  */
 @AutoConfigureMockMvc
@@ -56,6 +61,9 @@ class EmployeeApiIntegrationTest {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	@Autowired
+	CustomerService customerService;
 
 	@Autowired
 	EmployeeRepository employeeRepository;
@@ -127,8 +135,8 @@ class EmployeeApiIntegrationTest {
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("role"))
 				.andExpect(content().string(not(containsString("passwordHash"))));
 
-		assertThat(countByLoginId("tc26.admin")).isZero();   // 직원 안 생김
-		assertThat(countAdmins()).isEqualTo(adminsBefore);   // ADMIN도 그대로
+		assertThat(countByLoginId("tc26.admin")).isZero(); // 직원 안 생김
+		assertThat(countAdmins()).isEqualTo(adminsBefore); // ADMIN도 그대로
 	}
 
 	@Test
@@ -144,7 +152,7 @@ class EmployeeApiIntegrationTest {
 		String created = mockMvc.perform(withSession(post("/api/employees"), owner)
 				.content(NEW_STAFF_BODY))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.role").value("STAFF"))         // 권한은 STAFF로 고정
+				.andExpect(jsonPath("$.role").value("STAFF")) // 권한은 STAFF로 고정
 				.andExpect(jsonPath("$.initialPassword").isNotEmpty())
 				.andExpect(content().string(not(containsString("passwordHash"))))
 				.andReturn().getResponse().getContentAsString();
@@ -166,21 +174,100 @@ class EmployeeApiIntegrationTest {
 				.andExpect(content().string(not(containsString(storedHash))));
 	}
 
-	//사장 저장 (매장 개설 계정과 같음)
+	@Test
+	@DisplayName("유일한 ADMIN이 본인 계정을 비활성화 — 409 ADMIN_ACCOUNT_PROTECTED, 계정은 활성 그대로")
+	@Tag("TC-27")
+	@Tag("REQ-30")
+	void only_admin_cannot_deactivate_own_account() throws Exception {
+		// given ADMIN 1명(매장 개설 계정)
+		Employee ownerAccount = saveOwner("tc27.owner2");
+		Cookie owner = sessionOf(ownerAccount);
+
+		// when — ADMIN 본인 계정을 비활성화
+		mockMvc.perform(withSession(patch("/api/employees/{id}/deactivate", ownerAccount.getId()), owner))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ADMIN_ACCOUNT_PROTECTED"))
+				.andExpect(jsonPath("$.message").value("사장님 계정은 비활성화하거나 비밀번호를 초기화할 수 없습니다."));
+
+		// then — 재조회: 계정 활성 그대로.
+		mockMvc.perform(withSession(get("/api/employees"), owner))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].loginId", hasItem("tc27.owner2")))
+				.andExpect(jsonPath("$.items[?(@.loginId =='tc27.owner2')].active", hasItem(true)));
+	}
+
+	@Test
+	@DisplayName("STAFF 비활성화 — 204, 그 직원의 기존 토큰은 다음 요청부터 401")
+	@Tag("TC-27")
+	@Tag("REQ-30")
+	void deactivated_staff_token_is_rejected_with_401() throws Exception {
+		// given ADMIN 1명(매장 개설 계정),STAFF 1명
+		Employee ownerAccount = saveOwner("tc27.owner2");
+		Employee staffAccount = saveStaff("tc27.staff2");
+		Cookie owner = sessionOf(ownerAccount);
+		Cookie staff = sessionOf(staffAccount);
+
+		// staff 활성화 상태확인 - 고객목록으로 확인하는 이유는 staff는 직원관리 페이지 접근 불가.
+		mockMvc.perform(withSession(get("/api/customers"), staff))
+				.andExpect(status().isOk());
+
+		// when — 사장 쿠키로 STAFF를 비활성화해 204를 확인
+		mockMvc.perform(withSession(patch("/api/employees/{id}/deactivate", staffAccount.getId()), owner))
+				.andExpect(status().isNoContent());
+
+		// then — 비활성화 Staff로 고객목록 재조회 401확인
+		mockMvc.perform(withSession(get("/api/customers"), staff))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+	}
+
+	@Test
+	@DisplayName("직원을 비활성화해도 그 직원이 처리한 과거 거래의 처리 직원은 그대로 조회된다")
+	@Tag("TC-27")
+	@Tag("REQ-30")
+	void deactivated_staff_stays_as_performer_of_past_transactions() throws Exception {
+		// given ADMIN 1명(매장 개설 계정),STAFF 1명 , 고객 1명
+		Employee ownerAccount = saveOwner("tc27.owner2");
+		Employee staffAccount = saveStaff("tc27.staff2");
+		Cookie owner = sessionOf(ownerAccount);
+		Cookie staff = sessionOf(staffAccount);
+		RegisteredCustomer customer = customerService.register("이름", "01027270001");
+
+		// staff 활성화 상태확인 - 고객목록으로 확인하는 이유는 staff는 직원관리 페이지 접근 불가.
+		mockMvc.perform(withSession(get("/api/customers"), staff))
+				.andExpect(status().isOk());
+
+		// when — staff가 충전 201
+		mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), staff)
+				.header("Idempotency-Key", "tc27-charge")
+				.content("{\"amount\": 10000}"))
+				.andExpect(status().isCreated());
+
+		// 사장 -> 충전한 staff 비활성화 204
+		mockMvc.perform(withSession(patch("/api/employees/{id}/deactivate", staffAccount.getId()), owner))
+				.andExpect(status().isNoContent());
+
+		// then — 사장 쿠키로 거래 내역에서 충전 처리한 직원 이름 확인.
+		mockMvc.perform(withSession(get("/api/customers/{id}/transactions",customer.customerId()), owner))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$..content[0].performedByName").value("테스트직원"));
+	}
+
+	// 사장 저장 (매장 개설 계정과 같음)
 	private Employee saveOwner(String loginId) {
 		Employee owner = TestEmployees.owner(loginId, passwordEncoder.encode(PASSWORD), "테스트사장", clock.instant());
 		employeeRepository.add(owner);
 		return owner;
 	}
 
-	//직원 저장 (첫 비밀번호 변경까지 마친 상태)
+	// 직원 저장 (첫 비밀번호 변경까지 마친 상태)
 	private Employee saveStaff(String loginId) {
 		Employee staff = TestEmployees.readyStaff(loginId, passwordEncoder.encode(PASSWORD), "테스트직원", clock.instant());
 		employeeRepository.add(staff);
 		return staff;
 	}
 
-	//진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기
+	// 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기
 	private Cookie sessionOf(Employee employee) {
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());
 	}
@@ -197,7 +284,7 @@ class EmployeeApiIntegrationTest {
 		return jdbcTemplate.queryForObject("SELECT count(*) FROM employees WHERE role = 'ADMIN'", Integer.class);
 	}
 
-	//DB password_hash칸 직접 읽기
+	// DB password_hash칸 직접 읽기
 	private String passwordHashOf(String loginId) {
 		return jdbcTemplate.queryForObject("SELECT password_hash FROM employees WHERE login_id = ?", String.class,
 				loginId);
