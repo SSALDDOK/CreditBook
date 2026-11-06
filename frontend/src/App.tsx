@@ -5,13 +5,14 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { PasswordPage } from '@/features/auth/PasswordPage'
+import { SignupPage } from '@/features/auth/SignupPage'
 import { CustomerDetailBreadcrumb, CustomerRegisterBreadcrumb } from '@/features/customers/CustomerDetailBreadcrumb'
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
 import { CustomerListPage } from '@/features/customers/CustomerListPage'
 import { CustomerRegisterPage } from '@/features/customers/CustomerRegisterPage'
 import { CustomerTransactionsScreen } from '@/features/transactions/CustomerTransactionsPage'
 import { RequireAuth } from '@/routes/RequireAuth'
-import { DEFAULT_AFTER_LOGIN, EMPLOYEES_PATH, LOGIN_PATH, PASSWORD_PATH } from '@/routes/redirect'
+import { DEFAULT_AFTER_LOGIN, EMPLOYEES_PATH, LOGIN_PATH, PASSWORD_PATH, SIGNUP_PATH } from '@/routes/redirect'
 
 // 직원 관리는 사장만 쓰는 화면이라 처음 열 때 따로 불러온다 — 다른 화면의 첫 로딩에 메뉴 부품 코드를 싣지 않는다
 const EmployeesPage = lazy(() =>
@@ -20,7 +21,8 @@ const EmployeesPage = lazy(() =>
 
 /**
  * 라우트 표 (react-router v7, declarative 모드)
- * - /login       SCR-1 로그인 (공개)
+ * - /login       SCR-1 로그인 (공개). 직원 계정이 하나도 없으면 /signup 으로 replace
+ * - /signup      SCR-11 매장 개설·사장님 가입 (공개, 왼쪽 메뉴 없음). 계정이 있으면 /login 으로 replace
  * - /customers   SCR-3 고객 목록 (로그인 필요)
  * - /customers/new   SCR-4 고객 등록 (로그인 필요 — 검색어는 주소가 아니라 화면 이동 상태로 받는다)
  * - /customers/:customerId   SCR-5 고객 상세 (로그인 필요)
@@ -39,6 +41,7 @@ export default function App() {
         <AuthProvider>
           <Routes>
             <Route path={LOGIN_PATH} element={<LoginPage />} />
+            <Route path={SIGNUP_PATH} element={<SignupPage />} />
             <Route element={<RequireAuth />}>
               <Route
                 path="/customers"
