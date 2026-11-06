@@ -66,7 +66,8 @@ function delay(signal?: AbortSignal): Promise<void> {
 
 export async function mockLogin({ loginId, password }: LoginRequest): Promise<SessionResponse> {
   await delay()
-  if (password === 'wrong') {
+  // 'login.fail' 은 매장 개설 뒤 이어지는 로그인이 실패하는 경우를 볼 때 쓴다(mock/setup.ts)
+  if (password === 'wrong' || loginId === 'login.fail') {
     throw new ApiError(401, 'INVALID_CREDENTIALS', '아이디 또는 비밀번호가 올바르지 않습니다.')
   }
   current = loginId === 'owner' ? mockAdminSession() : loginId === 'newstaff' ? mockMustChangeSession() : mockSession()

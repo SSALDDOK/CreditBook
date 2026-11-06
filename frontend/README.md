@@ -26,6 +26,8 @@ npm run dev        # http://localhost:5173
 
 목 모드의 로그인(`src/api/mock/auth.ts`): 처음에는 로그인된 상태(김직원, STAFF)로 시작해 고객 목록이 바로 보인다. 로그아웃하면 로그인 화면으로 가고, 아이디·비밀번호를 아무 값이나 넣으면 로그인된다. 비밀번호를 `wrong`으로 넣으면 로그인 실패 화면을 볼 수 있다. 로그인 상태는 메모리에만 있어 새로고침하면 처음 상태로 돌아간다.
 
+목 모드의 매장 개설(`src/api/mock/setup.ts`): 기본은 이미 개설된 매장이라 `/signup`으로 가면 로그인 화면으로 돌아온다. 개설 화면을 보려면 `.env.local`에 `VITE_MOCK_SETUP_AVAILABLE=true`를 넣는다. 오류 흐름은 아이디를 `taken.owner`(403)·`bad.input`(400)·`server.down`(500)·`login.fail`(개설 뒤 로그인 실패)로 넣으면 볼 수 있다. 목 로그인은 아이디가 `owner`일 때만 사장 세션이다.
+
 목 모드의 고객(`src/api/mock/customers.ts`): 상세 화면 상태별 확인용 고객이 있다.
 
 | 고객 | id | 상태 |
@@ -119,6 +121,13 @@ npm run lint       # oxlint
 |---|---|---|
 | 공통 | `page-title` | 머리글 제목 (상세는 "고객 › 상세") |
 | 공통 | `auth-checking` | 로그인 확인 중 표시 — 사라지면 보호 화면이 그려진다 |
+| SCR-1 로그인 | `login-setup-notice` | 가입 도중 다른 사람이 매장을 먼저 열었을 때(403) 위쪽 노란 상자 |
+| SCR-11 매장 개설 | `signup-checking` | 개설 가능 여부 확인 중 표시 — 사라지면 폼이 보이거나 로그인 화면으로 이동한다 |
+| SCR-11 매장 개설 | `signup-page` / `signup-form` | 화면 카드·폼 (폼의 `aria-busy`가 제출 중 true) |
+| SCR-11 매장 개설 | `signup-store-name` / `signup-owner-name` / `signup-login-id` / `signup-password` / `signup-password-confirm` | 입력 칸. 뒤에 `-help`를 붙이면 칸 아래 안내(확인 칸은 없음), `-error`를 붙이면 칸 아래 오류 |
+| SCR-11 매장 개설 | `signup-owner-notice` | 사장님 계정 경고 배너 |
+| SCR-11 매장 개설 | `signup-error` | 폼 안 공통 오류(네트워크·5xx) |
+| SCR-11 매장 개설 | `signup-submit` | [매장 개설]. `data-state`가 `idle`/`pending` |
 | SCR-3 목록 | `customer-search-input` | 검색창 |
 | SCR-3 목록 | `customer-include-inactive` | '비활성 포함' 체크박스 (`getByLabel('비활성 포함')`으로도 찾는다) |
 | SCR-3 목록 | `customer-list` | 목록 영역. `data-state`가 `loading` → `ready`/`error` |

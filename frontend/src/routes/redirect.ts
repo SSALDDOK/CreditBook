@@ -7,6 +7,16 @@ export const DEFAULT_AFTER_LOGIN = '/customers'
 export const PASSWORD_PATH = '/password'
 /** SCR-12 직원 계정 관리 (사장 전용) */
 export const EMPLOYEES_PATH = '/settings/employees'
+/** SCR-11 매장 개설·사장님 가입 (공개, 직원 계정이 하나도 없을 때만 열린다) */
+export const SIGNUP_PATH = '/signup'
+
+/**
+ * 매장 개설 화면에서 로그인 화면으로 보낼 때 넘기는 화면 이동 상태. 주소에 넣지 않는다.
+ * - skipSetupCheck: 로그인 화면이 개설 가능 여부를 다시 묻지 않는다 — 두 화면 사이를 오가지 않게
+ * - loginId: 아이디 칸에 미리 채울 값
+ * - notice: 위쪽 노란 상자에 보여 줄 서버 문구
+ */
+export type LoginLocationState = { skipSetupCheck: true; loginId?: string; notice?: string } | null
 
 /** 로그인 화면으로 오게 된 이유. expired 면 "로그인이 만료되었습니다" 안내를 띄운다. */
 export type LoginReason = 'expired'
