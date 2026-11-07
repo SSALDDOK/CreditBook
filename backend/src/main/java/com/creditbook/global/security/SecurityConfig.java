@@ -46,7 +46,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
-@EnableConfigurationProperties({ CorsProperties.class, LoginRateLimitProperties.class })
+@EnableConfigurationProperties({ CorsProperties.class, LoginRateLimitProperties.class, OriginGuardProperties.class })
 public class SecurityConfig {
 
 	/** 로그인 없이 부를 수 있는 경로. 이 경로에서는 쿠키의 토큰을 읽지도 않는다 ({@link CookieBearerTokenResolver}). */
@@ -77,7 +77,7 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(HttpSecurity http, EmployeeJwtAuthenticationConverter authenticationConverter,
 			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler,
 			CorsProperties corsProperties, LoginRateLimitProperties loginRateLimitProperties, Clock clock,
-			SecurityErrorResponseWriter errorResponseWriter) throws Exception {
+			SecurityErrorResponseWriter errorResponseWriter, OriginGuardProperties originGuardProperties) throws Exception {
 		http
 				.csrf(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
@@ -98,6 +98,10 @@ public class SecurityConfig {
 						.authenticationEntryPoint(authenticationEntryPoint)
 						.accessDeniedHandler(accessDeniedHandler)
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter)));
+		// 프록시를 거치지 않은 요청 거절 (CB-59). 다른 필터보다 먼저 등록해 레이트 리밋·인증보다 앞에서 거절한다. 설정값이 비면 넣지 않는다
+		if (originGuardProperties.isEnabled()) {
+			http.addFilterBefore(new OriginGuardFilter(originGuardProperties, errorResponseWriter), LogoutFilter.class);
+		}
 		// DSL 이 자동으로 여는 메타데이터 경로를 막는다. 메타데이터 필터(인증 필터 바로 앞)보다 확실히 앞에 두려고 LogoutFilter 자리를 기준으로 한다
 		http.addFilterBefore(new ProtectedResourceMetadataBlockingFilter(authenticationEntryPoint), LogoutFilter.class);
 		// 로그인 요청 수 제한 (REQ-15). CorsFilter·HeaderWriterFilter 뒤라 429 에도 CORS·보안 헤더가 붙고, 본문을 읽거나 DB 를 조회하기 전에 거절한다.
