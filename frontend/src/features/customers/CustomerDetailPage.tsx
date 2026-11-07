@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { ApiError, toUserMessage } from '@/api/client'
+import { ApiError, CUSTOMER_NOT_FOUND_MESSAGE, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -45,7 +45,7 @@ export function CustomerDetailPage() {
       {state.status === 'error' ? (
         <div className="flex flex-col items-start gap-4 rounded-2xl border bg-background p-8">
           <p role="alert" data-testid={notFound ? 'customer-not-found' : 'error-message'} className="text-destructive">
-            {notFound ? '고객을 찾을 수 없습니다' : toUserMessage(state.error)}
+            {notFound ? CUSTOMER_NOT_FOUND_MESSAGE : toUserMessage(state.error)}
           </p>
           <div className="flex gap-3">
             {!notFound && (
@@ -55,7 +55,7 @@ export function CustomerDetailPage() {
             )}
             <Button asChild variant="outline">
               <Link to="/customers" data-testid="customer-detail-back">
-                고객 목록으로 돌아가기
+                고객 목록으로
               </Link>
             </Button>
           </div>

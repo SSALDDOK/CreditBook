@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router'
-import { ApiError, toUserMessage } from '@/api/client'
+import { ApiError, CUSTOMER_NOT_FOUND_MESSAGE, toUserMessage } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import type { TransactionResponse } from '@/api/transactions'
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -123,11 +123,11 @@ function CustomerTransactionsPage({
       <div className="flex flex-1 flex-col gap-5" data-testid="transactions-page" data-state={viewState}>
         <div className="flex flex-col items-start gap-4 rounded-2xl border bg-background p-8">
           <p role="alert" data-testid="customer-not-found" className="text-destructive">
-            고객을 찾을 수 없습니다
+            {CUSTOMER_NOT_FOUND_MESSAGE}
           </p>
           <Button asChild variant="outline">
             <Link to="/customers" data-testid="transactions-back">
-              고객 목록으로 돌아가기
+              고객 목록으로
             </Link>
           </Button>
         </div>
