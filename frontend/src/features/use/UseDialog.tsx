@@ -157,7 +157,7 @@ function UseDialogBody({
       busy={flow.pending}
       testId="use-dialog"
       titleRef={flow.titleRef}
-      onOpenAutoFocus={(e) => e.preventDefault()}
+      onOpenAutoFocus={flow.handleOpenAutoFocus}
       banner={
         !confirming && restoredDraft ? (
           <RestoredDraftBanner testId="use-restored-banner">{USE_RESTORED_MESSAGE}</RestoredDraftBanner>
