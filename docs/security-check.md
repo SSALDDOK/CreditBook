@@ -83,3 +83,31 @@ curl -s -b staff.jar $B/api/auth/session -w ' [%{http_code}]'
 - 서버 로그에 WARN `unknown field rejected: method=… path=… field=…`로 남긴다. 끼운 값은 남기지 않고, 항목 이름도 영문·숫자·`_` 64자까지만 그대로 쓴다
 - 바뀐 기대 결과: 처리 직원(`performedBy`)·처리 시각(`performedAt`)을 본문에 끼워 넣은 요청은 예전에는 무시하고 처리했지만(201), 이제 거절하고 아무것도 저장하지 않는다(400). 처리 직원·시각이 로그인한 직원과 서버 시계로만 정해진다는 규칙은 그대로다
 - 확인: 충전에 `balance` → 400 `INVALID_INPUT`, 잔액 그대로, WARN 로그에 `field=balance`. 화면이 보내는 요청 6종은 서버 요청 항목과 일치하며, E2E 전체 통과
+
+### 2026-11-07 — 배포 환경 (화면 Vercel · 백엔드 Render · DB Neon)
+
+배포 주소는 이 문서에 적지 않는다. 화면은 `/api/*`를 백엔드로 넘기며 비밀 헤더(`X-Origin-Secret`)를 붙이고, 백엔드는 그 헤더가 없거나 다른 요청을 헬스 체크(`GET /actuator/health`)만 빼고 403으로 거절한다.
+
+**1부 항목 재확인**
+
+| # | 보낸 요청 → 받은 응답 | 판정 |
+|---|---|---|
+| 8 | 화면 주소에 `http://` → 308로 `https://`. 백엔드 주소에 `http://` → 301로 `https://` | 통과 |
+| 8 | 다른 출처(`Origin: https://evil.example`) preflight → 화면 경유 401, 백엔드 직접 403. 둘 다 `Access-Control-Allow-*` 헤더 없음 | 통과 — 브라우저가 다른 출처 요청을 막는다 |
+| 8 | 화면에서 가짜 검색어(`9999`)로 고객 검색 → 백엔드 로그에서 그 검색어 0건(인증·거절 로그도 `path=`에 경로만, 검색어 없음). 화면 배포처 대시보드 로그에는 그 요청 줄이 나타나지 않음 | 볼 수 있는 로그에는 검색어가 남지 않는다. 한계: 화면 배포처 플랫폼 내부의 요청 주소 보관 여부는 확인할 수 없어, 검색어를 본문으로 옮기는 API 변경은 지금 하지 않고 여러 매장 전환 때 다시 본다 |
+| 5 | `//`가 든 주소 → 화면 배포처가 308로 정리된 주소(`/api/customers/charges`)로 돌려보내 백엔드에 닿지 않음. `..`가 든 주소(정리하지 않고 보냄) → 백엔드가 프레임워크 기본 형식 400(`timestamp`·`status`·`error`·`path`), 로그인 없이도 같음 | 내부 정보 없음. 형식 불일치는 로컬과 같다(BUG-5, 열린 상태) |
+| + | 백엔드 주소로 직접 `GET /api/setup/status` → 403 `FORBIDDEN`, 화면 경유 → 200 `{"available":false}`(매장 개설 뒤) | 통과 — 직접 접근으로는 매장 개설·로그인 불가 |
+| + | 로그인 IP 레이트 리밋(REQ-15): 화면 경유로 없는 아이디 로그인 11회 → 1–10회 401, 11회 429(`Retry-After`). 서버 로그 `login rate limited: ip=`가 화면 배포처가 아닌 실제 접속자 공인 IP | 통과 — 접속자마다 따로 센다 |
+
+**TC-57 — 저장소·빌드 결과물·배포 설정에 DB 비밀번호·JWT 서명 키가 없다 (REQ-25)**
+
+| 절차 | 확인한 것 → 결과 | 판정 |
+|---|---|---|
+| 1. 저장소 전체 이력 검색 | `git log -p --all -i -G "password\|secret\|jwt"`로 추가된 줄 중 값이 붙은 대입을 추림 → 31건 모두 테스트 고정값·변수명·코드. 자격 증명이 든 접속 문자열(`postgres://사용자:비밀번호@`) 0건. 원격(GitHub) 브랜치에 닿는 이력에 실제 비밀값 0건 | 통과 |
+| 2. `.env`·`application-local.yml` | `.gitignore`에 있음(`git check-ignore`로 확인), 커밋 이력 0건 | 통과 |
+| 3. `application.yml` | DB 비밀번호 항목 없음(배포처 환경변수 `SPRING_DATASOURCE_PASSWORD`). `jwt-secret`·`origin-guard.secret`은 환경변수 참조, 기본값 빈 값(JWT 키가 비면 기동 실패, 프록시 확인 값이 비면 확인 끔) | 통과 |
+| 4. 빌드 결과물 | 백엔드 이미지의 jar(`BOOT-INF/classes` 186개 파일)와 화면 빌드(`dist` 10개 파일)에서 DB 호스트(`neon.tech`)·자격 증명 접속 문자열·BCrypt 해시·키 이름(`JWT_SECRET`·`ORIGIN_SECRET`·`x-origin-secret`) 검색 → 0건. jar 안 설정 파일은 `application.yml` 하나. 비밀 헤더는 화면 빌드가 아니라 배포처 경로 설정이 붙인다 | 통과 |
+| 5. 배포처 설정 화면 | 백엔드: 환경변수 9개, DB 비밀번호 2개·JWT 키·프록시 확인 값은 가려진 값으로만 표시. 화면: `ORIGIN_SECRET` 1개를 민감 값으로 등록. 이미지 정의(`backend/Dockerfile`)와 저장소에 값 없음 | 통과 |
+| 6. GitHub Actions | 저장된 Secrets를 쓰지 않는다 — E2E용 DB 비밀번호·JWT 키·직원 비밀번호를 실행마다 `openssl rand`로 만들고 `::add-mask::`로 가림, DB 비밀번호는 `POSTGRES_PASSWORD_FILE`로 넘겨 컨테이너 환경변수에 남지 않음. 최근 main CI 로그(1,526줄)에서 가려진 표시 12곳, 가려지지 않은 비밀값 0건 | 통과 |
+
+판정: **TC-57 Pass** — 실제 비밀값은 배포처 환경변수에만 있다.
