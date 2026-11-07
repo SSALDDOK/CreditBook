@@ -59,6 +59,9 @@ creditbook:
     login-rate-limit:
       max-requests: 10
       window: 1m
+  # 프록시 경유 확인 (CB-59): 화면 배포처가 /api 를 넘길 때 붙이는 비밀 헤더 값. 환경변수로만 받는다, 비우면 확인 안 함(로컬·테스트)
+  origin-guard:
+    secret: ${CREDITBOOK_ORIGIN_SECRET:}
   cors:
     allowed-origins: []  # 같은 출처(프록시) 배포면 비워 둔다. '*' 는 기동 실패
   charge:
