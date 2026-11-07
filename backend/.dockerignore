@@ -1,0 +1,9 @@
+# 이미지 빌드 맥락에서 뺀다 — 로컬 접속 설정(비밀번호 참조 포함)·빌드 산출물·개발용 시드
+application-local*.yml
+application-local*.yaml
+build/
+.gradle/
+bin/
+dev/
+*.iml
+.idea/

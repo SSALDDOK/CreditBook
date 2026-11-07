@@ -23,6 +23,8 @@ spring:
       fail-on-unknown-properties: true
 
 server:
+  # 배포처(Render)가 PORT 환경변수로 포트를 정한다. 없으면 8080
+  port: ${PORT:8080}
   # 프록시(Render 등) 뒤에서 클라이언트 IP 를 바로잡는다. Tomcat RemoteIpValve 가 내부 프록시 주소에서 온 X-Forwarded-For 만 믿고
   # request.getRemoteAddr() 를 바꾼다 — 로그인 레이트 리밋은 이 값만 쓴다 (X-Forwarded-For 를 직접 읽으면 위조할 수 있다)
   forward-headers-strategy: native
