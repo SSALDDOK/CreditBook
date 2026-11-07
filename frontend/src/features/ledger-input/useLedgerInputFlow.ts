@@ -90,11 +90,20 @@ export function useLedgerInputFlow<R>({
   }))
 
   // 단계가 바뀌면 포커스를 옮긴다: 입력 화면은 금액 칸, 확인 화면은 제목(스크린리더가 새 화면을 읽게)
+  // 창을 처음 그리는 순간에는 포털이 아직 내용을 붙이지 않아 금액 칸이 없다 — 열릴 때의 포커스는 handleOpenAutoFocus 가 맡고,
+  // 이 effect 는 설정을 다 받은 뒤(첫 열기)와 단계가 바뀔 때를 맡는다
   const settingsReady = settings !== null
   useEffect(() => {
     if (step === 'input' && settingsReady) amountRef.current?.focus()
     if (step === 'confirm') titleRef.current?.focus()
   }, [step, settingsReady])
+
+  /** 창이 열려 내용이 붙은 뒤 불린다(Radix onOpenAutoFocus). 금액 칸이 있으면 금액 칸, 설정을 받는 중이면 제목에 둔다 */
+  function handleOpenAutoFocus(e: Event) {
+    e.preventDefault() // Radix 기본(첫 번째 버튼)으로 가지 않게
+    const target = step === 'input' ? (amountRef.current ?? titleRef.current) : titleRef.current
+    target?.focus()
+  }
 
   /** 형식 오류 문구(비었음·0원·소수·숫자 아님). 금액 칸을 건드린 뒤에만. 한도 초과(OVER_MAX)는 모달마다 문구가 달라 제외 */
   const amountFormatError =
@@ -217,6 +226,7 @@ export function useLedgerInputFlow<R>({
     submit,
     amountRef,
     titleRef,
+    handleOpenAutoFocus,
     formId,
   }
 }

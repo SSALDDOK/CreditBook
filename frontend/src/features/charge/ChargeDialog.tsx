@@ -131,7 +131,7 @@ function ChargeDialogBody({
       busy={flow.pending}
       testId="charge-dialog"
       titleRef={flow.titleRef}
-      onOpenAutoFocus={(e) => e.preventDefault()}
+      onOpenAutoFocus={flow.handleOpenAutoFocus}
       banner={
         !confirming && restoredDraft ? (
           <RestoredDraftBanner testId="charge-restored-banner">{CHARGE_RESTORED_MESSAGE}</RestoredDraftBanner>
