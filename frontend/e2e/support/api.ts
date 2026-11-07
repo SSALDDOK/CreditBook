@@ -17,6 +17,16 @@ export function uniquePhone(): string {
   return `010${digits}`
 }
 
+/** 테스트마다 겹치지 않는 직원 아이디 (영문·숫자·마침표 4–20자) — 비활성 계정도 중복으로 세므로 지울 수 없어 매번 새로 만든다 */
+export function uniqueLoginId(prefix: string): string {
+  return `${prefix}.${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 실행마다 바뀌는 새 비밀번호 — 공개 리포에 고정 비밀번호를 두지 않는다 */
+export function randomPassword(): string {
+  return `E2e-${crypto.randomUUID()}`
+}
+
 export type TestCustomer = { id: string; name: string; phone: string }
 
 /** API로 고객 등록 (잔액 0원). 이름 뒤에 짧은 꼬리를 붙여 겹치지 않게 한다 */
