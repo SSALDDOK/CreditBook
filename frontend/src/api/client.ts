@@ -10,8 +10,11 @@ export type ErrorResponse = {
   details?: unknown
 }
 
-export const COMMON_ERROR_MESSAGE = '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'
+// 화면설계 SCR-10 메시지 규칙 글자 그대로 — 마침표는 네트워크 문구에만 붙인다
+export const COMMON_ERROR_MESSAGE = '일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요'
 export const NETWORK_ERROR_MESSAGE = '네트워크 연결을 확인해 주세요.'
+/** 없는 고객(404) — 고객 상세·거래 이력이 같은 문구를 쓴다(SCR-10) */
+export const CUSTOMER_NOT_FOUND_MESSAGE = '존재하지 않는 고객입니다'
 
 export class ApiError extends Error {
   readonly status: number
