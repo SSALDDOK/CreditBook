@@ -1,0 +1,21 @@
+# 백엔드(Render 무료 인스턴스)가 15분 동안 요청이 없으면 잠들어 첫 접속이 1분 가까이 걸린다.
+# 10분마다 헬스 체크를 불러 깨워 둔다. 무료 인스턴스 시간(월 750시간)은 서비스 1개를 계속 켜 둬도 넘지 않는다.
+# GitHub 예약 실행은 몇 분씩 늦게 시작될 수 있어 15분보다 짧은 10분으로 둔다.
+# 저장소에 60일 동안 활동이 없으면 GitHub가 예약 실행을 멈춘다 — 다시 켜려면 Actions 화면에서 Enable 또는 커밋 1개.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: backend health
+        # 잠든 상태에서 깨어나는 데 1분 넘게 걸릴 수 있어 넉넉히 기다린다. 헬스 체크는 비밀 헤더 없이 열린 유일한 경로다
+        run: curl -fsS --max-time 150 --retry 2 --retry-delay 10 https://creditbook-api.onrender.com/actuator/health
