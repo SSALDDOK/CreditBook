@@ -208,8 +208,8 @@ SELECT tgname FROM pg_trigger WHERE tgrelid = 'ledger_entries'::regclass AND NOT
 - `jacoco`: 테스트 커버리지. 테스트 후 `backend/build/reports/jacoco/test/html/index.html`을 브라우저로 연다
 - `toolchain 17`: PC에 다른 Java가 있어도 17로 빌드
 
-### 앞으로 추가될 것
-- PIT 뮤테이션 테스트 (`domain` 패키지 테스트가 버그를 실제로 잡는지 검증)
+### 도메인 커버리지 게이트
+- `domain` 패키지 라인 커버리지가 80% 미만이면 `build`가 실패한다(`jacocoTestCoverageVerification`). 잔액 규칙은 경계값 단위 테스트로 직접 확인한다
 
 ## 6. 프론트 (`frontend/`, Node.js)
 

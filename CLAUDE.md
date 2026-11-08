@@ -8,7 +8,7 @@
   - 스프린트 보드: `collection://cb292543-5bea-46aa-8970-9191533e66df`
 - 워크스페이스 인덱스(결정 로그 등): 리포와 별개로 Claude 계정의 Project 문서에 있다 — 필요하면 사용자에게 요청
 
-마지막 동기화: 2026-11-03 저녁 (S6 진행 — CB-15 화면·CB-45 API·CB-60 화면 완료, CB-54 수정, SCR-1 잠금은 아이디를 바꾸면 해제, SCR-12·13 문구 결정, S5 실제 시간 36h → 28h 정정. 이전: 11-03 S6 착수 결정·화면설계 공유, 11-02 S5 종료·S6 시작). 리포가 Notion보다 앞선 것(인수인계 요청으로 넘김): V2 Neon 적용(2026-10-03, 스키마 정의서 "Neon 적용 전" 표기)
+마지막 동기화: 2026-11-08 새벽 (S6 마감 — 배포 CB-59·TC-57, CB-61, CB-22 기동 시 정합성 점검·배포 후 스모크, 범위 결정: CB-17·48·49·39 범위 밖, CB-52·PITR(CB-23)·README·API 명세 차이·전체 회고는 S7, S7 신설 11-09~15. 이전: 11-03 CB-15·45·60 구현). 리포가 Notion보다 앞선 것: 없음 (V3·V4 Neon 적용은 스키마 정의서에 반영됨)
 
 ## 세션 시작 점검 (Notion 읽기 전용)
 1. **인수인계 요청 DB** (순서 2026-10-26 사용자 지시): ① 코워크가 보낸 미완료 요청(`요청자 = 코워크`, `담당 = Claude Code`, `상태 ≠ 완료`)을 먼저 읽고 → ② 마지막 "다음 세션 시작 작업 — … 세션 마무리" 행을 읽고 → ③ 둘을 비교해 겹치는 것·바뀐 것·새로 끼어든 것을 보여 주고 합친 순서를 제안한다. 마무리 행은 지난 세션 시점 기준이라 그 뒤 코워크가 바꾼 것이 우선할 수 있다. 처리는 사용자가 승인한 뒤에 한다 (알림만, 자동 처리 없음)
@@ -29,7 +29,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 - **하루는 새벽 6시에 끝난다** (2026-10-26): 10-27 01시는 아직 10-26이다. 몇 일차인지, 처리 결과·Pass 보고·댓글 날짜는 이 기준으로 적되, Notion·Jira 본문에는 기준 자체를 쓰지 않는다
 - **제안마다 근거 줄** (2026-10-26): 제안·코워크 질문 답·범위 조정·위임 프롬프트 끝에 `확인한 근거: <REQ 경계 조건 · Jira 설명(결정 날짜) · 스프린트 카드 절 · TC/테스트 계획서 § · 코드 file:line> / 못 본 것: <…>`를 붙인다. "못 본 것"이 있으면 제안 전에 먼저 읽고, 읽을 수 없으면 그대로 적는다. 착수·위임·자르는 선을 정할 때는 REQ 경계 조건·Jira 결정 이력·스프린트 카드 조건을 먼저 읽고 Must를 앞에 둔다
 - **S6 타임박싱은 코워크 채팅에서 확정** (2026-11-02): 개발 쪽은 항목별 추정치·순서 의견만 `처리 결과`에 주고 표를 따로 만들지 않는다. 확정본은 S6 카드
-- **마이그레이션 메모** (2026-10-30 확인): `employees.must_change_password`는 V1에 이미 있어 CB-45는 마이그레이션이 필요 없다. V4는 CB-15 잠금 칸(연속 실패 횟수·잠금 끝 시각)만(11-03 구현). Neon에는 V3도 아직 없으므로 배포 때 V3·V4를 함께 적용하는 순서를 배포 이슈에서 정한다
+- **마이그레이션 메모** (2026-10-30 확인): `employees.must_change_password`는 V1에 이미 있어 CB-45는 마이그레이션이 필요 없다. V4는 CB-15 잠금 칸(연속 실패 횟수·잠금 끝 시각)만(11-03 구현). V3·V4는 2026-11-07 배포 직전 Neon에 함께 적용했다(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동). 다음 V5(S7)는 운영 DB에 적용하기 전에 PITR 리허설을 먼저 한다
 
 ### 기술 설계는 리포가 먼저 (2026-09-28 사용자 결정 — "Notion이 먼저" 원칙의 예외)
 스키마·기술 설계(인덱스, 트리거, 권한, 제약조건, JPA 매핑 등)는 Claude Code가 설계하고, 코워크는 문서로 정리한다.
@@ -40,23 +40,28 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 - **API 명세도 같은 흐름** (2026-10-03 사용자 결정): 경로·요청/응답 필드·상태 코드·에러 코드는 Claude Code가 backend-dev와 상의해 설계하고, 추천안 하나를 실제 JSON 예시와 함께 제시해 사용자 최종 승인 후 확정한다. 서브에이전트 혼자 확정하지 않는다. 오류 응답 규칙(`code` 대문자 스네이크·도메인 예외 이름과 짝, 부가 숫자는 `details`)은 `ErrorResponse`·`ErrorCode`가 확정본이다
 - 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
-## 스프린트 로드맵 (현재: S6)
-1인 포트폴리오, 1주 스프린트 6개 + 쉬는 주 1주. 프로젝트 완료 예정 2026-11-08.
+## 스프린트 로드맵 (현재: S6 마감, 11-09부터 S7)
+1인 포트폴리오, 1주 스프린트 7개 + 쉬는 주 1주(09-21~11-15, 8주). 프로젝트 완료 예정 2026-11-15 — S7(여러 매장 전환)은 2026-11-07 사용자 결정으로 추가, 기간은 11-09 결정.
 
 **지난 스프린트 결과** (자세한 기록은 스프린트 보드 각 카드):
 - S2(10-04)·S3(10-11) 종료. S3은 가용일 2일 손실로 **위험 기반 우선순위 조정** — 짧게 확실히 닫을 수 있는 것을 먼저 끝내고, 의존 사슬 끝과 정합성 증명 테스트를 S4 첫 이틀로 이월했다
 - **S4 종료** (2026-10-18): S3 이월 6건 중 4건(CB-14·35·12·11) 완료, 본 작업 '반드시' 5건(CB-46·36·37·9·10)과 선 아래 CB-47·18·51 완료. E2E는 환경·CI headless·공통 뼈대(`frontend/e2e/support/api.ts`·`e2e/pages/`)와 충전 모달 TC-50까지. 미완료(CB-41 TC-35·36·39, CB-43 TC-19, CB-19 스모크, TC-13·14·28·30·46·51)는 S5 첫 이틀로 이월. 원인: 기능 구현과 테스트를 같은 날 병행해 테스트가 밀렸고, Playwright 학습 시간을 계획에 넣지 않았다
 - **쉬는 주** (2026-10-21 사용자 결정): 10-19~25는 사용자 단기 근무로 쉬고, 1주 리듬을 유지해 S5·S6을 한 주씩 미뤘다. 할 일 범위는 그대로
 - **S5 종료** (2026-11-01): S4 이월 테스트(CB-41·43·19·20 E2E·통합, PR #53–58), 보안 점검 CB-53(PR #59, 빠졌던 TC-22는 #61로 보완), 매장 개설 API CB-44(#60, TC-25), 탐색적 테스트 2세션(#62, `docs/exploratory-test-s5.md`) → 결함 4건 CB-54~57(BUG-6~9). 실제 약 28h(계획 약 20h — 시간을 따로 재지 않아 커밋 시각·대화 기록으로 추정, 처음 적은 36h는 세션을 열어 둔 시간이라 11-03 정정). 가장 많이 넘친 것은 이월 테스트 이틀(계획 10h, Playwright 학습 1h 포함 → 실제 약 16h — E2E가 생각보다 어려웠다) → S6부터 작업 시작·끝 시각을 기록한다. DoD ①④ 충족, ②(P2 버그 CB-57 수정)·③(REQ-25 TC)은 S6으로. 원인→조치: Jira 완료 판단 때 '검증 TC'를 태그·TC DB와 대조하지 않아 TC-22가 빠짐 → 완료 권유 전 대조 / 매장 개설을 API로만 끝내 사용자 관점 검증이 빠짐 → SCR-11 화면을 S6 배포 전 반드시로
-- **S5 회고 범위 결정** (2026-11-01 사용자 결정): 범위 밖 — CB-50 비기능(REQ-23·24, TC-17·18), SCR-2 매장 대시보드(REQ-18), CB-23. SCR-10은 화면 안 표시를 설계로 인정. S6에 추가 — CB-22 배포 후 정합성 스모크(REQ-28 대표 키), 운영 점검 가이드 절차(폐업·이전 장부 정산, 사장 비밀번호 분실 복구, 사장 계정 교체), REQ-25 TC 신설
+- **S5 회고 범위 결정** (2026-11-01 사용자 결정): 범위 밖 — CB-50 비기능(REQ-23·24, TC-17·18), SCR-2 매장 대시보드(REQ-18), CB-23(백업·복구 리허설 — 11-08에 S7로 다시 들임, 운영 DB 스키마 변경 전 반드시). SCR-10은 화면 안 표시를 설계로 인정. S6에 추가 — CB-22 배포 후 정합성 스모크(REQ-28 대표 키), 운영 점검 가이드 절차(폐업·이전 장부 정산, 사장 비밀번호 분실 복구, 사장 계정 교체), REQ-25 TC 신설
 
-**S6에서 지켜야 할 것** (2026-10-26·11-01·11-02 사용자 결정):
-- **배포 전 반드시**: CB-15(로그인 잠금 + IP 레이트 리밋 429 — **11-03 완료, 서버 PR #64·화면 #66·#68**) · CB-45(직원 관리 API + 비밀번호 변경 API — **11-03 구현 PR #67**, 검증 TC-26·27·56 통합 테스트 남음) · CB-58(SCR-11 매장 개설 화면 — 가입 성공 → 고객 목록) · **CB-60**(SCR-12 직원 계정 관리 + SCR-13 비밀번호 변경 화면 — **11-03 PR #69**, 화면 E2E 1건 남음: 직원 추가 → 첫 로그인 강제 변경 → 고객 목록, 사용자 작성). **로그인 잠금과 직원 관리 없이 공개 URL로 배포하지 않는다**
-- **배포 순서**: 위 일이 끝난 뒤 배포(CB-59, REQ-25 대표 — Render 백엔드·Vercel 프론트, Vercel이 `/api/*`를 Render로 rewrite)하고, 배포 직후 바로 매장을 개설한다 — 계정이 0개인 동안은 공개 URL에서 누구나 사장 계정을 만들 수 있다. 시험 배포도 이 일들보다 먼저 하지 않는다. Neon에는 V3·V4를 함께 적용(첫 적용은 사용자 확인 후). **rewrite 구성이면 Render는 요청을 Vercel IP에서 온 것으로 보므로 로그인 레이트 리밋이 모든 사용자 공용 한도가 된다** — CB-59 설계 때 신뢰할 프록시·클라이언트 IP 판별을 정하고 배포 직후 로그(`login rate limited: ip=`)로 확인한다
+**S6 결과** (11-02~08, 자세한 기록은 S6 카드):
+- **배포 전 반드시 모두 완료**: CB-15(로그인 잠금 + IP 레이트 리밋, PR #64·#66·#68) · CB-45(직원 관리·비밀번호 변경 API #67, TC-26·27·56 #71) · CB-60(SCR-12·13 #69, TC-58 #73) · CB-58(SCR-11 #72, 배포 직후 실제 매장 개설로 수동 검증)
+- **배포 CB-59** (11-07, #76·#77): 백엔드 Render(Docker, `backend/` 변경 커밋만 main CI 통과 뒤 자동 배포)·화면 Vercel(`/api/*`를 백엔드로 넘김)·DB Neon(V3·V4 적용). 화면 배포처가 넘기는 요청에 비밀 헤더 `X-Origin-Secret`을 붙이고 백엔드는 없거나 다르면 403(헬스 체크만 예외) → 프록시가 넘긴 접속자 IP를 믿을 수 있어 로그인 레이트 리밋이 실제 IP로 센다(배포 로그로 확인). 깨워 두기 `keep-alive.yml`은 GitHub 예약 실행이 몇 시간씩 건너뛰어 S7에 교체. TC-57 Pass·배포 뒤 보안 확인 2줄(#79). **배포 주소는 문서·PR에 적지 않는다**(리포에는 `vercel.json`·`keep-alive.yml`의 백엔드 주소만). 구성·환경변수 키·적용 순서는 운영 점검 가이드 11절
+- **CB-22** (11-08, #80): 백엔드가 기동할 때마다 정합성 점검 6개를 읽기 전용으로 돌려 로그로 남긴다(알림은 기동 로그 ERROR, 메일 알림은 S7). 배포 후 스모크 체크리스트 1회 수행(11-08)
+- **버그**: CB-57·55·56(#74·#75, TC-59), CB-54(#68), CB-61 사이드바 고정 매장명(#78, BUG-10 — 배포 후 발견)
+- **범위 결정** (11-06~08 사용자 결정): 범위 밖 — CB-17(PIT)·CB-48(거래 이력 필터)·CB-49(연락처 원문 조회 — REQ-26의 마스킹은 CB-25·TC-23으로 완료, 원문 조회만 범위 밖)·CB-39. S7로 — CB-52(여러 매장 전환이 고객 테이블과 연락처 중복 규칙을 바꾸므로 함께 설계, 운영 DB 스키마 변경은 복구 리허설 뒤)·PITR 리허설 CB-23(운영 DB 스키마 변경 전 반드시)·README·API 명세와 구현 차이 목록·전체 회고(S7까지 끝난 뒤 한 번에)·깨워 두기 교체와 정합성 점검 메일 알림·데모 계정
 - **이슈 짝** (11-02 사용자 결정): REQ-25 → CB-59, REQ-28 대표 → CB-22, REQ-30 대표 → CB-60(CB-45는 관련 Jira)
-- **S5에서 넘어온 버그**: CB-57(Major·P2, 재현 테스트는 두 번째 열기까지) → CB-55·56. CB-54(BUG-7)는 11-03 수정(PR #68)
-- **넘치면 자르는 후보**: CB-52(고객 정보 수정 API·SCR-9)·CB-48·CB-17·CB-49 — 자르는 순서 SCR-9 → CB-48 → CB-17 → CB-49. 타임박스는 현재 상태로 진행하고 자르기는 보류한다(11-02 사용자 결정) — 넘칠 조짐이 보이면 위 순서로 다시 묻는다
-- API 명세(Swagger 등)와 구현 일치 확인, JaCoCo 리포트 GitHub Pages 게시(CB-39), 전체 회고도 S6
+
+**S7에서 지켜야 할 것** (11-07·08 사용자 결정, 확정본은 S7 카드):
+- 여러 매장 전환 — 가입 = 새 매장 + 그 매장 사장, 입구는 초대 코드, 매장 이름 중복 허용, 매장 사이 데이터가 섞이지 않음을 테스트로 증명. 업무 규칙(가입 항목·초대 코드·중복 기준)은 Notion이 먼저, 스키마 설계는 리포가 먼저
+- **운영 DB 스키마 변경(V5) 전에 PITR 리허설**(운영 점검 가이드 8절). 병합하면 백엔드가 기동하며 Neon에 바로 적용하므로 병합 전 사용자 확인 + 복구 지점
+- S7 전에는 공개 링크를 나누지 않는다(배포 장부는 지울 수 없는 실제 장부 — 시험 거래를 넣지 않는다)
 
 | 스프린트 | 기간 | 목표 |
 |---|---|---|
@@ -66,7 +71,8 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 | S4 (완료) | 10.12–10.18 | S3 이월분, 충전 취소, 고객 상세·등록, 충전·사용 모달, 거래 이력·취소 버튼, 정합성 테스트 3종 완료. 이월 테스트는 S5 첫 이틀로 |
 | (쉬는 주) | 10.19–10.25 | 사용자 단기 근무 — 작업 없음 |
 | S5 (완료) | 10.26–11.01 | S4 이월 테스트, 보안 점검(CB-53), 매장 개설 API(CB-44), 탐색적 테스트 → 결함 4건. CB-50은 범위 밖 |
-| **S6** | 11.02–11.08 | CB-15·CB-45·CB-60(11-03 구현 완료)·CB-58(배포 전 반드시), CB-57 등 버그, 배포 CB-59·CB-22, 문서 마무리. S5에서 옮긴 후보는 넘치면 자른다 |
+| S6 (마감) | 11.02–11.08 | 배포 전 반드시(CB-15·45·60·58), 버그(CB-57·55·56·54·61), 배포 CB-59·TC-57, CB-22 기동 시 정합성 점검, 운영 점검 가이드. CB-52·문서 일부는 S7 |
+| **S7** | 11.09–11.15 | 여러 매장 전환(초대 코드, 매장 간 격리 테스트), CB-52, PITR 리허설(스키마 변경 전), README·API 명세 차이 목록·전체 회고 |
 
 ## 서브에이전트 구성 계획
 `.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev, frontend-dev, test-writer(둘 다 S3 추가)가 있다.
@@ -84,13 +90,13 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 
 ## 프로젝트 개요
 카페/식당 선결제 잔액 관리 웹앱. 결제 처리(PG)는 범위 밖 — 이미 받은 선결제를 기록·차감만 하는 장부 도구.
-1인 6주 포트폴리오. 목표 직무: SW QA / 보안 QA / 유지보수·운영 개발.
+1인 8주 포트폴리오(1주 스프린트 7회 + 쉬는 주 1주). 목표 직무: SW QA / 보안 QA / 유지보수·운영 개발.
 **핵심 가치는 기능이 아니라 잔액 정합성과 추적 가능성.**
 
 ## 기술 스택
 - 백엔드: **Java 17** (Corretto, 로컬 기설치 버전 그대로 사용 — 21 아님) + **Spring Boot 4.0.8**, DDD 구조. 리포의 `backend/` 하위 (2026-09-28 결정: 3.5 라인은 OSS 지원 종료, 4.1보다 검증 기간이 긴 4.0 라인. Boot 4에서는 `@MockBean` 대신 `@MockitoBean`)
 - 프론트: React 19 + Vite 8 + TypeScript 6 + Tailwind 4 + shadcn/ui, 린트는 oxlint. 리포의 `frontend/` 하위 (CB-32). **Node 22 최신(22.23.3 이상)** — 22.12는 한글이 들어간 경로에서 Vite가 비정상 종료한다. 목 데이터는 `VITE_USE_MOCK`이 없으면 개발 모드에서만 켜진다. CI 필수 검사에 `frontend build`가 추가됐다. 설치·실행은 [docs/dev-environment-guide.md](docs/dev-environment-guide.md) §6
-- DB: PostgreSQL (Neon, 서버리스) · 마이그레이션: Flyway · 테스트: JUnit5(단위) + Playwright(E2E) · 배포: Vercel(FE) + Render(BE) + GitHub Actions(CI/CD)
+- DB: PostgreSQL (Neon, 서버리스) · 마이그레이션: Flyway · 테스트: JUnit5(단위) + Playwright(E2E) · 배포: Vercel(FE) + Render(BE) + GitHub Actions(CI/CD) — 구성·환경변수 키·프록시 경유 확인·마이그레이션 적용 순서는 Notion 운영 점검 가이드 11절
 - 도구 간 연결(Docker·Testcontainers vs Neon, Flyway 동작, 의존성 읽는 법, 육안 확인 방법)은 [docs/dev-environment-guide.md](docs/dev-environment-guide.md)에 설명돼 있다. 사용자가 도구 동작을 물으면 이 문서를 기준으로 답하고, 환경이 바뀌면 함께 고친다
 
 ## 패키지 구조 (DDD, 도메인 최상위)
@@ -182,16 +188,16 @@ com.creditbook
 | 테이블 | 핵심 제약·인덱스·트리거 (이름으로 대화할 때 참고) |
 |---|---|
 | `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` — 단일 매장 전제(여러 매장은 범위 밖, 2026-10-30) |
-| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role`. V4(CB-15): `failed_login_count`·`locked_until`(NULL = 잠기지 않음), `ck_employees_failed_login_count`(>= 0, 상한은 설정값이라 두지 않음). **Neon 미적용** |
+| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role`. V4(CB-15): `failed_login_count`·`locked_until`(NULL = 잠기지 않음), `ck_employees_failed_login_count`(>= 0, 상한은 설정값이라 두지 않음). 2026-11-07 Neon 적용 |
 | `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
 | `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version` — Optimistic Lock(낙관적 락) |
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
-| `revoked_tokens` (V3, CB-42) | 로그아웃한 토큰의 `jti` PK, `employee_id` FK, `ix_revoked_tokens_expires_at`(만료 지난 행 정리용). 인증 요청마다 직원 활성·역할과 함께 1쿼리로 조회. **Neon 미적용** |
+| `revoked_tokens` (V3, CB-42) | 로그아웃한 토큰의 `jti` PK, `employee_id` FK, `ix_revoked_tokens_expires_at`(만료 지난 행 정리용). 인증 요청마다 직원 활성·역할과 함께 1쿼리로 조회. 2026-11-07 Neon 적용 |
 
-- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03. **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. V3(`revoked_tokens`, CB-42)·V4(`employees` 로그인 잠금 칸, CB-15 — 2026-11-02 Neon 롤백 검증)는 로컬 Docker DB·Testcontainers에만 적용됐다. 다음 스키마 변경은 `V5__...sql`부터 새 파일로 만든다.
+- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03, V3(`revoked_tokens`, CB-42)·V4(`employees` 로그인 잠금 칸, CB-15) 2026-11-07(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동, 배포 직전). **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 다음 스키마 변경은 `V5__...sql`부터 새 파일로 만들고, 운영 DB에 적용하기 전에 PITR 리허설을 한다(S7).
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
-- **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 S5·S6 보안 강화 후보. SQL은 `V1__init.sql` 끝부분이 확정본이다.
+- **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 프로젝트 종료 후 보안 강화 후보(S5·S6에서는 하지 않음). SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
 - **처리 직원(`ledger_entries.performed_by`) — 방법 A** (2026-10-01): `performed_by`는 NOT NULL·`employees` FK다. 충전·사용 서비스는 현재 직원을 인터페이스 `CurrentEmployee`로 받고, 실제 구현은 S3 로그인에서 연결한다. S2에는 테스트에서만 가짜 직원을 넣는다. 임시 헤더로 직원 ID 받기, 가짜 직원 시드 마이그레이션, 운영 코드의 직원 ID 하드코딩은 쓰지 않는다(방법 B 기각)
 - 정합성 점검 쿼리(잔액 대사, `balance_after` 누적합, 반제 무결성·유형 불일치)는 스키마 정의서 §6이 확정본이다. 모두 0행이어야 정상이며, 정합성 테스트와 배포 후 스모크에 그대로 쓴다.
@@ -258,12 +264,12 @@ com.creditbook
 - TC를 검증하는 테스트에는 REQ 태그와 함께 `@Tag("TC-n")`을 붙인다(대체 아님). 한 테스트가 여러 TC를 검증하면 여러 개 붙인다. TC 실행 결과는 이 태그가 붙은 테스트의 **main CI 결과로만** 판정하고(테스트 계획서 §5.1), TC 태그가 든 PR이 병합돼 CI가 통과하면 인수인계 요청 DB에 "TC-n Pass" 보고(TC 번호, 테스트 클래스#메서드, PR 번호, CI 실행 링크, 날짜)를 쓴다
 - 도메인 패키지 라인 커버리지 80% 미만이면 `build`가 실패한다(`jacocoTestCoverageVerification`, REQ-21·TC-32). 게이트 동작은 `./gradlew jacocoTestCoverageVerification -PdomainLineCoverageMin=0.99`로 확인한다(PowerShell에서는 `-P` 인자를 따옴표로 감싼다)
 - 요구사항 "상태"는 구현 진행을, 검증 여부는 연결된 TC의 "실행 결과"로 본다 (요구사항 명세서 작성 규칙 6). 서버가 끝나도 화면 검증 E2E TC가 미실행이면 그 요구사항의 검증은 끝나지 않았다. 요구사항 DB의 "Jira 키"는 그 요구사항을 마지막으로 끝내는 이슈 1개, 나머지는 "관련 Jira". TC DB에는 Jira 키 칸을 두지 않는다 — TC → 검증 대상 요구사항 → "Jira 키"·"관련 Jira"로 찾는다 (2026-10-06)
-- CI에 JaCoCo 커버리지 리포트, `domain` 패키지에는 PIT 뮤테이션 테스트
+- CI에 JaCoCo 커버리지 리포트, `domain` 패키지는 위 라인 커버리지 게이트. 뮤테이션 테스트(PIT, CB-17)는 범위 밖(2026-11-07)
 
 ## Neon 연결
 1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
 2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
-3. `bootRun`의 기본 프로필은 **로컬 Docker DB(`local-docker`, 리포 루트 `docker-compose.yml`, `localhost:5433`)**다 (2026-10-07). Neon에는 `$env:SPRING_PROFILES_ACTIVE='local'`을 명시할 때만 붙는다 — 손으로 시험한 거래가 append-only 장부에 영구히 남지 않게 하려는 기본값이다. Flyway는 붙은 DB에 대기 중인 마이그레이션을 자동 적용한다 (Neon은 V1·V2 적용 완료). 따라서 **새 마이그레이션 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
+3. `bootRun`의 기본 프로필은 **로컬 Docker DB(`local-docker`, 리포 루트 `docker-compose.yml`, `localhost:5433`)**다 (2026-10-07). Neon에는 `$env:SPRING_PROFILES_ACTIVE='local'`을 명시할 때만 붙는다 — 손으로 시험한 거래가 append-only 장부에 영구히 남지 않게 하려는 기본값이다. Flyway는 붙은 DB에 대기 중인 마이그레이션을 자동 적용한다 (Neon은 V1~V4 적용 완료). 배포 백엔드도 기동할 때 Neon에 대기 마이그레이션을 적용하므로, 새 마이그레이션은 main에 병합하는 것 자체가 운영 적용이다. 따라서 **새 마이그레이션 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
 4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
@@ -283,13 +289,15 @@ com.creditbook
 - **화면에서 금액을 계산하는 예외는 `frontend/src/features/ledger-input/balancePreview.ts` 하나** (2026-10-15·16 사용자 승인): 확인 화면의 처리 후 예상 잔액·부족액(SCR-6·7)과 취소 창의 취소 후 예상 잔액(SCR-8)만 **표시용**으로 계산한다. 서버로 보내거나 처리 뒤 잔액에 쓰지 않는다 — 처리 뒤 잔액은 서버 응답(`balanceAfter`)과 재조회 값만
 - **고정 높이 레이아웃** (2026-10-15): 화면 전체 `h-dvh`·`overflow-hidden`, 본문(main)만 내부 스크롤 — 왼쪽 아래 직원 표시가 항상 보인다. 목록·거래 이력의 한 페이지 행 수는 화면 높이에 맞춘다(`frontend/src/hooks/useFitPageSize.ts`, 1024×768에서 약 10행, 최소 5·최대 30, 창 크기가 바뀌면 다시 계산). API `size`는 기본 20·최대 100
 - **SCR-8 거래 이력** (CB-47·18): 최신순, 행마다 기록된 거래 후 잔액, 취소 가능 여부는 서버가 행마다 준다. [취소]는 사유 입력 창(사유가 비면 [취소하기] 비활성)을 거치고, 충전 취소 거절 문구는 사유 창 안에 표시한다(TC-51). 고객 상세(SCR-5)는 최근 거래 5건, '전체 이력 보기'로 SCR-8에 간다
-- **SCR-10 공통 오류** (11-02 사용자 결정): 오류 안내는 상단 띠가 아니라 **내용 자리 대신**(목록은 목록 카드 안, 상세는 카드 하나) 표시한다. 문구는 SCR-10 메시지 규칙 표 **글자 그대로** — 마침표는 네트워크 문구('네트워크 연결을 확인해 주세요.')에만, 403·404·500은 없음. 서버 403 문구('권한이 없습니다.')는 그대로 두고 화면 표준 문구 표(`frontend/src/api/client.ts`의 `SCREEN_MESSAGES`)에 `FORBIDDEN` → '이 기능은 사장님 계정에서만 사용할 수 있습니다'. 404 버튼은 '고객 목록으로'(CB-55), 500 문구 '일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요'(CB-56)
+- **SCR-10 공통 오류** (11-02 사용자 결정): 오류 안내는 상단 띠가 아니라 **내용 자리 대신**(목록은 목록 카드 안, 상세는 카드 하나) 표시한다. 문구는 SCR-10 메시지 규칙 표 **글자 그대로** — 마침표는 네트워크 문구('네트워크 연결을 확인해 주세요.')에만, 403·404·500은 없음. 서버 403 문구('권한이 없습니다.')는 그대로 두고, 직원 관리 화면 안 403 카드는 `EMPLOYEES_FORBIDDEN_MESSAGE`('이 기능은 사장님 계정에서만 사용할 수 있습니다', `frontend/src/features/employees/EmployeesPage.tsx`) — `client.ts`의 화면 표준 문구 표 `SCREEN_MESSAGES`는 지금 비어 있다. 404 버튼은 '고객 목록으로'(CB-55), 500 문구 '일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요'(CB-56)
 - **SCR-12 직원 계정 관리·SCR-13 비밀번호 변경** (CB-60, 11-02): STAFF에게는 왼쪽 메뉴 '직원 관리'를 숨기고, 주소(`/settings/employees`)로 직접 오면 API를 부르지 않고 화면 안 403 카드(문구 + [이전 화면으로]). 사장 행은 [⋯] 없이 '본인' 표시만(툴팁 없음 — 태블릿 기준). 직원 추가는 이름·아이디만(권한 고정 STAFF), 초기 비밀번호는 1회만 표시. SCR-13은 로그인 화면과 같은 카드 양식 — 로그인 응답의 비밀번호 변경 필요 표시가 참이면 다른 화면 대신 이곳으로(바꾸면 고객 목록), 왼쪽 아래 [비밀번호 변경](사장·직원 모두)으로도 열린다(안내 문구만 일반용, 바꾼 뒤 원래 화면). 입력 규칙은 매장 개설과 같다(8–72자, 확인 일치). 연결 API·오류 코드는 REQ-30 행(CB-45). 화면은 403 `PASSWORD_CHANGE_REQUIRED`를 `FORBIDDEN`과 구분해 SCR-13으로 보내고, SCR-13에서 423이면 SCR-1과 같은 잠금 상자를 띄운다. 아이디 중복 즉시 안내는 목록(비활성 포함)과 대소문자 구분 비교. **구현 (CB-60, PR #69, 11-03 사용자 결정)**: SCR-13 라우트 `/password`(AppLayout 없음, 강제 변경·스스로 바꾸기 공용 — 일반 모드 안내 '현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.' / [변경하기] / [취소]). 비밀번호 변경 필요 세션은 `RequireAuth`가 `/password`로 replace, 다른 API의 403 `PASSWORD_CHANGE_REQUIRED`는 `client.ts` 등록 함수 → 세션 재확인(서버를 부르는 동작이 있어야 이동). 비밀번호 초기화·비활성화는 확인 창 뒤, 초기 비밀번호 안내 끝에 '하이픈(-)까지 그대로 입력합니다.'(하이픈 포함 14자가 비밀번호), 마지막 로그인 없으면 '-', 비활성 행은 메뉴 없음. 직원 관리 화면은 lazy 로드. 잠금 상자는 `features/auth/LockedNotice.tsx` 공용. 화면설계 이미지와 다른 것: [변경하고 시작하기] 비활성 색·추가 모달 권한 안내 상자 배경 색(구현 유지, 이미지를 고침), 사이드바 폭·머리말·글꼴(모든 화면 공통 값이라 유지). 목 데이터의 사장 아이디는 `owner`(로컬 개발 DB와 같음)
 - **SCR-1 로그인 잠금 안내** (CB-15): 423이면 잠금 안내(문장마다 줄바꿈)와 남은 시간(`retryAfterSeconds`), 429면 노란 안내 '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'만(남은 시간 표시 없음). 잠금은 계정 단위라 **아이디 칸을 고치면 잠금 안내를 지우고 [로그인]을 다시 켠다**(같은 단말의 다른 직원, 11-03 사용자 결정). 안내 상자는 13px·단어 단위 줄바꿈, 카드 26rem(CB-54). 세션 만료 안내는 로그인에 실패하면 주소의 `reason`을 지워 사라진다(새로고침해도 다시 안 나옴, `next`는 유지)
 - **SCR-4 고객 등록** (CB-51): 커서는 채우지 않은 필수 칸(검색어로 연락처가 채워지면 이름 칸, 이름이 채워지면 연락처 칸). 같은 번호 비활성 고객 확인 창의 버튼은 [닫기] [새로 등록] [해당 고객으로 이동](기본, 오른쪽). 비활성 고객이 여럿이면 [해당 고객으로 이동] 없이 [닫기] [새로 등록]
+- **사이드바** (CB-61, 11-07): 매장명을 표시하지 않는다 — 받아 올 API가 없어 개발용 고정 문구가 남아 다른 매장명이 보였던 결함(BUG-10). 표시는 S7 여러 매장 전환 때 매장 정보 API와 함께
 
 ## 로그 정책 (운영 점검 가이드 §6 요약)
 - 잔액 변동: INFO — 계좌 ID·유형·금액·변동 후 잔액·실행자. 고객 이름·연락처는 남기지 않는다
 - 잔액 부족·권한 거부: WARN (정상 동작이므로 ERROR 아님)
 - 예외: ERROR, 스택트레이스는 로그에만 — 응답에는 절대 포함하지 않는다
 - 모든 로그 라인에 요청 correlation id (CB-40): 요청·응답 헤더 `X-Request-Id`(들어온 값은 `^[A-Za-z0-9-]{1,64}$`일 때만 사용, 아니면 새 UUID), MDC 키 `requestId`, 로그 `[rid=…]`(`logging.pattern.correlation`). `RequestIdFilter`가 보안 필터보다 먼저 돈다. 다른 스레드(`@Async` 등)로 넘기는 작업을 만들면 MDC를 복사하는 `TaskDecorator`를 함께 둔다
+- 기동 시 정합성 점검 (CB-22): 모두 0건이면 INFO `reconciliation check ok on startup: checks=6, rows=0`, 틀린 행이 있으면 점검마다 ERROR(점검 이름·건수만, 고객 이름 없음), 실행 실패는 ERROR 후 기동 계속(`creditbook.reconciliation.on-startup`). 쿼리는 `LedgerReconciliationImpl` — 스키마 정의서 §6 원문이라 바뀌면 `ReconciliationApiIntegrationTest`와 함께 고친다. 대응 절차는 운영 점검 가이드 2.3절
