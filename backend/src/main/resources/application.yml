@@ -72,3 +72,7 @@ creditbook:
   # 영업 시간대. 충전 취소의 '당일'(REQ-7)을 이 시간대의 달력 날짜로 판단한다 — 서버·DB 시각은 UTC 다.
   # 잘못된 시간대 ID 면 기동이 실패한다
   business-zone: Asia/Seoul
+  # 장부 정합성 점검 (REQ-28): 기동할 때마다 운영 점검 가이드 §2 쿼리를 읽기 전용으로 돌려 틀린 행 건수를 로그로 남긴다.
+  # 모두 0건이면 INFO, 틀린 행이 있으면 점검마다 ERROR(건수만). 점검이 실패해도 기동은 막지 않는다
+  reconciliation:
+    on-startup: true
