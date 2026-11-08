@@ -32,6 +32,8 @@ import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
+import com.creditbook.prepaid.domain.LedgerReconciliation;
+import com.creditbook.prepaid.domain.ReconciliationResult;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
 
@@ -131,6 +133,9 @@ class ReconciliationApiIntegrationTest {
     @Autowired
     Clock clock;
 
+    @Autowired
+    LedgerReconciliation ledgerReconciliation;
+
     @Test
     @Tag("TC-52")
     @DisplayName("충전 → 사용 → 사용 취소 → 충전 취소 후 정합성 점검 쿼리(§2.1·§2.2)를 돌리면 모두 0행이다")
@@ -219,6 +224,14 @@ class ReconciliationApiIntegrationTest {
             softly.assertThat(jdbcTemplate.queryForList(SQL_CANCEL_TARGET_MISMATCHES))
                     .as("§2.2 반제 대상 유형·계좌 불일치").isEmpty();
         });
+
+        // then 3 — 기동 시 점검(CB-22)이 쓰는 운영 코드도 같은 장부에서 6개 모두 0건
+        // (운영 코드의 쿼리가 위 쿼리와 어긋나거나 실제 DB에서 안 돌면 여기서 걸린다 — 운영에선 예외를 삼켜 로그만 남으니까)
+        // 이 테스트 트랜잭션에 합류해서 돌기 때문에 읽기 전용·시간 제한은 여기서 확인 안 됨 → 그건 기동 로그(checks=6, rows=0)로 본다
+        assertThat(ledgerReconciliation.runAll())
+                .hasSize(6)
+                // 틀리면 실패 메시지에 어느 점검인지(checkId)가 같이 나온다
+                .allSatisfy(result -> assertThat(result.rows()).as(result.checkId()).isZero());
 
     }
 
