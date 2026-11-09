@@ -75,7 +75,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 | **S7** | 11.09–11.15 | 여러 매장 전환(초대 코드, 매장 간 격리 테스트), CB-52, PITR 리허설(스키마 변경 전), README·API 명세 차이 목록·전체 회고 |
 
 ## 서브에이전트 구성 계획
-`.claude/agents/`에 아래 4개를 역할별로 만들 계획이다. 현재는 backend-dev, frontend-dev, test-writer(둘 다 S3 추가)가 있다.
+`.claude/agents/`에 아래 5개가 있다. code-reviewer·database-reviewer는 S7 여러 매장 전환(V5) 설계·구현의 품질을 위해 2026-11-10 사용자 승인으로 추가했다(ECC 원본을 이 프로젝트 결정에 맞게 다시 씀).
 
 **작업 배정은 먼저 제안하고 컨펌받는다** (2026-09-30 사용자 요청): 할 일이 생기면 Claude Code가 "무슨 일을 → 어느 에이전트(또는 Claude Code 본인)에게 → 왜 → 쓸 커맨드·skill"을 먼저 말하고, 사용자가 컨펌한 뒤에 에이전트를 띄운다. 작업을 시작할 때 `.claude/commands/`·`.claude/skills/`를 확인해 맞는 것을 직접 쓰고, 커밋·PR 직전에는 `/cb-review-gate`를 돌린다 (2026-10-04). 에이전트에는 정의의 `skills`(미리 불러오기)와 `Skill` 도구로 연결한다 — backend-dev·frontend-dev는 `/feature-dev` 1–5단계(화면은 "화면 기능일 때" 절)를 따르고 커밋·PR은 하지 않는다.
 
@@ -84,7 +84,8 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 | backend-dev | Spring Boot 도메인/API 구현 | S1부터 |
 | frontend-dev | React + Vite UI 구현 (금액 계산 없이 서버 응답 표시) | S3부터 (CB-32) — 추가됨 |
 | test-writer | 사용자가 쓴 JUnit5 통합·Playwright E2E를 실행·검증하고 개선안 제시 (작성·수정 안 함, 리뷰형) | S3부터 (통합 테스트) — 추가됨 |
-| code-reviewer | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3부터 — PR이 실제로 쌓이기 시작하면 |
+| code-reviewer | PR 전 브랜치 전체 리뷰 — 절대 금지 8항목, 정합성, 권한·매장 간 격리, OWASP (읽기 전용) | S7 — 추가됨 (2026-11-10) |
+| database-reviewer | 마이그레이션 SQL·스키마 리뷰, 검증 시나리오 설계, 로컬에서만 롤백 확인 (읽기 전용, Neon 접속 안 함) | S7 — 추가됨 (2026-11-10, V5부터) |
 
 에이전트를 새로 만들 때는 [.claude/claude-code-guide.md](.claude/claude-code-guide.md)의 "새 에이전트 추가 절차"를 따른다. **요청 전에** 로드맵의 "현재" 표시가 실제 스프린트와 맞는지 확인한다 — 세션 시작 점검에서 스프린트 보드와 대조해 어긋나면 Claude Code가 먼저 알린다.
 

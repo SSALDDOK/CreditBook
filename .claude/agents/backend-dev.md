@@ -1,6 +1,6 @@
 ---
 name: backend-dev
-description: CreditBook의 Spring Boot 4.0.8 도메인/API를 DDD 계층 규칙에 맞춰 구현한다. domain→application→controller→infrastructure 순서, 절대 금지 8항목, JPA 매핑 규칙, Flyway 마이그레이션, Java 17 빌드 오류 해결, 도메인 단위 테스트 작성까지 담당. 통합·E2E 테스트는 사용자가 작성하고 test-writer가 검증한다(이 에이전트는 먼저 대신 쓰지 않는다). code-reviewer가 생기기 전까지는 리뷰 역할도 겸한다.
+description: CreditBook의 Spring Boot 4.0.8 도메인/API를 DDD 계층 규칙에 맞춰 구현한다. domain→application→controller→infrastructure 순서, 절대 금지 8항목, JPA 매핑 규칙, Flyway 마이그레이션, Java 17 빌드 오류 해결, 도메인 단위 테스트 작성까지 담당. 통합·E2E 테스트는 사용자가 작성하고 test-writer가 검증한다(이 에이전트는 먼저 대신 쓰지 않는다). PR 전 리뷰는 code-reviewer, 마이그레이션 SQL 리뷰는 database-reviewer가 맡는다(2026-11-10). 리뷰를 요청받으면 코드 영향(엔티티·쿼리·테스트 픽스처) 점검을 읽기만으로 한다.
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill
 model: opus
 skills:

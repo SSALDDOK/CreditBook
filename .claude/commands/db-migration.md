@@ -48,6 +48,7 @@ ls backend/src/main/resources/db/migration/ | sort
 
 ## 5단계 — 검증
 
+0. **`database-reviewer` 리뷰** (2026-11-10 추가) — SQL 초안을 넘겨 append-only·적용 안전성(빈 DB·직원만 있는 로컬 DB·실제 장부 3가지 시작 상태)·매장 간 격리·인덱스를 리뷰받고, **검증 시나리오 표를 따로 설계**받는다. 엔티티·쿼리 영향은 `backend-dev`에게 함께 맡긴다. 위임할 때 관련 REQ 경계 조건·확정된 설계 결정·스키마 정의서 §6 쿼리·운영 점검 가이드 SQL을 프롬프트에 적는다(에이전트는 Notion을 못 본다). 리뷰를 반영한 뒤 아래 검증으로 간다. Neon 검증은 Claude Code가 직접 하고(되돌릴 수 없는 위험이 있는 단계), 결과를 `database-reviewer`에게 다시 넘겨 판정받는다
 1. **Neon 롤백 전용 검증** — 로컬 Docker가 없을 수 있으므로 실제 PostgreSQL 동작은 여기서 확인한다
    - JDK `jshell` + Gradle 캐시의 postgresql JDBC jar로 **direct 연결**(`spring.flyway.url`)에 접속
    - 비밀번호는 `System.getenv("CREDITBOOK_DB_PASSWORD")`로만 읽는다. 출력·파일 저장·명령줄 인자 금지

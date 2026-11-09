@@ -29,16 +29,18 @@ git diff --name-only HEAD
 
 ## 3단계 — 심층 리뷰 위임
 
-`*.java`, DDD 계층 경계, JPA 매핑, Flyway 마이그레이션 관련 변경은 `backend-dev`에게, `frontend/` 변경은 `frontend-dev`에게 위임해 자체 점검(각 정의의 "완료 전 자가 점검" 기준)을 받는다.
+`*.java`, DDD 계층 경계, JPA 매핑 관련 변경은 `backend-dev`에게, `frontend/` 변경은 `frontend-dev`에게 위임해 자체 점검(각 정의의 "완료 전 자가 점검" 기준)을 받는다. Flyway 마이그레이션(`db/migration/V*.sql`)이 있으면 `database-reviewer`에게 SQL 리뷰를 맡긴다.
+
+PR을 만들기 전에는 브랜치 전체(`main...HEAD`)를 `code-reviewer`에게 맡겨 정합성·권한·매장 간 격리·보안 리뷰를 받는다. 위임할 때 Jira 키·관련 REQ 경계 조건·확정된 API 명세·대상 TC를 프롬프트에 적는다(에이전트는 Notion·Jira를 못 본다).
 
 `frontend/` 변경에는 위 8항목에 더해 아래를 하드 게이트로 본다 (frontend-dev 절대 금지와 같은 내용):
 - 화면 코드에서 잔액 산술(`balance + amount` 등)이나 금액 낙관적 갱신, `parseFloat`·`toFixed`로 금액 처리 — 2·3번 항목의 화면판
 - 토큰을 `localStorage`·`sessionStorage`에 저장, `VITE_` 환경변수에 비밀 값 — 5번 항목의 화면판
 - `dangerouslySetInnerHTML`, 고객 전화번호 원본 조합·`console.log` 출력
 
-S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되면 인증·PII·시크릿·삼켜진 예외 같은 항목은 그쪽으로 위임이 옮겨간다. 그 전까지는 아래 항목을 이 커맨드 안에서 직접 점검한다:
+인증·PII·시크릿·삼켜진 예외·매장 간 격리 같은 심층 보안 항목은 `code-reviewer`(읽기 전용, 2026-11-10 추가)가 맡는다. `code-reviewer`를 부르지 않는 작은 변경(문서·설정 한두 줄)이면 아래 항목만 이 커맨드 안에서 직접 점검한다:
 - 평문 비밀번호 비교, JWT 검증 누락
-- 고객 전화번호 조회 시 `phone_access_logs` 기록 누락
+- 요청에서 받은 id로 읽는 조회에 '현재 직원의 매장' 조건 누락
 - 빈 catch 블록, 삼켜진 `OptimisticLockException`
 
 ## 4단계 — 결과 종합
@@ -49,10 +51,13 @@ S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크 포함)가 추가되
 ## 절대 금지 게이트: 통과(PASS) / 차단(BLOCK)
 [BLOCK인 경우 위반 항목과 파일:줄 나열]
 
-## backend-dev 리뷰 요약
+## backend-dev·frontend-dev 자가 점검 요약
 - ...
 
-## 보안/PII 직접 점검 (code-reviewer 생기기 전까지)
+## database-reviewer 요약 (마이그레이션이 있을 때)
+- ...
+
+## code-reviewer 요약 (PR 전) / 보안 직접 점검 (작은 변경일 때)
 - ...
 
 ## 종합 판정: 승인(Approve) / 경고(Warning) / 차단(Block)
