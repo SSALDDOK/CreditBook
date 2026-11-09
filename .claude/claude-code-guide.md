@@ -29,8 +29,9 @@ CreditBook 리포의 `.claude/`에 들어 있는 도구를 언제, 어떻게 쓰
 
 ```
 /feature-dev CB-xx 기능 설명
-   └─ 스키마 변경이 필요하면 → /db-migration 설명
+   └─ 스키마 변경이 필요하면 → /db-migration 설명 (database-reviewer 리뷰·시나리오 → Neon 롤백 검증 → 승인)
 /cb-review-gate            ← 절대 금지 8항목 게이트
+code-reviewer 에이전트      ← PR 전 브랜치 전체 리뷰 (정합성·격리·보안)
 /code-review               ← (내장) 일반 버그·품질 리뷰, 함께 쓰면 좋다
 PR 생성 → CI 통과 확인 → 병합
 ```
@@ -86,10 +87,11 @@ archify 요청 예 (포트폴리오 문서용):
 
 | 에이전트 | 역할 | 상태 |
 |---|---|---|
-| `backend-dev` | Spring Boot 도메인/API 구현, Flyway, 도메인 테스트. test-writer·code-reviewer가 생기기 전까지 그 역할도 겸함 (모델: opus). `/feature-dev` 1–5단계를 따르고 커밋·PR은 하지 않는다 | 사용 중 |
+| `backend-dev` | Spring Boot 도메인/API 구현, Flyway, 도메인 테스트 (모델: opus). `/feature-dev` 1–5단계를 따르고 커밋·PR은 하지 않는다 | 사용 중 |
 | `test-writer` | 사용자가 쓴 JUnit5 통합·Playwright E2E를 실행·검증하고 개선안 제시 — Write·Edit 도구가 없는 리뷰형 (모델: opus). 인수조건·TC 대조, 단언 강도, 순서 의존·불안정 대기 점검, §5.1 TC 판정 근거 초안, 결함이면 버그 양식으로 보고 | 사용 중 (S3, 통합 테스트부터) |
 | `frontend-dev` | React + Vite + Tailwind + shadcn/ui 화면 구현 (모델: opus). `feature-dev`의 "화면 기능일 때" 절과 5단계를 따르고 커밋·PR은 하지 않는다. 금액 계산·업무 판단 없이 서버 응답 표시, E2E는 사용자가 작성 | 사용 중 (S3, CB-32부터) |
-| `code-reviewer` | PR 리뷰, OWASP 보안 체크 (읽기 전용) | S3 추가 예정 (PR이 쌓이기 시작하면) |
+| `code-reviewer` | PR 전 브랜치 전체 리뷰 — 절대 금지 8항목 하드 게이트, 정합성, 권한·매장 간 격리(IDOR), OWASP 보안, 계층·매핑, 테스트 유무. Write·Edit 없는 읽기 전용 (모델: opus). ECC `code-reviewer`·`security-reviewer`를 Spring·JPA·React 기준으로 다시 씀 — 80% 확신·HIGH 이상 증거 필수·0건도 정상 원칙 유지 | 사용 중 (S7, 2026-11-10 추가) |
+| `database-reviewer` | 마이그레이션 SQL·스키마 리뷰 — append-only, 운영 적용 안전성(시작 상태 3가지), 매장 간 격리(복합 외래 키·부분 유일 인덱스), 인덱스, 정합성 쿼리 영향. 검증 시나리오 표를 따로 설계하고 로컬 Docker·Testcontainers에서만 롤백 전용 확인, Neon 접속 안 함. 읽기 전용 (모델: opus). ECC `database-reviewer`에서 Supabase·RLS를 빼고 이 프로젝트 결정(UUID PK·FK 인덱스 예외 등)을 '다시 지적하지 않을 것'으로 넣음 | 사용 중 (S7, 2026-11-10 추가) |
 
 - **맡길 만한 것**: "backend-dev 에이전트로 CB-8 도메인 로직과 테스트까지 통째로 해줘" — 범위가 분명하고 메인 대화를 어지럽히고 싶지 않은 작업
 - **직접 하는 게 나은 것**: 작은 수정, 대화 맥락이 필요한 작업

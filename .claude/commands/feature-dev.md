@@ -65,7 +65,7 @@ cd backend && ./gradlew build   # 실행·스킵·실패 수를 확인한다 (Do
 ## 5단계 — 자가 리뷰
 
 - backend-dev·frontend-dev: 각 에이전트 정의의 "완료 전 자가 점검" 체크리스트
-- Claude Code: 위임 결과를 테스트 재실행으로 확인한 뒤 `/cb-review-gate`로 절대 금지 8항목을 게이트한다. S3부터 `code-reviewer`(읽기 전용, OWASP 보안 체크)가 생기면 PR 단계 리뷰를 그쪽으로 넘긴다
+- Claude Code: 위임 결과를 테스트 재실행으로 확인한 뒤 `/cb-review-gate`로 절대 금지 8항목을 게이트한다. PR을 만들기 전에 `code-reviewer`(읽기 전용 — 정합성·권한·매장 간 격리·OWASP)에게 브랜치 전체 리뷰를 맡기고, 마이그레이션이 있으면 `database-reviewer`에게도 맡긴다
 
 ## 6단계 — 커밋
 
