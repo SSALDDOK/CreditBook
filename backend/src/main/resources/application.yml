@@ -59,6 +59,11 @@ creditbook:
     login-rate-limit:
       max-requests: 10
       window: 1m
+    # 초대 코드 가입 IP 레이트 리밋 (REQ-36): 같은 IP 의 POST /api/setup 을 window 고정 창마다 max-requests 번까지 받고 넘으면 429.
+    # 성공·실패와 관계없이 모든 요청을 센다(초대 코드 대입 방지). 환경변수 CREDITBOOK_AUTH_SIGNUPRATELIMIT_MAXREQUESTS 로 덮을 수 있다
+    signup-rate-limit:
+      max-requests: 5
+      window: 10m
   # 프록시 경유 확인 (CB-59): 화면 배포처가 /api 를 넘길 때 붙이는 비밀 헤더 값. 환경변수로만 받는다, 비우면 확인 안 함(로컬·테스트)
   origin-guard:
     secret: ${CREDITBOOK_ORIGIN_SECRET:}

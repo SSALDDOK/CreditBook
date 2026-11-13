@@ -7,16 +7,23 @@ import com.creditbook.global.validation.PasswordConfirmed;
 import com.creditbook.global.validation.StrippedLength;
 import com.creditbook.store.domain.Store;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * 매장 개설 요청 (REQ-29). 형식이 틀리면 400 INVALID_INPUT 의 fieldErrors 에 항목 이름이 실린다.
- * 받지 않는 항목(role 등)은 본문 읽기 단계에서 거절된다. {@link #toString()} 은 비밀번호를 가린다.
+ * 초대 코드 가입 요청 (REQ-29·36). 초대 코드는 비어 있지 않고 64자 이하인지만 본다 — 형식(길이·문자 집합)은 발급 쪽이 정하므로 검사하지 않고,
+ * 공백·하이픈·대소문자는 서비스가 고쳐 비교한다. 형식이 틀리면 400 INVALID_INPUT 의 fieldErrors 에 항목 이름이 실린다.
+ * 받지 않는 항목(role 등)은 본문 읽기 단계에서 거절된다. {@link #toString()} 은 초대 코드·비밀번호 등 모든 항목을 가린다.
  */
 @PasswordConfirmed
 public record SetupRequest(
+		@NotNull(message = "초대 코드를 입력해 주세요.")
+		@NotBlank(message = "초대 코드를 입력해 주세요.")
+		@Size(max = INVITE_CODE_MAX_LENGTH, message = "초대 코드를 확인해 주세요.")
+		String inviteCode,
+
 		@NotNull(message = "매장명을 입력해 주세요.")
 		@StrippedLength(min = 1, max = Store.NAME_MAX_LENGTH, message = "매장명은 1–30자여야 합니다.")
 		String storeName,
@@ -39,9 +46,13 @@ public record SetupRequest(
 		@NotNull(message = "비밀번호 확인을 입력해 주세요.")
 		String passwordConfirm) implements PasswordConfirmation {
 
+	/** 받는 초대 코드의 최대 글자 수 (공백·하이픈 포함, 정규화 전). */
+	public static final int INVITE_CODE_MAX_LENGTH = 64;
+
 	@Override
 	public String toString() {
-		return "SetupRequest{storeName=[PROTECTED], ownerName=[PROTECTED], loginId=[PROTECTED], password=[PROTECTED], "
+		return "SetupRequest{inviteCode=[PROTECTED], storeName=[PROTECTED], ownerName=[PROTECTED], loginId=[PROTECTED], "
+				+ "password=[PROTECTED], "
 				+ "passwordConfirm=[PROTECTED]}";
 	}
 

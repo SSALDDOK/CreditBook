@@ -32,6 +32,10 @@ public enum ErrorCode {
 	/** 새 비밀번호가 현재 비밀번호와 같음. */
 	PASSWORD_UNCHANGED(HttpStatus.BAD_REQUEST, "현재 비밀번호와 다른 비밀번호를 입력해 주세요."),
 
+	// 400 — 초대 코드 가입 (REQ-36)
+	/** 없는 초대 코드·사용 중지된 코드·한도를 다 쓴 코드. 어느 경우인지 구분하지 않는다 (details 없음). */
+	INVALID_INVITE_CODE(HttpStatus.BAD_REQUEST, "초대 코드를 확인해 주세요."),
+
 	// 401 — 인증
 	UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
 	/** 로그인 실패. 아이디 없음·비밀번호 틀림·비활성 직원을 구분하지 않는다. */
@@ -39,8 +43,6 @@ public enum ErrorCode {
 
 	// 403 — 권한
 	FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
-	/** 직원 계정이 이미 있는데 매장 개설 요청 (REQ-29). 매장 개설은 계정이 하나도 없을 때만 열린다. */
-	SETUP_ALREADY_COMPLETED(HttpStatus.FORBIDDEN, "이미 개설된 매장입니다. 로그인해 주세요."),
 	/** 비밀번호를 바꿔야 하는 계정이 비밀번호 변경·세션 조회·로그아웃 말고 다른 기능을 부름 (REQ-30). 보안 필터가 거절한다. */
 	PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 변경한 뒤 이용해 주세요."),
 
@@ -73,7 +75,7 @@ public enum ErrorCode {
 	/** 같은 연락처의 고객이 이미 있음 (REQ-1). 같은 번호 고객 id·이름·활성 여부는 응답의 details 에 실린다. 확인 표시로 다시 요청하면 등록된다. */
 	DUPLICATE_PHONE(HttpStatus.CONFLICT, "같은 번호의 고객이 있습니다."),
 
-	/** 직원 추가 때 같은 로그인 아이디가 이미 있음 (REQ-30). 비활성 직원 포함, 대소문자 구분 정확 일치. */
+	/** 직원 추가·초대 코드 가입 때 같은 로그인 아이디가 이미 있음 (REQ-30·36). 모든 매장, 비활성 직원 포함, 대소문자 구분 정확 일치. */
 	DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
 	/** 사장 계정이나 본인 계정을 비활성화·비밀번호 초기화 (REQ-30). 사장 교체·분실 복구는 운영자 절차로 한다. */
 	ADMIN_ACCOUNT_PROTECTED(HttpStatus.CONFLICT, "사장님 계정은 비활성화하거나 비밀번호를 초기화할 수 없습니다."),
@@ -85,9 +87,11 @@ public enum ErrorCode {
 	/** 연속 로그인 실패로 잠긴 계정. 잠긴 동안은 비밀번호가 맞아도 거절한다. 남은 초는 details 와 Retry-After 헤더에 실린다. */
 	ACCOUNT_LOCKED(HttpStatus.LOCKED, "로그인을 5회 실패해 계정이 잠겼습니다. 잠시 후 다시 시도해 주세요."),
 
-	// 429 — 요청 수 제한 (REQ-15)
+	// 429 — 요청 수 제한 (REQ-15·36)
 	/** 같은 IP 의 로그인 요청이 너무 많음. 창이 끝날 때까지 남은 초는 Retry-After 헤더에 실린다 (details 없음). */
 	LOGIN_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
+	/** 같은 IP 의 가입(POST /api/setup) 요청이 너무 많음. 창이 끝날 때까지 남은 초는 Retry-After 헤더에 실린다 (details 없음). */
+	SIGNUP_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
 	// 500
 	INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");

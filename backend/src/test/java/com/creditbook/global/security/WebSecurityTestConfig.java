@@ -48,11 +48,6 @@ public class WebSecurityTestConfig {
 			}
 
 			@Override
-			public boolean existsAny() {
-				return false;
-			}
-
-			@Override
 			public boolean existsByLoginId(String loginId) {
 				return false;
 			}

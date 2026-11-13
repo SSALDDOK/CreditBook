@@ -6,6 +6,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -27,7 +28,7 @@ class StoreRepositoryImplTest {
 
 	private final EntityManager em = mock(EntityManager.class);
 	private final StoreRepositoryImpl repository = new StoreRepositoryImpl();
-	private final Store store = Store.open("카페 새벽", Instant.parse("2026-10-30T01:00:00Z"));
+	private final Store store = Store.open("카페 새벽", UUID.randomUUID(), Instant.parse("2026-10-30T01:00:00Z"));
 
 	StoreRepositoryImplTest() {
 		ReflectionTestUtils.setField(repository, "em", em);

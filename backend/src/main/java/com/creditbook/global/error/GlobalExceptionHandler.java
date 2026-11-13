@@ -45,8 +45,8 @@ import com.creditbook.prepaid.domain.LedgerEntryNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
 import com.creditbook.prepaid.domain.PrepaidDomainException;
 import com.creditbook.prepaid.domain.ReversalConflictException;
+import com.creditbook.store.domain.InvalidInviteCodeException;
 import com.creditbook.store.domain.InvalidStoreNameException;
-import com.creditbook.store.domain.SetupAlreadyCompletedException;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -351,13 +351,13 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
-	 * 이미 개설된 매장에 개설 요청 (REQ-29) — 계정이 있거나, 동시 요청이 매장 행을 먼저 만들었을 때.
-	 * 로그인 없이 부르는 경로라 정상적인 거절이어도 시도 자체를 WARN 으로 남긴다. 매장명·아이디·이름은 남기지 않는다.
+	 * 초대 코드로 매장을 열 수 없음 (REQ-36) — 없는 코드·사용 중지·한도 소진을 구분하지 않는다.
+	 * 로그인 없이 부르는 경로라 정상적인 거절이어도 시도 자체를 WARN 으로 남긴다. 코드 원문·해시·아이디·매장명은 남기지 않는다.
 	 */
-	@ExceptionHandler(SetupAlreadyCompletedException.class)
-	ResponseEntity<ErrorResponse> handleSetupAlreadyCompleted(SetupAlreadyCompletedException ex) {
-		log.warn("setup rejected: already completed");
-		return respond(ErrorCode.SETUP_ALREADY_COMPLETED, ErrorResponse.of(ErrorCode.SETUP_ALREADY_COMPLETED));
+	@ExceptionHandler(InvalidInviteCodeException.class)
+	ResponseEntity<ErrorResponse> handleInvalidInviteCode(InvalidInviteCodeException ex) {
+		log.warn("store signup rejected: invalid invite code");
+		return respond(ErrorCode.INVALID_INVITE_CODE, ErrorResponse.of(ErrorCode.INVALID_INVITE_CODE));
 	}
 
 	/**

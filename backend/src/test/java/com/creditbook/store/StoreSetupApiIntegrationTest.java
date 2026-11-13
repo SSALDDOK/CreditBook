@@ -69,85 +69,87 @@ class StoreSetupApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
-	@Test
-	@DisplayName("계정이 있는 상태에서 매장 개설 API 직접 호출 — 403, 계정·매장이 추가로 생기지 않고 가입 가능 여부만 false로 보인다")
-	@Tag("TC-25")
-	@Tag("REQ-29")
-	void setup_is_rejected_when_an_account_already_exists() throws Exception {
-		// given — ADMIN 계정 1개와 그 매장 (계정이 하나라도 있으면 개설을 막는지 보려고 - 초대 코드 전 규칙)
-		employeeRepository.add(TestEmployees.owner(TestStores.create(jdbcTemplate), "tc25.admin",
-				passwordEncoder.encode("existing-pass"), "기존사장",
-				clock.instant()));
+	// TC-25·TC-61로 다시 쓴다 (초대 코드 가입, 2026-11-13)
+	// @Test
+	// @DisplayName("계정이 있는 상태에서 매장 개설 API 직접 호출 — 403, 계정·매장이 추가로 생기지 않고 가입 가능 여부만 false로 보인다")
+	// @Tag("TC-25")
+	// @Tag("REQ-29")
+	// void setup_is_rejected_when_an_account_already_exists() throws Exception {
+	// 	// given — ADMIN 계정 1개와 그 매장 (계정이 하나라도 있으면 개설을 막는지 보려고 - 초대 코드 전 규칙)
+	// 	employeeRepository.add(TestEmployees.owner(TestStores.create(jdbcTemplate), "tc25.admin",
+	// 			passwordEncoder.encode("existing-pass"), "기존사장",
+	// 			clock.instant()));
+	//
+	// 	int storesBefore = countRows("stores"); // 계정엔 매장이 필수라 0이 아니다 — 요청 전 개수와 비교한다
+	//
+	// 	// when & then — 로그인 쿠키 없이 개설 요청 → 403
+	// 	mockMvc.perform(post("/api/setup")
+	// 			.contentType(MediaType.APPLICATION_JSON)
+	// 			.content(SETUP_BODY))
+	// 			.andExpect(status().isForbidden())
+	// 			.andExpect(jsonPath("$.code").value("SETUP_ALREADY_COMPLETED"));
+	//
+	// 	assertThat(countRows("employees")).isEqualTo(1);     // 기존 1명 그대로 (새 ADMIN 안 생김)
+	// 	assertThat(countRows("stores")).isEqualTo(storesBefore); // 매장도 안 생김 (요청 전보다 늘지 않음)
+	//
+	// 	// when & then — 가입 가능 여부는 false만. 매장명·계정 정보 같은 다른 값은 응답에 없다 (STRICT = 필드가 더 있으면 실패)
+	// 	mockMvc.perform(get("/api/setup/status"))
+	// 			.andExpect(status().isOk())
+	// 			.andExpect(content().json("""
+	// 					{"available": false}
+	// 					""", JsonCompareMode.STRICT));
+	// }
 
-		int storesBefore = countRows("stores"); // 계정엔 매장이 필수라 0이 아니다 — 요청 전 개수와 비교한다
-
-		// when & then — 로그인 쿠키 없이 개설 요청 → 403
-		mockMvc.perform(post("/api/setup")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(SETUP_BODY))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("SETUP_ALREADY_COMPLETED"));
-
-		assertThat(countRows("employees")).isEqualTo(1);     // 기존 1명 그대로 (새 ADMIN 안 생김)
-		assertThat(countRows("stores")).isEqualTo(storesBefore); // 매장도 안 생김 (요청 전보다 늘지 않음)
-
-		// when & then — 가입 가능 여부는 false만. 매장명·계정 정보 같은 다른 값은 응답에 없다 (STRICT = 필드가 더 있으면 실패)
-		mockMvc.perform(get("/api/setup/status"))
-				.andExpect(status().isOk())
-				.andExpect(content().json("""
-						{"available": false}
-						""", JsonCompareMode.STRICT));
-	}
-
-	@Test
-	@DisplayName("계정 0개 상태에서 매장 개설 — 201, 매장과 ADMIN 계정이 둘 다 생기고 그 계정으로 로그인된다")
-	@Tag("TC-25")
-	@Tag("REQ-29")
-	void setup_creates_store_and_admin_when_no_account_exists() throws Exception {
-		// given — 빈 DB (직원 0명, 매장 없음). 전제가 깨지면 아래 결과를 믿을 수 없으니 먼저 확인
-		assertThat(countRows("employees")).isZero();
-		assertThat(countRows("stores")).isZero();
-
-		mockMvc.perform(get("/api/setup/status"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.available").value(true));
-
-		// when — 비로그인으로 개설
-		mockMvc.perform(post("/api/setup")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(SETUP_BODY))
-				.andExpect(status().isCreated())
-				.andExpect(content().json("""
-						{"storeName": "단골 카페", "loginId": "lizzy", "name": "이사장", "role": "ADMIN"}
-						""", JsonCompareMode.STRICT)); // 비밀번호·해시·id는 응답에 없음
-
-		// then — 매장 1행 + ADMIN 1명이 함께 생김 (한 트랜잭션)
-		entityManager.flush(); // JdbcTemplate로 직접 보기 전에 JPA가 쥐고 있는 INSERT를 내보낸다
-		assertThat(jdbcTemplate.queryForObject("SELECT name FROM stores", String.class)).isEqualTo("단골 카페");
-		assertThat(jdbcTemplate.queryForObject("SELECT role FROM employees WHERE login_id = 'lizzy'", String.class))
-				.isEqualTo("ADMIN");
-		String hash = jdbcTemplate.queryForObject(
-				"SELECT password_hash FROM employees WHERE login_id = 'lizzy'", String.class);
-		assertThat(hash).isNotEqualTo("s3cure-pass").startsWith("$2"); // 평문이 아니라 BCrypt 해시
-
-		// 만든 계정으로 실제 로그인이 된다 (해시가 제대로 저장됐는지 끝까지 확인)
-		mockMvc.perform(post("/api/auth/login")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"loginId": "lizzy", "password": "s3cure-pass"}
-						"""))
-				.andExpect(status().isOk());
-
-		// 한 번 개설하면 가입 경로가 닫힌다
-		mockMvc.perform(get("/api/setup/status"))
-				.andExpect(jsonPath("$.available").value(false));
-		mockMvc.perform(post("/api/setup")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(SETUP_BODY.replace("lizzy", "second.owner")))
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("SETUP_ALREADY_COMPLETED"));
-		assertThat(countRows("employees")).isEqualTo(1); // 두 번째 요청으로 계정이 늘지 않음
-	}
+	// TC-25·TC-61로 다시 쓴다 (초대 코드 가입, 2026-11-13)
+	// @Test
+	// @DisplayName("계정 0개 상태에서 매장 개설 — 201, 매장과 ADMIN 계정이 둘 다 생기고 그 계정으로 로그인된다")
+	// @Tag("TC-25")
+	// @Tag("REQ-29")
+	// void setup_creates_store_and_admin_when_no_account_exists() throws Exception {
+	// 	// given — 빈 DB (직원 0명, 매장 없음). 전제가 깨지면 아래 결과를 믿을 수 없으니 먼저 확인
+	// 	assertThat(countRows("employees")).isZero();
+	// 	assertThat(countRows("stores")).isZero();
+	//
+	// 	mockMvc.perform(get("/api/setup/status"))
+	// 			.andExpect(status().isOk())
+	// 			.andExpect(jsonPath("$.available").value(true));
+	//
+	// 	// when — 비로그인으로 개설
+	// 	mockMvc.perform(post("/api/setup")
+	// 			.contentType(MediaType.APPLICATION_JSON)
+	// 			.content(SETUP_BODY))
+	// 			.andExpect(status().isCreated())
+	// 			.andExpect(content().json("""
+	// 					{"storeName": "단골 카페", "loginId": "lizzy", "name": "이사장", "role": "ADMIN"}
+	// 					""", JsonCompareMode.STRICT)); // 비밀번호·해시·id는 응답에 없음
+	//
+	// 	// then — 매장 1행 + ADMIN 1명이 함께 생김 (한 트랜잭션)
+	// 	entityManager.flush(); // JdbcTemplate로 직접 보기 전에 JPA가 쥐고 있는 INSERT를 내보낸다
+	// 	assertThat(jdbcTemplate.queryForObject("SELECT name FROM stores", String.class)).isEqualTo("단골 카페");
+	// 	assertThat(jdbcTemplate.queryForObject("SELECT role FROM employees WHERE login_id = 'lizzy'", String.class))
+	// 			.isEqualTo("ADMIN");
+	// 	String hash = jdbcTemplate.queryForObject(
+	// 			"SELECT password_hash FROM employees WHERE login_id = 'lizzy'", String.class);
+	// 	assertThat(hash).isNotEqualTo("s3cure-pass").startsWith("$2"); // 평문이 아니라 BCrypt 해시
+	//
+	// 	// 만든 계정으로 실제 로그인이 된다 (해시가 제대로 저장됐는지 끝까지 확인)
+	// 	mockMvc.perform(post("/api/auth/login")
+	// 			.contentType(MediaType.APPLICATION_JSON)
+	// 			.content("""
+	// 					{"loginId": "lizzy", "password": "s3cure-pass"}
+	// 					"""))
+	// 			.andExpect(status().isOk());
+	//
+	// 	// 한 번 개설하면 가입 경로가 닫힌다
+	// 	mockMvc.perform(get("/api/setup/status"))
+	// 			.andExpect(jsonPath("$.available").value(false));
+	// 	mockMvc.perform(post("/api/setup")
+	// 			.contentType(MediaType.APPLICATION_JSON)
+	// 			.content(SETUP_BODY.replace("lizzy", "second.owner")))
+	// 			.andExpect(status().isForbidden())
+	// 			.andExpect(jsonPath("$.code").value("SETUP_ALREADY_COMPLETED"));
+	// 	assertThat(countRows("employees")).isEqualTo(1); // 두 번째 요청으로 계정이 늘지 않음
+	// }
 
 	private int countRows(String table) {
 		// JPA가 아직 DB에 보내지 않은 INSERT를 먼저 내보내야 JdbcTemplate 조회에 보인다 (롤백은 그대로)

@@ -3,7 +3,9 @@ package com.creditbook.store.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,6 +15,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -25,59 +29,58 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.creditbook.auth.domain.DuplicateLoginIdException;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.Role;
+import com.creditbook.store.domain.InvalidInviteCodeException;
 import com.creditbook.store.domain.InvalidStoreNameException;
-import com.creditbook.store.domain.SetupAlreadyCompletedException;
 import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreInviteCode;
+import com.creditbook.store.domain.StoreInviteCodeRepository;
 import com.creditbook.store.domain.StoreRepository;
 
 /**
- * 매장 개설 유스케이스 (REQ-29). 저장소는 목, 비밀번호 해시는 실제 BCrypt(테스트용 낮은 비용 계수)를 쓴다.
- * 한 트랜잭션·동시 요청의 실제 DB 동작은 통합 테스트(TC-25)가 본다.
+ * 초대 코드 가입 유스케이스 (REQ-29·36). 저장소는 목, 비밀번호 해시는 실제 BCrypt(테스트용 낮은 비용 계수)를 쓴다.
+ * 한 트랜잭션(실패 시 차감 되돌림)·조건부 UPDATE·동시 요청의 실제 DB 동작은 통합 테스트가 본다.
  */
 @Tag("REQ-29")
+@Tag("REQ-36")
 @ExtendWith(OutputCaptureExtension.class)
 class StoreSetupServiceTest {
 
-	private static final Instant NOW = Instant.parse("2026-10-30T01:00:00Z");
+	private static final Instant NOW = Instant.parse("2026-11-13T01:00:00Z");
+	private static final UUID INVITE_CODE_ID = UUID.fromString("0f1e2d3c-4b5a-4968-8776-655443322110");
+	private static final String RAW_CODE = "abcd-efgh-2345";
 
+	private final StoreInviteCodeRepository storeInviteCodeRepository = mock(StoreInviteCodeRepository.class);
 	private final EmployeeRepository employeeRepository = mock(EmployeeRepository.class);
 	private final StoreRepository storeRepository = mock(StoreRepository.class);
 	private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
-	private final StoreSetupService service = new StoreSetupService(employeeRepository, storeRepository,
-			passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC));
+	private final StoreSetupService service = new StoreSetupService(storeInviteCodeRepository, employeeRepository,
+			storeRepository, passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC));
 
 	@Test
-	@DisplayName("직원 계정이 하나도 없으면 매장 개설이 가능하고, 하나라도 있으면 불가능하다")
-	void setup_available_only_without_accounts() {
-		// given / when / then
-		given(employeeRepository.existsAny()).willReturn(false);
-		assertThat(service.isSetupAvailable()).isTrue();
-
-		given(employeeRepository.existsAny()).willReturn(true);
-		assertThat(service.isSetupAvailable()).isFalse();
-	}
-
-	@Test
-	@DisplayName("계정 0개 상태에서 매장 개설 — 매장을 먼저 저장하고 해시된 비밀번호로 ADMIN 계정을 만든다")
-	void setup_creates_store_then_admin(CapturedOutput output) {
-		// given
-		given(employeeRepository.existsAny()).willReturn(false);
+	@DisplayName("초대 코드가 맞으면 코드 사용 횟수를 차감하고, 아이디를 확인한 뒤, 매장과 해시된 비밀번호의 사장 계정을 만든다")
+	void signup_claims_code_then_creates_store_and_admin(CapturedOutput output) {
+		// given — 코드는 정규화한 값의 해시로 찾는다
+		given(storeInviteCodeRepository.claimUse(StoreInviteCode.hashOf(RAW_CODE))).willReturn(Optional.of(INVITE_CODE_ID));
+		given(employeeRepository.existsByLoginId("kim.owner")).willReturn(false);
 
 		// when
-		StoreSetupResult result = service.setUp(" 카페 새벽 ", " 김사장 ", "kim.owner", "s3cure-pass");
+		StoreSetupResult result = service.setUp(RAW_CODE, " 카페 새벽 ", " 김사장 ", "kim.owner", "s3cure-pass");
 
-		// then — 매장 INSERT 가 직원 INSERT 보다 먼저 (동시 요청은 매장 단계에서 막힌다)
+		// then — 차감 → 아이디 확인 → 매장 INSERT → 사장 INSERT 순서
 		ArgumentCaptor<Store> store = ArgumentCaptor.forClass(Store.class);
 		ArgumentCaptor<Employee> admin = ArgumentCaptor.forClass(Employee.class);
-		InOrder order = inOrder(employeeRepository, storeRepository);
-		order.verify(employeeRepository).existsAny();
+		InOrder order = inOrder(storeInviteCodeRepository, employeeRepository, storeRepository);
+		order.verify(storeInviteCodeRepository).claimUse(StoreInviteCode.hashOf(RAW_CODE));
+		order.verify(employeeRepository).existsByLoginId("kim.owner");
 		order.verify(storeRepository).add(store.capture());
 		order.verify(employeeRepository).add(admin.capture());
 
 		assertThat(store.getValue().getName()).isEqualTo("카페 새벽");
+		assertThat(store.getValue().getInviteCodeId()).isEqualTo(INVITE_CODE_ID);
 		assertThat(store.getValue().getCreatedAt()).isEqualTo(NOW);
 
 		Employee created = admin.getValue();
@@ -94,33 +97,77 @@ class StoreSetupServiceTest {
 
 		assertThat(result).isEqualTo(new StoreSetupResult("카페 새벽", created.getId(), "kim.owner", "김사장", Role.ADMIN));
 
-		// 로그에는 새 ADMIN 직원 ID 만 — 매장명·아이디·이름·비밀번호는 남지 않는다
-		assertThat(output.getOut()).contains("store setup completed: adminEmployeeId=" + created.getId())
+		// 로그에는 매장·사장·초대 코드 id 만 — 코드 원문·해시, 매장명·아이디·이름·비밀번호는 남지 않는다
+		assertThat(output.getOut())
+				.contains("store signup completed: storeId=" + store.getValue().getId() + ", adminEmployeeId="
+						+ created.getId() + ", inviteCodeId=" + INVITE_CODE_ID)
+				.doesNotContain(RAW_CODE).doesNotContain(StoreInviteCode.normalize(RAW_CODE))
+				.doesNotContain(StoreInviteCode.hashOf(RAW_CODE))
 				.doesNotContain("카페 새벽").doesNotContain("kim.owner").doesNotContain("김사장")
 				.doesNotContain("s3cure-pass").doesNotContain(created.getPasswordHash());
 	}
 
 	@Test
-	@DisplayName("계정이 이미 있으면 매장 개설을 거절하고 매장·계정을 만들지 않는다")
-	void setup_rejected_when_account_exists() {
+	@DisplayName("공백·하이픈·대소문자만 다르게 입력해도 같은 코드로 찾는다")
+	void signup_uses_normalized_code_hash() {
 		// given
-		given(employeeRepository.existsAny()).willReturn(true);
+		given(storeInviteCodeRepository.claimUse(anyString())).willReturn(Optional.of(INVITE_CODE_ID));
+
+		// when
+		service.setUp(" ABCD EFGH 2345 ", "카페 새벽", "김사장", "kim.owner", "s3cure-pass");
+
+		// then
+		verify(storeInviteCodeRepository).claimUse(StoreInviteCode.hashOf(RAW_CODE));
+	}
+
+	@Test
+	@DisplayName("없는·꺼진·다 쓴 초대 코드면(차감 0행) 가입을 거절하고 아이디 확인·매장·계정 저장을 하지 않는다")
+	void signup_rejected_when_code_cannot_be_claimed() {
+		// given
+		given(storeInviteCodeRepository.claimUse(anyString())).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.setUp("카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
-				.isInstanceOf(SetupAlreadyCompletedException.class);
+		assertThatThrownBy(() -> service.setUp(RAW_CODE, "카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
+				.isInstanceOf(InvalidInviteCodeException.class)
+				.hasMessage("초대 코드를 확인해 주세요.");
+		verifyNoInteractions(employeeRepository, storeRepository);
+	}
+
+	@Test
+	@DisplayName("아이디가 이미 있으면(다른 매장·비활성 포함) 가입을 거절하고 매장·계정을 만들지 않는다")
+	void signup_rejected_when_login_id_exists() {
+		// given
+		given(storeInviteCodeRepository.claimUse(anyString())).willReturn(Optional.of(INVITE_CODE_ID));
+		given(employeeRepository.existsByLoginId("kim.owner")).willReturn(true);
+
+		// when / then — 차감은 트랜잭션이 되돌린다 (예외가 RuntimeException 이라 롤백)
+		assertThatThrownBy(() -> service.setUp(RAW_CODE, "카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
+				.isInstanceOf(DuplicateLoginIdException.class)
+				.isInstanceOf(RuntimeException.class);
 		verifyNoInteractions(storeRepository);
 		verify(employeeRepository, never()).add(any());
 	}
 
 	@Test
-	@DisplayName("매장명이 규칙에 맞지 않으면 아무것도 저장하지 않는다")
-	void setup_rejected_when_store_name_invalid() {
-		// given
-		given(employeeRepository.existsAny()).willReturn(false);
+	@DisplayName("같은 아이디 동시 가입으로 사장 계정 저장이 아이디 중복에 걸리면 그 예외를 그대로 던진다")
+	void signup_propagates_concurrent_duplicate_login_id() {
+		// given — 사전 확인은 함께 지나갔고, 저장할 때 ux_employees_login_id 가 막은 경우
+		given(storeInviteCodeRepository.claimUse(anyString())).willReturn(Optional.of(INVITE_CODE_ID));
+		willThrow(new DuplicateLoginIdException()).given(employeeRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> service.setUp("   ", "김사장", "kim.owner", "s3cure-pass"))
+		assertThatThrownBy(() -> service.setUp(RAW_CODE, "카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
+				.isInstanceOf(DuplicateLoginIdException.class);
+	}
+
+	@Test
+	@DisplayName("매장명이 규칙에 맞지 않으면 매장·계정을 저장하지 않는다")
+	void signup_rejected_when_store_name_invalid() {
+		// given
+		given(storeInviteCodeRepository.claimUse(anyString())).willReturn(Optional.of(INVITE_CODE_ID));
+
+		// when / then
+		assertThatThrownBy(() -> service.setUp(RAW_CODE, "   ", "김사장", "kim.owner", "s3cure-pass"))
 				.isInstanceOf(InvalidStoreNameException.class);
 		verifyNoInteractions(storeRepository);
 		verify(employeeRepository, never()).add(any());

@@ -22,18 +22,20 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.creditbook.global.error.ErrorCode;
+
 /**
  * 웹 보안 구성 (CB-42). 기본은 거부 — 아래 공개 경로 말고는 모두 로그인이 필요하다 (없는 경로도 401).
  * <ul>
- * <li>공개: POST /api/auth/login, POST /api/auth/logout, GET /actuator/health, /error</li>
+ * <li>공개: POST /api/auth/login, POST /api/auth/logout, POST /api/setup(초대 코드 가입), GET /actuator/health, /error</li>
  * <li>비밀번호를 바꿔야 하는 계정(REQ-30)은 {@link #PASSWORD_CHANGE_ALLOWED_ENDPOINTS} 와 로그아웃만 쓸 수 있다.
  * 그 밖은 403 PASSWORD_CHANGE_REQUIRED — 이 계정은 역할 대신 비밀번호 변경 필요 권한만 받으므로 역할 검사에서 걸린다</li>
  * <li>ADMIN 전용: {@link #ADMIN_ENDPOINTS} (REQ-16·30). STAFF 가 부르면 403</li>
  * <li>그 밖의 경로는 ADMIN·STAFF 역할이 있어야 한다 (로그인하지 않았으면 401)</li>
  * <li>리소스 서버 DSL 이 자동으로 여는 메타데이터 경로는 {@link ProtectedResourceMetadataBlockingFilter} 가 401 로 막는다</li>
  * <li>인증: {@value SessionCookies#NAME} 쿠키의 JWT 만 받는다 (Authorization 헤더 미사용). 서버 세션 없음(STATELESS)</li>
- * <li>로그인 IP 레이트 리밋: {@link LoginRateLimitFilter} 가 POST /api/auth/login 을 IP 별로 세어 넘으면 429 (REQ-15).
- * CORS·보안 헤더 필터 뒤, 인증 필터 앞이다</li>
+ * <li>IP 레이트 리밋: {@link IpRateLimitFilter} 두 개가 POST /api/auth/login(REQ-15, 429 LOGIN_RATE_LIMITED)과
+ * POST /api/setup(REQ-36, 429 SIGNUP_RATE_LIMITED)을 IP 별로 따로 센다. CORS·보안 헤더 필터 뒤, 인증 필터 앞이다</li>
  * <li>401·403 은 {@link RestAuthenticationEntryPoint}·{@link RestAccessDeniedHandler} 가 ErrorResponse 형식으로 응답한다.
  * 진입점은 일반 예외 처리와 리소스 서버(토큰 오류) 두 곳에 모두 지정한다 — 한쪽만 지정하면 토큰 오류가 기본 응답(빈 본문)으로 나간다</li>
  * </ul>
@@ -46,16 +48,22 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
-@EnableConfigurationProperties({ CorsProperties.class, LoginRateLimitProperties.class, OriginGuardProperties.class })
+@EnableConfigurationProperties({ CorsProperties.class, LoginRateLimitProperties.class, SignupRateLimitProperties.class,
+		OriginGuardProperties.class })
 public class SecurityConfig {
+
+	/** 로그인 요청. IP 레이트 리밋(REQ-15)이 센다. */
+	static final RequestMatcher LOGIN = pathPattern(HttpMethod.POST, "/api/auth/login");
+
+	/** 초대 코드 가입 요청. IP 레이트 리밋(REQ-36)이 센다. */
+	static final RequestMatcher SIGNUP = pathPattern(HttpMethod.POST, "/api/setup");
 
 	/** 로그인 없이 부를 수 있는 경로. 이 경로에서는 쿠키의 토큰을 읽지도 않는다 ({@link CookieBearerTokenResolver}). */
 	static final RequestMatcher PUBLIC_ENDPOINTS = new OrRequestMatcher(
-			pathPattern(HttpMethod.POST, "/api/auth/login"),
+			LOGIN,
 			pathPattern(HttpMethod.POST, "/api/auth/logout"),
-			// 매장 개설 (REQ-29) — 계정이 하나도 없을 때만 열리므로 로그인 전에 부른다. 계정이 있으면 서비스가 403 으로 막는다
-			pathPattern(HttpMethod.GET, "/api/setup/status"),
-			pathPattern(HttpMethod.POST, "/api/setup"),
+			// 초대 코드 가입 (REQ-29·36) — 계정이 생기기 전에 부른다. 코드가 틀리면 서비스가 400 으로 막는다
+			SIGNUP,
 			pathPattern(HttpMethod.GET, "/actuator/health"),
 			pathPattern("/error"));
 
@@ -76,8 +84,9 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, EmployeeJwtAuthenticationConverter authenticationConverter,
 			RestAuthenticationEntryPoint authenticationEntryPoint, RestAccessDeniedHandler accessDeniedHandler,
-			CorsProperties corsProperties, LoginRateLimitProperties loginRateLimitProperties, Clock clock,
-			SecurityErrorResponseWriter errorResponseWriter, OriginGuardProperties originGuardProperties) throws Exception {
+			CorsProperties corsProperties, LoginRateLimitProperties loginRateLimitProperties,
+			SignupRateLimitProperties signupRateLimitProperties, Clock clock, SecurityErrorResponseWriter errorResponseWriter,
+			OriginGuardProperties originGuardProperties) throws Exception {
 		http
 				.csrf(AbstractHttpConfigurer::disable)
 				.formLogin(AbstractHttpConfigurer::disable)
@@ -104,9 +113,12 @@ public class SecurityConfig {
 		}
 		// DSL 이 자동으로 여는 메타데이터 경로를 막는다. 메타데이터 필터(인증 필터 바로 앞)보다 확실히 앞에 두려고 LogoutFilter 자리를 기준으로 한다
 		http.addFilterBefore(new ProtectedResourceMetadataBlockingFilter(authenticationEntryPoint), LogoutFilter.class);
-		// 로그인 요청 수 제한 (REQ-15). CorsFilter·HeaderWriterFilter 뒤라 429 에도 CORS·보안 헤더가 붙고, 본문을 읽거나 DB 를 조회하기 전에 거절한다.
-		// 체인 빈이 하나라 필터 인스턴스(IP 별 횟수)도 하나다 — 서블릿 필터로 따로 등록되지 않게 빈으로 만들지 않는다
-		http.addFilterBefore(new LoginRateLimitFilter(loginRateLimitProperties, clock, errorResponseWriter), LogoutFilter.class);
+		// 로그인(REQ-15)·가입(REQ-36) 요청 수 제한. CorsFilter·HeaderWriterFilter 뒤라 429 에도 CORS·보안 헤더가 붙고, 본문을 읽거나 DB 를 조회하기 전에 거절한다.
+		// 체인 빈이 하나라 필터 인스턴스(IP 별 횟수)도 경로마다 하나다 — 서블릿 필터로 따로 등록되지 않게 빈으로 만들지 않는다
+		http.addFilterBefore(new IpRateLimitFilter("login", LOGIN, loginRateLimitProperties.maxRequests(),
+				loginRateLimitProperties.window(), ErrorCode.LOGIN_RATE_LIMITED, clock, errorResponseWriter), LogoutFilter.class);
+		http.addFilterBefore(new IpRateLimitFilter("signup", SIGNUP, signupRateLimitProperties.maxRequests(),
+				signupRateLimitProperties.window(), ErrorCode.SIGNUP_RATE_LIMITED, clock, errorResponseWriter), LogoutFilter.class);
 		if (corsProperties.isEnabled()) {
 			http.cors(cors -> cors.configurationSource(corsConfigurationSource(corsProperties)));
 		}

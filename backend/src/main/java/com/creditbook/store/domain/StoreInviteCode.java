@@ -1,6 +1,11 @@
 package com.creditbook.store.domain;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -14,8 +19,11 @@ import jakarta.persistence.Table;
  * 매장 개설 초대 코드 (store_invite_codes, REQ-36). 운영자가 무작위 코드를 만들어 전달하고, DB 에는 그 SHA-256 hex 만 둔다 —
  * 코드 원문은 저장하지 않는다. 코드는 지우지 않고 사용 중지만 한다.
  * <p>
- * 사용 횟수를 올리는 일은 조건부 UPDATE 한 문장으로 한다(V5 주석) — 이 엔티티로 읽고 고쳐 쓰지 않는다. 그래서 상태를 바꾸는
- * 메서드를 두지 않는다. 발급·사용 API 는 아직 없다.
+ * 사용 횟수를 올리는 일은 조건부 UPDATE 한 문장으로 한다(V5 주석, {@link StoreInviteCodeRepository#claimUse}) — 이 엔티티로 읽고
+ * 고쳐 쓰지 않는다. 그래서 상태를 바꾸는 메서드를 두지 않는다. 발급 API 는 없다(운영자 절차).
+ * <p>
+ * 입력한 코드는 {@link #normalize} 로 고친 뒤 {@link #hashOf} 로 해시해 비교한다 — 발급할 때도 같은 함수로 해시를 만든다.
+ * 코드의 길이·문자 집합은 운영 문서에서 정한다. 여기서는 가정하지 않는다.
  */
 @Entity
 @Table(name = "store_invite_codes")
@@ -54,6 +62,40 @@ public class StoreInviteCode {
 
 	@Column(name = "disabled_at")
 	private Instant disabledAt;
+
+	/**
+	 * 입력한 초대 코드를 비교용 형태로 고친다 — 공백(어디에 있든)과 하이픈을 빼고 대문자로 바꾼다. 사람이 옮겨 적다 넣은 띄어쓰기·하이픈,
+	 * 대소문자 차이로 같은 코드가 다르게 비교되지 않게 한다. 길이·문자 집합은 검사하지 않는다.
+	 *
+	 * @param rawCode 입력한 코드 원문
+	 * @return 고친 값. 공백·하이픈뿐이었으면 빈 문자열
+	 * @throws NullPointerException rawCode 가 null 일 때
+	 */
+	public static String normalize(String rawCode) {
+		Objects.requireNonNull(rawCode, "rawCode");
+		StringBuilder normalized = new StringBuilder(rawCode.length());
+		rawCode.codePoints()
+				.filter(codePoint -> codePoint != '-' && !Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint))
+				.forEach(normalized::appendCodePoint);
+		return normalized.toString().toUpperCase(Locale.ROOT);
+	}
+
+	/**
+	 * 초대 코드 원문을 {@link #normalize} 로 고친 뒤 UTF-8 바이트의 SHA-256 을 소문자 hex 64자로 돌려준다 (pepper 없음).
+	 * store_invite_codes.code_hash 와 비교하는 값이고, 발급할 때도 이 값을 저장한다.
+	 *
+	 * @throws NullPointerException rawCode 가 null 일 때
+	 */
+	public static String hashOf(String rawCode) {
+		byte[] bytes = normalize(rawCode).getBytes(StandardCharsets.UTF_8);
+		try {
+			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+		}
+		catch (NoSuchAlgorithmException ex) {
+			// 모든 Java 플랫폼은 SHA-256 을 갖춰야 한다 (MessageDigest 명세)
+			throw new IllegalStateException("SHA-256 is not available", ex);
+		}
+	}
 
 	protected StoreInviteCode() {
 		// JPA 전용

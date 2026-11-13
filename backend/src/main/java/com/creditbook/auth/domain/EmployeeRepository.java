@@ -8,7 +8,7 @@ import java.util.UUID;
  * 직원 저장소. 구현은 infrastructure 에 있다. 직원은 삭제하지 않는다 (비활성화만) — 삭제 메서드를 두지 않는다.
  * <p>
  * 다른 직원을 다루는 조회(직원 관리)는 모두 매장 조건을 받는다 (REQ-36) — 다른 매장 직원은 없는 것과 같다.
- * 매장 조건이 없는 조회는 본인 조회(토큰의 직원 ID)·로그인(아이디 전역 유일)·매장 개설(계정 유무)에만 쓴다.
+ * 매장 조건이 없는 조회는 본인 조회(토큰의 직원 ID)·로그인·아이디 중복 확인(아이디 전역 유일)에만 쓴다.
  */
 public interface EmployeeRepository {
 
@@ -35,10 +35,7 @@ public interface EmployeeRepository {
 	 */
 	Optional<Employee> findByIdAndStoreIdForUpdate(UUID id, UUID storeId);
 
-	/** 직원 계정이 하나라도 있는가 (비활성 직원 포함). 매장 개설은 계정이 하나도 없을 때만 열린다 (REQ-29). */
-	boolean existsAny();
-
-	/** 같은 로그인 아이디(대소문자 구분, 정확히 일치)의 직원이 있는가. 비활성 직원도 센다 (REQ-30). */
+	/** 같은 로그인 아이디(대소문자 구분, 정확히 일치)의 직원이 모든 매장에 있는가. 비활성 직원도 센다 (REQ-30·36). */
 	boolean existsByLoginId(String loginId);
 
 	/**
