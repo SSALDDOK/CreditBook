@@ -33,6 +33,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-11")
 class CustomerDetailServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final Instant NOW = Instant.parse("2026-10-15T01:00:00Z");
 
@@ -55,13 +57,13 @@ class CustomerDetailServiceTest {
 		// given
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678", new BigDecimal("5500"), true,
 				NOW, List.of());
-		given(customerRepository.findDetail(CUSTOMER_ID, 5)).willReturn(Optional.of(detail));
+		given(customerRepository.findDetail(STORE_ID, CUSTOMER_ID, 5)).willReturn(Optional.of(detail));
 
 		// when
-		CustomerDetail result = service.getDetail(CUSTOMER_ID);
+		CustomerDetail result = service.getDetail(STORE_ID, CUSTOMER_ID);
 
 		// then
-		verify(customerRepository).findDetail(CUSTOMER_ID, CustomerService.RECENT_ENTRY_LIMIT);
+		verify(customerRepository).findDetail(STORE_ID, CUSTOMER_ID, CustomerService.RECENT_ENTRY_LIMIT);
 		assertThat(CustomerService.RECENT_ENTRY_LIMIT).isEqualTo(5);
 		assertThat(result).isSameAs(detail);
 		assertThat(result.balance()).isEqualByComparingTo("5500");
@@ -71,10 +73,10 @@ class CustomerDetailServiceTest {
 	@DisplayName("없는 고객이면 CustomerNotFoundException 으로 거절한다")
 	void get_detail_fails_when_customer_not_found() {
 		// given
-		given(customerRepository.findDetail(CUSTOMER_ID, 5)).willReturn(Optional.empty());
+		given(customerRepository.findDetail(STORE_ID, CUSTOMER_ID, 5)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.getDetail(CUSTOMER_ID))
+		assertThatThrownBy(() -> service.getDetail(STORE_ID, CUSTOMER_ID))
 				.isInstanceOf(CustomerNotFoundException.class);
 	}
 

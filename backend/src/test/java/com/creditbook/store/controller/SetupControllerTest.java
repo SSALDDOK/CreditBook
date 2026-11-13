@@ -135,19 +135,6 @@ class SetupControllerTest {
 		assertThat(output.getOut()).doesNotContain("카페 새벽").doesNotContain("kim.owner").doesNotContain("김사장");
 	}
 
-	@Test
-	@DisplayName("동시 요청이 매장을 먼저 만들어 늦은 요청이 막혀도 500 이 아니라 403 SETUP_ALREADY_COMPLETED 다")
-	void concurrent_setup_rejected_with_403() throws Exception {
-		// given — 저장소가 ux_store_profile_singleton 위반을 바꾼 예외
-		given(storeSetupService.setUp(anyString(), anyString(), anyString(), anyString()))
-				.willThrow(new SetupAlreadyCompletedException(new RuntimeException("duplicate key")));
-
-		// when / then
-		setUp(BODY)
-				.andExpect(status().isForbidden())
-				.andExpect(jsonPath("$.code").value("SETUP_ALREADY_COMPLETED"));
-	}
-
 	// ---- 입력 오류
 
 	@ParameterizedTest(name = "[{index}] {0} = \"{1}\"")

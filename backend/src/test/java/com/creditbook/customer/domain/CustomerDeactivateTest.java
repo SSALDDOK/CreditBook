@@ -24,6 +24,8 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 @Tag("REQ-4")
 class CustomerDeactivateTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-10-11T03:00:00Z");
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
@@ -31,11 +33,11 @@ class CustomerDeactivateTest {
 	private static final ChargePolicy SETUP_POLICY = ChargePolicy.ofMaxAmount(1_000_000);
 
 	private static Customer newCustomer() {
-		return Customer.register("김단골", "01012345678", REGISTERED_AT);
+		return Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
 	}
 
 	private static PrepaidAccount accountOf(Customer customer, long balance) {
-		PrepaidAccount account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT);
 		if (balance > 0) {
 			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, REGISTERED_AT, null,
 					IdempotencyKey.of("setup-charge"));

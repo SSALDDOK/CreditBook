@@ -19,14 +19,15 @@ import jakarta.persistence.LockModeType;
  */
 interface PrepaidAccountJpaRepository extends Repository<PrepaidAccount, UUID> {
 
-	Optional<PrepaidAccount> findByCustomerId(UUID customerId);
+	Optional<PrepaidAccount> findByCustomerIdAndStoreId(UUID customerId, UUID storeId);
 
 	/**
 	 * 조회한 계좌의 version 을 커밋 때 강제로 올린다 (UPDATE ... SET version = v+1 WHERE id = ? AND version = v).
 	 * 그사이 다른 트랜잭션이 계좌를 바꿨으면 0행이 갱신돼 Optimistic Lock 예외가 난다.
 	 */
 	@Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
-	@Query("select a from PrepaidAccount a where a.customerId = :customerId")
-	Optional<PrepaidAccount> findForVersionIncrementByCustomerId(@Param("customerId") UUID customerId);
+	@Query("select a from PrepaidAccount a where a.customerId = :customerId and a.storeId = :storeId")
+	Optional<PrepaidAccount> findForVersionIncrementByCustomerIdAndStoreId(@Param("customerId") UUID customerId,
+			@Param("storeId") UUID storeId);
 
 }

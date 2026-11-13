@@ -57,6 +57,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-10")
 class IdempotencyKeyWebTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID ACCOUNT_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 	private static final UUID ENTRY_ID = UUID.fromString("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f");
@@ -80,6 +82,7 @@ class IdempotencyKeyWebTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private static MockHttpServletRequestBuilder request(String path) {
@@ -92,12 +95,12 @@ class IdempotencyKeyWebTest {
 	private void givenServiceReturns(String path, String keyValue, boolean replayed) {
 		IdempotencyKey key = IdempotencyKey.of(keyValue);
 		if (path.equals("charges")) {
-			given(chargeService.charge(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, key))
+			given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, key))
 					.willReturn(new ChargeResult(ENTRY_ID, ACCOUNT_ID, CUSTOMER_ID, LedgerEntryType.CHARGE,
 							new BigDecimal("4500"), new BigDecimal("45500"), "음료", EMPLOYEE_ID, NOW, replayed));
 		}
 		else {
-			given(usageService.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, key))
+			given(usageService.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, key))
 					.willReturn(new UsageResult(ENTRY_ID, ACCOUNT_ID, CUSTOMER_ID, LedgerEntryType.USE,
 							new BigDecimal("4500"), new BigDecimal("45500"), "음료", EMPLOYEE_ID, NOW, replayed));
 		}
@@ -105,16 +108,16 @@ class IdempotencyKeyWebTest {
 
 	private void givenServiceThrows(String path, RuntimeException ex) {
 		if (path.equals("charges")) {
-			given(chargeService.charge(any(), any(), any(), any(), eq(IdempotencyKey.of(KEY_VALUE)))).willThrow(ex);
+			given(chargeService.charge(any(), any(), any(), any(), any(), eq(IdempotencyKey.of(KEY_VALUE)))).willThrow(ex);
 		}
 		else {
-			given(usageService.use(any(), any(), any(), any(), eq(IdempotencyKey.of(KEY_VALUE)))).willThrow(ex);
+			given(usageService.use(any(), any(), any(), any(), any(), eq(IdempotencyKey.of(KEY_VALUE)))).willThrow(ex);
 		}
 	}
 
 	private void verifyServiceNeverCalled() {
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")

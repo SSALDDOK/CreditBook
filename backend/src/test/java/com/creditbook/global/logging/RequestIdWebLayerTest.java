@@ -49,6 +49,8 @@ import com.creditbook.support.WithMockEmployee;
 @ExtendWith(OutputCaptureExtension.class)
 class RequestIdWebLayerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final String UUID_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
@@ -69,7 +71,8 @@ class RequestIdWebLayerTest {
 
 	private void givenSuccessfulUse() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
-		given(usageService.use(any(), any(), any(), any(), any())).willReturn(new UsageResult(UUID.randomUUID(),
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+		given(usageService.use(any(), any(), any(), any(), any(), any())).willReturn(new UsageResult(UUID.randomUUID(),
 				UUID.randomUUID(), CUSTOMER_ID, LedgerEntryType.USE, new BigDecimal("1000"), new BigDecimal("9000"),
 				null, EMPLOYEE_ID, Instant.parse("2026-10-07T01:00:00Z"), false));
 	}
@@ -121,6 +124,7 @@ class RequestIdWebLayerTest {
 	void validation_error_response_carries_id() throws Exception {
 		// given
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 
 		// when / then
 		mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{}")
@@ -166,7 +170,8 @@ class RequestIdWebLayerTest {
 	void unexpected_error_logs_id_and_hides_internals(CapturedOutput output) throws Exception {
 		// given
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
-		given(usageService.use(any(), any(), any(), any(), any()))
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+		given(usageService.use(any(), any(), any(), any(), any(), any()))
 				.willThrow(new IllegalStateException("internal-detail-should-not-leak"));
 
 		// when

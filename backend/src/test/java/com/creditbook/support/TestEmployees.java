@@ -1,6 +1,7 @@
 package com.creditbook.support;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.Role;
@@ -12,26 +13,29 @@ import com.creditbook.auth.domain.Role;
  * <li>{@link #readyStaff} — 직원 추가 후 첫 비밀번호 변경까지 마친 직원 (STAFF, 비밀번호 변경 필요 없음). 비밀번호 해시는 받은 값 그대로다</li>
  * </ul>
  * 비밀번호 변경 필요 상태의 직원이 필요하면 {@link Employee#createStaff} 를 직접 쓴다.
+ * 직원은 매장에 속하므로(REQ-36) 매장 id 를 받는다 — 매장 행은 {@link TestStores} 로 먼저 만든다.
  */
 public final class TestEmployees {
 
 	private TestEmployees() {
 	}
 
-	public static Employee owner(String loginId, String passwordHash, String name, Instant createdAt) {
-		return Employee.createOwner(loginId, passwordHash, name, createdAt);
+	public static Employee owner(UUID storeId, String loginId, String passwordHash, String name, Instant createdAt) {
+		return Employee.createOwner(storeId, loginId, passwordHash, name, createdAt);
 	}
 
-	public static Employee readyStaff(String loginId, String passwordHash, String name, Instant createdAt) {
-		Employee staff = Employee.createStaff(loginId, passwordHash, name, createdAt);
+	public static Employee readyStaff(UUID storeId, String loginId, String passwordHash, String name,
+			Instant createdAt) {
+		Employee staff = Employee.createStaff(storeId, loginId, passwordHash, name, createdAt);
 		staff.changePassword(passwordHash, createdAt);
 		return staff;
 	}
 
 	/** 역할을 인자로 받는 테스트용. ADMIN 이면 {@link #owner}, STAFF 면 {@link #readyStaff}. */
-	public static Employee ready(String loginId, String passwordHash, String name, Role role, Instant createdAt) {
-		return role == Role.ADMIN ? owner(loginId, passwordHash, name, createdAt)
-				: readyStaff(loginId, passwordHash, name, createdAt);
+	public static Employee ready(UUID storeId, String loginId, String passwordHash, String name, Role role,
+			Instant createdAt) {
+		return role == Role.ADMIN ? owner(storeId, loginId, passwordHash, name, createdAt)
+				: readyStaff(storeId, loginId, passwordHash, name, createdAt);
 	}
 
 }

@@ -37,6 +37,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-1")
 class CustomerRegisterServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-18T01:10:00Z");
 	private static final UUID ACTIVE_ID = UUID.fromString("a3f0c1e2-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID INACTIVE_ID = UUID.fromString("b4e1d2f3-6c8e-4f3b-8d9c-2e3f4a5b6c7d");
@@ -58,10 +60,10 @@ class CustomerRegisterServiceTest {
 	@DisplayName("같은 번호 고객이 없으면 메모와 함께 고객과 잔액 0원 계좌를 등록한다")
 	void register_with_memo_saves_customer_and_account_when_no_same_phone() {
 		// given
-		given(customerRepository.findAllByPhone("01033814821")).willReturn(List.of());
+		given(customerRepository.findAllByStoreIdAndPhone(STORE_ID, "01033814821")).willReturn(List.of());
 
 		// when
-		RegisteredCustomer result = service.register("박서준", "01033814821", "  단골, 아메리카노 선호 ", false);
+		RegisteredCustomer result = service.register(STORE_ID, "박서준", "01033814821", "  단골, 아메리카노 선호 ", false);
 
 		// then
 		ArgumentCaptor<Customer> customerCaptor = ArgumentCaptor.forClass(Customer.class);
@@ -80,10 +82,10 @@ class CustomerRegisterServiceTest {
 		List<SamePhoneCustomer> samePhone = List.of(
 				new SamePhoneCustomer(ACTIVE_ID, "박서연", true),
 				new SamePhoneCustomer(INACTIVE_ID, "박휴면", false));
-		given(customerRepository.findAllByPhone("01033814821")).willReturn(samePhone);
+		given(customerRepository.findAllByStoreIdAndPhone(STORE_ID, "01033814821")).willReturn(samePhone);
 
 		// when / then
-		assertThatThrownBy(() -> service.register("박서준", "01033814821", null, false))
+		assertThatThrownBy(() -> service.register(STORE_ID, "박서준", "01033814821", null, false))
 				.isInstanceOfSatisfying(DuplicatePhoneException.class,
 						ex -> assertThat(ex.getExistingCustomers()).containsExactlyElementsOf(samePhone));
 		verify(customerRepository, never()).add(any());
@@ -94,10 +96,10 @@ class CustomerRegisterServiceTest {
 	@DisplayName("확인 표시로 다시 요청하면 같은 번호 고객이 있어도 등록한다")
 	void register_with_confirm_skips_same_phone_check() {
 		// when
-		RegisteredCustomer result = service.register("박서준", "01033814821", null, true);
+		RegisteredCustomer result = service.register(STORE_ID, "박서준", "01033814821", null, true);
 
 		// then: 같은 번호 조회 없이 바로 등록
-		verify(customerRepository, never()).findAllByPhone(anyString());
+		verify(customerRepository, never()).findAllByStoreIdAndPhone(any(), anyString());
 		verify(customerRepository).add(any());
 		verify(prepaidAccountRepository).add(any());
 		assertThat(result.memo()).isNull();
@@ -107,10 +109,10 @@ class CustomerRegisterServiceTest {
 	@DisplayName("메모 없이 이름·연락처만 받는 등록은 같은 번호 확인을 하지 않는다")
 	void legacy_register_skips_same_phone_check() {
 		// when
-		RegisteredCustomer result = service.register("박서준", "01033814821");
+		RegisteredCustomer result = service.register(STORE_ID, "박서준", "01033814821");
 
 		// then
-		verify(customerRepository, never()).findAllByPhone(anyString());
+		verify(customerRepository, never()).findAllByStoreIdAndPhone(any(), anyString());
 		verify(customerRepository).add(any());
 		assertThat(result.memo()).isNull();
 	}
@@ -122,9 +124,9 @@ class CustomerRegisterServiceTest {
 		String memo = "메".repeat(201);
 
 		// when / then
-		assertThatThrownBy(() -> service.register("박서준", "01033814821", memo, false))
+		assertThatThrownBy(() -> service.register(STORE_ID, "박서준", "01033814821", memo, false))
 				.isInstanceOf(InvalidCustomerMemoException.class);
-		verify(customerRepository, never()).findAllByPhone(anyString());
+		verify(customerRepository, never()).findAllByStoreIdAndPhone(any(), anyString());
 		verify(customerRepository, never()).add(any());
 		verify(prepaidAccountRepository, never()).add(any());
 	}

@@ -31,6 +31,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 고객 API. 요청 형식 검증과 DTO 변환만 하고, 등록·비활성화 규칙은 서비스·도메인이 판단한다.
+ * 모든 경로는 로그인한 직원의 매장({@link CurrentEmployee#storeId()}) 안에서만 동작한다 — 다른 매장 고객은 404 (REQ-36).
  */
 @RestController
 @RequestMapping("/api/customers")
@@ -57,8 +58,8 @@ public class CustomerController {
 	 */
 	@PostMapping
 	public ResponseEntity<CustomerResponse> register(@Valid @RequestBody CustomerRegisterRequest request) {
-		RegisteredCustomer registered = customerService.register(request.name(), request.phoneDigits(), request.memo(),
-				request.duplicatePhoneConfirmed());
+		RegisteredCustomer registered = customerService.register(requireCurrentStoreId(), request.name(),
+				request.phoneDigits(), request.memo(), request.duplicatePhoneConfirmed());
 		URI location = ServletUriComponentsBuilder.fromCurrentRequest()
 				.path("/{id}")
 				.buildAndExpand(registered.customerId())
@@ -86,29 +87,29 @@ public class CustomerController {
 			@RequestParam(name = "size", defaultValue = DEFAULT_PAGE_SIZE)
 			@Min(value = 1, message = "페이지 크기는 {value} 이상이어야 합니다.")
 			@Max(value = MAX_PAGE_SIZE, message = "페이지 크기는 {value} 이하여야 합니다.") int size) {
-		return CustomerListResponse.from(customerService.search(q, includeInactive, page, size));
+		return CustomerListResponse.from(customerService.search(requireCurrentStoreId(), q, includeInactive, page, size));
 	}
 
 	/**
 	 * 고객 상세 (REQ-11). 잔액·활성 여부와 최근 거래(최신순 최대 5건)를 함께 돌려준다. 비활성 고객도 조회된다.
 	 * 연락처는 가려서 내보낸다. 로그인한 직원(ADMIN·STAFF) 모두 부를 수 있다.
 	 *
-	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT, 없는 고객이면 404 CUSTOMER_NOT_FOUND
+	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT, 없거나 다른 매장 고객이면 404 CUSTOMER_NOT_FOUND
 	 */
 	@GetMapping("/{id}")
 	public CustomerDetailResponse getDetail(@PathVariable("id") UUID id) {
-		return CustomerDetailResponse.from(customerService.getDetail(id));
+		return CustomerDetailResponse.from(customerService.getDetail(requireCurrentStoreId(), id));
 	}
 
 	/**
 	 * 고객 비활성화 (REQ-4). 요청 본문 없음. ADMIN 만 부를 수 있다 — 권한은 보안 구성이 확인한다 (REQ-16, STAFF 는 403).
 	 * 잔액 0원 고객만 비활성화되고, 이미 비활성이면 그대로 둔 채 같은 204 로 응답한다.
 	 *
-	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT
+	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT, 없거나 다른 매장 고객이면 404 CUSTOMER_NOT_FOUND
 	 */
 	@PatchMapping("/{id}/deactivate")
 	public ResponseEntity<Void> deactivate(@PathVariable("id") UUID id) {
-		customerService.deactivate(id, requireCurrentEmployeeId());
+		customerService.deactivate(requireCurrentStoreId(), id, requireCurrentEmployeeId());
 		return ResponseEntity.noContent().build();
 	}
 
@@ -119,6 +120,16 @@ public class CustomerController {
 			throw new UnauthenticatedException();
 		}
 		return employeeId;
+	}
+
+	/** 현재 직원의 매장. 알 수 없으면 401 — 매장 조건 없이 처리하지 않는다 (REQ-36). */
+	private UUID requireCurrentStoreId() {
+		CurrentEmployee employee = currentEmployee.getIfAvailable();
+		UUID storeId = employee == null ? null : employee.storeId();
+		if (storeId == null) {
+			throw new UnauthenticatedException();
+		}
+		return storeId;
 	}
 
 }

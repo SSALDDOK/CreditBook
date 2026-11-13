@@ -40,6 +40,10 @@ public class LedgerEntry {
 	@Column(name = "seq", insertable = false, updatable = false)
 	private Long seq;
 
+	/** 이 거래가 속한 매장 (stores.id) — 만든 계좌의 매장을 그대로 쓴다 (fk_ledger_entries_store_account). */
+	@Column(name = "store_id", nullable = false, updatable = false)
+	private UUID storeId;
+
 	@Column(name = "account_id", nullable = false, updatable = false)
 	private UUID accountId;
 
@@ -80,9 +84,11 @@ public class LedgerEntry {
 		// JPA 전용
 	}
 
-	private LedgerEntry(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String memo, UUID reversesId, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
+	private LedgerEntry(UUID storeId, UUID accountId, LedgerEntryType type, BigDecimal amount,
+			BigDecimal balanceAfter, String memo, UUID reversesId, UUID performedBy, Instant performedAt,
+			IdempotencyKey idempotencyKey) {
 		this.id = UUID.randomUUID();
+		this.storeId = Objects.requireNonNull(storeId, "storeId");
 		this.accountId = Objects.requireNonNull(accountId, "accountId");
 		this.type = Objects.requireNonNull(type, "type");
 		this.amount = Objects.requireNonNull(amount, "amount");
@@ -100,24 +106,26 @@ public class LedgerEntry {
 	}
 
 	/**
-	 * 원 거래(CHARGE·USE)를 만든다. {@link PrepaidAccount} 에서만 호출한다.
+	 * 원 거래(CHARGE·USE)를 만든다. {@link PrepaidAccount} 에서만 호출한다 — 매장·계좌는 그 계좌의 값이다.
 	 *
 	 * @param idempotencyKey 요청 키 (없으면 null — idempotency_key 를 NULL 로 저장)
 	 */
-	static LedgerEntry original(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String memo, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
-		return new LedgerEntry(accountId, type, amount, balanceAfter, memo, null, performedBy, performedAt,
+	static LedgerEntry original(UUID storeId, UUID accountId, LedgerEntryType type, BigDecimal amount,
+			BigDecimal balanceAfter, String memo, UUID performedBy, Instant performedAt,
+			IdempotencyKey idempotencyKey) {
+		return new LedgerEntry(storeId, accountId, type, amount, balanceAfter, memo, null, performedBy, performedAt,
 				idempotencyKey);
 	}
 
 	/**
-	 * 반제 거래(CHARGE_CANCEL·USE_CANCEL)를 만든다. {@link PrepaidAccount} 에서만 호출한다.
+	 * 반제 거래(CHARGE_CANCEL·USE_CANCEL)를 만든다. {@link PrepaidAccount} 에서만 호출한다 — 매장·계좌는 그 계좌의 값이다.
 	 *
 	 * @param idempotencyKey 요청 키 (없으면 null — idempotency_key 를 NULL 로 저장)
 	 */
-	static LedgerEntry reversal(UUID accountId, LedgerEntryType type, BigDecimal amount, BigDecimal balanceAfter,
-			String reason, UUID reversesId, UUID performedBy, Instant performedAt, IdempotencyKey idempotencyKey) {
-		return new LedgerEntry(accountId, type, amount, balanceAfter, reason,
+	static LedgerEntry reversal(UUID storeId, UUID accountId, LedgerEntryType type, BigDecimal amount,
+			BigDecimal balanceAfter, String reason, UUID reversesId, UUID performedBy, Instant performedAt,
+			IdempotencyKey idempotencyKey) {
+		return new LedgerEntry(storeId, accountId, type, amount, balanceAfter, reason,
 				Objects.requireNonNull(reversesId, "reversesId"), performedBy, performedAt, idempotencyKey);
 	}
 
@@ -213,6 +221,10 @@ public class LedgerEntry {
 
 	public Long getSeq() {
 		return seq;
+	}
+
+	public UUID getStoreId() {
+		return storeId;
 	}
 
 	public UUID getAccountId() {

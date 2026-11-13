@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -32,6 +34,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -68,6 +71,17 @@ class CustomerDetailApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	@Autowired
+	JdbcTemplate jdbcTemplate;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@Test
 	@Tag("TC-48")
 	@DisplayName("고객 상세는 현재 잔액과 최근 거래 5건을 최신순으로 주고, 첫 거래의 거래 후 잔액이 현재 잔액과 같다")
@@ -75,7 +89,7 @@ class CustomerDetailApiIntegrationTest {
 	void detail_returns_balance_and_latest_five_entries_in_order() throws Exception {
 		// given 30,000 충전 → 1,000 4번 사용 → 6,000 사용 → 그 6,000 사용 취소 (거래 7건, 잔액 26,000)
 		Cookie session = loginAsNewStaff("cb46-staff");
-		RegisteredCustomer customer = customerService.register("CB46상세", "01012344646");
+		RegisteredCustomer customer = customerService.register(storeId, "CB46상세", "01012344646");
 		charge(session, customer.customerId(), 30000, "cb46-charge");
 		for (int i = 1; i <= 4; i++) {
 			use(session, customer.customerId(), 1000, "cb46-use-" + i);
@@ -118,7 +132,7 @@ class CustomerDetailApiIntegrationTest {
 	void detail_never_contains_raw_phone() throws Exception {
 		// given 고객 등록 (연락처 01012344747)
 		Cookie session = loginAsNewStaff("cb46-staff");
-		RegisteredCustomer customer = customerService.register("CB46마스킹", "01012344747");
+		RegisteredCustomer customer = customerService.register(storeId, "CB46마스킹", "01012344747");
 		entityManager.flush();
 		// when 상세 조회
 		String body = mockMvc.perform(withSession(get("/api/customers/{id}", customer.customerId()), session))
@@ -136,7 +150,7 @@ class CustomerDetailApiIntegrationTest {
 	void detail_of_customer_without_entries_has_empty_list() throws Exception {
 		// given 고객 등록만 (거래 0건)
 		Cookie session = loginAsNewStaff("cb46-staff");
-		RegisteredCustomer customer = customerService.register("CB46빈목록", "01012344848");
+		RegisteredCustomer customer = customerService.register(storeId, "CB46빈목록", "01012344848");
 		entityManager.flush();
 		// when 상세 조회
 		// then 200, 잔액 0, recentEntries = [] (거래 없어도 고객 정보는 나온다)
@@ -155,8 +169,8 @@ class CustomerDetailApiIntegrationTest {
 		// given 고객 등록 (0원) → 사장님이 비활성화
 		Cookie session = loginAsNewStaff("cb46-staff");
 		Employee admin = saveAdmin("cb46-admin"); // 비활성화는 ADMIN만 하므로 처리자도 ADMIN으로
-		RegisteredCustomer customer = customerService.register("CB46비활성", "01012344949");
-		customerService.deactivate(customer.customerId(), admin.getId());
+		RegisteredCustomer customer = customerService.register(storeId, "CB46비활성", "01012344949");
+		customerService.deactivate(storeId, customer.customerId(), admin.getId());
 		entityManager.flush();
 		// when 직원이 상세 조회
 		// then 200, active=false (비활성이어도 이력은 볼 수 있어야 해서 404가 아님)
@@ -210,7 +224,7 @@ class CustomerDetailApiIntegrationTest {
 
 	// ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
 	private Employee saveAdmin(String loginId) {
-		Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
+		Employee admin = TestEmployees.owner(storeId, loginId, passwordEncoder.encode("test5678!"), "테스트사장",
 				clock.instant());
 		employeeRepository.add(admin);
 		return admin;
@@ -218,7 +232,7 @@ class CustomerDetailApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

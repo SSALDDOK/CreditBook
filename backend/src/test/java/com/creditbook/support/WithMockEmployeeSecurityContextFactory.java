@@ -9,10 +9,10 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.test.context.support.WithSecurityContextFactory;
 
 import com.creditbook.auth.domain.Role;
+import com.creditbook.global.security.EmployeeAuthenticationToken;
 
 class WithMockEmployeeSecurityContextFactory implements WithSecurityContextFactory<WithMockEmployee> {
 
@@ -28,8 +28,8 @@ class WithMockEmployeeSecurityContextFactory implements WithSecurityContextFacto
 				.issuedAt(issuedAt)
 				.expiresAt(issuedAt.plus(Duration.ofHours(16)))
 				.build();
-		JwtAuthenticationToken authentication = new JwtAuthenticationToken(jwt,
-				List.of(new SimpleGrantedAuthority(role.authority())), employeeId.toString());
+		EmployeeAuthenticationToken authentication = new EmployeeAuthenticationToken(jwt,
+				List.of(new SimpleGrantedAuthority(role.authority())), employeeId, UUID.fromString(annotation.storeId()));
 		SecurityContext context = SecurityContextHolder.createEmptyContext();
 		context.setAuthentication(authentication);
 		return context;

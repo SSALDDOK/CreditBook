@@ -24,11 +24,14 @@ public interface LedgerEntryRepository {
 	 */
 	void add(LedgerEntry entry);
 
-	/** 요청 키로 저장된 거래를 찾는다 (키는 전역에서 유일하다). */
+	/**
+	 * 요청 키로 저장된 거래를 찾는다 (키는 전역에서 유일하다 — ux_ledger_entries_idem). 매장 조건이 없으므로, 호출자는 먼저 자기 매장의
+	 * 계좌를 찾은 뒤 이 결과를 그 계좌와 비교해야 한다 (다른 매장 거래는 '다른 요청' 으로 거절된다).
+	 */
 	Optional<LedgerEntry> findByIdempotencyKey(IdempotencyKey key);
 
-	/** 거래 ID 로 거래를 찾는다. */
-	Optional<LedgerEntry> findById(UUID id);
+	/** 그 매장의 거래를 ID 로 찾는다. 다른 매장 거래면 빈 값이다 (REQ-36). */
+	Optional<LedgerEntry> findByIdAndStoreId(UUID id, UUID storeId);
 
 	/**
 	 * {@code reverses_id = originalId} 인 반제 거래를 찾는다. ux_ledger_entries_reverses 때문에 많아야 1건이다.
@@ -40,11 +43,12 @@ public interface LedgerEntryRepository {
 	/**
 	 * 고객의 거래 이력을 최신순(seq 내림차순)으로 한 페이지 읽는다 (거래 이력 조회). 읽기만 한다.
 	 * 각 거래에 처리 직원 이름과 취소 여부(이 거래를 반제한 행이 있는가)를 붙인다. 고객의 활성 여부는 보지 않는다.
-	 * 계좌나 거래가 없는 고객이면 빈 페이지다 — 고객이 있는지는 호출자가 따로 확인한다.
+	 * 계좌나 거래가 없는 고객이면 빈 페이지다 — 고객이 있는지는 호출자가 따로 확인한다. 다른 매장 고객이면 빈 페이지다 (REQ-36).
 	 *
+	 * @param storeId 요청한 직원의 매장
 	 * @param customerId 고객 ID
 	 * @param pageable 페이지 번호·크기 (정렬은 seq 내림차순 고정이라 넘긴 정렬은 쓰지 않는다)
 	 */
-	Page<LedgerHistoryEntry> findHistoryByCustomerId(UUID customerId, Pageable pageable);
+	Page<LedgerHistoryEntry> findHistoryByCustomerId(UUID storeId, UUID customerId, Pageable pageable);
 
 }

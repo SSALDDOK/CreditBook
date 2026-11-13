@@ -42,6 +42,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-4")
 class CustomerDeactivateControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final String ADMIN_ID = "00000000-0000-0000-0000-00000000a001";
 	private static final String PATH = "/api/customers/{id}/deactivate";
@@ -58,6 +60,7 @@ class CustomerDeactivateControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(UUID.fromString(ADMIN_ID));
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	@Test
@@ -68,7 +71,7 @@ class CustomerDeactivateControllerTest {
 		mockMvc.perform(patch(PATH, CUSTOMER_ID))
 				.andExpect(status().isNoContent())
 				.andExpect(content().string(""));
-		verify(customerService).deactivate(CUSTOMER_ID, UUID.fromString(ADMIN_ID));
+		verify(customerService).deactivate(STORE_ID, CUSTOMER_ID, UUID.fromString(ADMIN_ID));
 	}
 
 	@Test
@@ -81,7 +84,7 @@ class CustomerDeactivateControllerTest {
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("FORBIDDEN"))
 				.andExpect(jsonPath("$.message").value("권한이 없습니다."));
-		verify(customerService, never()).deactivate(any(), any());
+		verify(customerService, never()).deactivate(any(), any(), any());
 	}
 
 	@Test
@@ -91,7 +94,7 @@ class CustomerDeactivateControllerTest {
 		mockMvc.perform(patch(PATH, CUSTOMER_ID))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-		verify(customerService, never()).deactivate(any(), any());
+		verify(customerService, never()).deactivate(any(), any(), any());
 	}
 
 	@Test
@@ -100,7 +103,7 @@ class CustomerDeactivateControllerTest {
 	void balance_not_zero_is_mapped_to_409_with_balance() throws Exception {
 		// given
 		willThrow(new CustomerBalanceNotZeroException(CUSTOMER_ID, new BigDecimal("5000")))
-				.given(customerService).deactivate(CUSTOMER_ID, UUID.fromString(ADMIN_ID));
+				.given(customerService).deactivate(STORE_ID, CUSTOMER_ID, UUID.fromString(ADMIN_ID));
 
 		// when / then
 		mockMvc.perform(patch(PATH, CUSTOMER_ID))
@@ -119,7 +122,7 @@ class CustomerDeactivateControllerTest {
 	void unknown_customer_is_mapped_to_404() throws Exception {
 		// given
 		willThrow(new CustomerNotFoundException(CUSTOMER_ID))
-				.given(customerService).deactivate(CUSTOMER_ID, UUID.fromString(ADMIN_ID));
+				.given(customerService).deactivate(STORE_ID, CUSTOMER_ID, UUID.fromString(ADMIN_ID));
 
 		// when / then
 		mockMvc.perform(patch(PATH, CUSTOMER_ID))
@@ -138,7 +141,7 @@ class CustomerDeactivateControllerTest {
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("id"))
 				.andExpect(content().string(not(containsString("not-a-uuid"))));
-		verify(customerService, never()).deactivate(any(), any());
+		verify(customerService, never()).deactivate(any(), any(), any());
 	}
 
 	@Test
@@ -147,7 +150,7 @@ class CustomerDeactivateControllerTest {
 	void optimistic_lock_failure_is_mapped_to_409() throws Exception {
 		// given
 		willThrow(new ObjectOptimisticLockingFailureException("PrepaidAccount", CUSTOMER_ID))
-				.given(customerService).deactivate(CUSTOMER_ID, UUID.fromString(ADMIN_ID));
+				.given(customerService).deactivate(STORE_ID, CUSTOMER_ID, UUID.fromString(ADMIN_ID));
 
 		// when / then
 		mockMvc.perform(patch(PATH, CUSTOMER_ID))

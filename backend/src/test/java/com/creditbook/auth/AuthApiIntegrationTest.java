@@ -21,6 +21,7 @@ import java.util.UUID;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 /**
  * 인증 통합 테스트. 인증 자체를 검증하므로 @WithMockEmployee 로 주입하지 않고,
@@ -90,6 +92,14 @@ class AuthApiIntegrationTest {
 
 	@Autowired
 	EntityManager entityManager;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	@Test
 	@DisplayName("비인증 요청은 모두 401 — 본문에 스택트레이스·내부 경로 없음")
@@ -216,7 +226,7 @@ class AuthApiIntegrationTest {
 		Employee employeeA = saveEmployee("tc31-a", Role.STAFF);
 		Employee employeeB = saveEmployee("tc31-b", Role.STAFF);
 		Cookie sessionA = sessionCookie(jwtTokenService.issue(employeeA.getId()).value());
-		RegisteredCustomer customer = customerService.register("감사로그TC31", "01031310031");
+		RegisteredCustomer customer = customerService.register(storeId, "감사로그TC31", "01031310031");
 
 		// when — 충전 요청에 가짜 시각·다른 직원 ID를 끼워 넣으면 받지 않는 항목으로 거절된다
 		// (멱등키 헤더는 충전·사용 API 필수라 넣음 — 없으면 400)
@@ -267,7 +277,7 @@ class AuthApiIntegrationTest {
 
 	//테스트용 직원
 	private Employee saveEmployee(String loginId, Role role) {
-		Employee employee = TestEmployees.ready(loginId, passwordEncoder.encode(PASSWORD), "테스트직원", role,
+		Employee employee = TestEmployees.ready(storeId, loginId, passwordEncoder.encode(PASSWORD), "테스트직원", role,
 				clock.instant());
 		employeeRepository.add(employee);
 		return employee;

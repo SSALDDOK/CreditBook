@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,6 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.creditbook.customer.domain.CustomerNotFoundException;
+import com.creditbook.global.security.CurrentEmployee;
 import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.application.LedgerHistoryItem;
 import com.creditbook.prepaid.application.LedgerHistoryService;
@@ -47,6 +49,8 @@ import com.creditbook.support.WithMockEmployee;
 @WithMockEmployee
 class LedgerEntryControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID USE_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 	private static final String PATH = "/api/customers/{customerId}/transactions";
@@ -56,6 +60,15 @@ class LedgerEntryControllerTest {
 
 	@MockitoBean
 	LedgerHistoryService ledgerHistoryService;
+
+	@MockitoBean
+	CurrentEmployee currentEmployee;
+
+	// 매장 (REQ-36) — 컨트롤러가 현재 직원의 매장을 서비스에 넘긴다
+	@BeforeEach
+	void stubCurrentStore() {
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+	}
 
 	private static Page<LedgerHistoryItem> pageOf(List<LedgerHistoryItem> content, int page, int size, long total) {
 		return new PageImpl<>(content, PageRequest.of(page, size), total);
@@ -68,7 +81,7 @@ class LedgerEntryControllerTest {
 		LedgerHistoryEntry use = new LedgerHistoryEntry(USE_ID, LedgerEntryType.USE, new BigDecimal("4500"),
 				new BigDecimal("-4500"), new BigDecimal("45500"), "음료, 베이커리",
 				Instant.parse("2026-10-16T05:22:00Z"), "김직원", false, null);
-		given(ledgerHistoryService.getHistory(CUSTOMER_ID, 0, 20))
+		given(ledgerHistoryService.getHistory(STORE_ID, CUSTOMER_ID, 0, 20))
 				.willReturn(pageOf(List.of(new LedgerHistoryItem(use, true)), 0, 20, 1));
 
 		// when / then
@@ -97,20 +110,20 @@ class LedgerEntryControllerTest {
 				// 금액은 소수점·지수 표기 없이 정수로 나간다
 				.andExpect(content().string(containsString("\"amount\":4500,")))
 				.andExpect(content().string(containsString("\"balanceAfter\":45500,")));
-		verify(ledgerHistoryService).getHistory(CUSTOMER_ID, 0, 20);
+		verify(ledgerHistoryService).getHistory(STORE_ID, CUSTOMER_ID, 0, 20);
 	}
 
 	@Test
 	@DisplayName("요청한 페이지 번호와 크기로 조회한다 (크기 경계 1·100 허용)")
 	void page_and_size_are_passed_to_service() throws Exception {
 		// given
-		given(ledgerHistoryService.getHistory(any(), anyInt(), anyInt())).willReturn(Page.empty());
+		given(ledgerHistoryService.getHistory(any(), any(), anyInt(), anyInt())).willReturn(Page.empty());
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID).param("page", "3").param("size", "1")).andExpect(status().isOk());
 		mockMvc.perform(get(PATH, CUSTOMER_ID).param("size", "100")).andExpect(status().isOk());
-		verify(ledgerHistoryService).getHistory(CUSTOMER_ID, 3, 1);
-		verify(ledgerHistoryService).getHistory(CUSTOMER_ID, 0, 100);
+		verify(ledgerHistoryService).getHistory(STORE_ID, CUSTOMER_ID, 3, 1);
+		verify(ledgerHistoryService).getHistory(STORE_ID, CUSTOMER_ID, 0, 100);
 	}
 
 	@Test
@@ -118,7 +131,7 @@ class LedgerEntryControllerTest {
 	@DisplayName("ADMIN 도 거래 이력을 조회할 수 있고, 거래가 없으면 빈 content 로 200 이다")
 	void admin_can_read_empty_history() throws Exception {
 		// given
-		given(ledgerHistoryService.getHistory(CUSTOMER_ID, 0, 20)).willReturn(pageOf(List.of(), 0, 20, 0));
+		given(ledgerHistoryService.getHistory(STORE_ID, CUSTOMER_ID, 0, 20)).willReturn(pageOf(List.of(), 0, 20, 0));
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -143,7 +156,7 @@ class LedgerEntryControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(content().string(not(containsString("Exception"))));
-		verify(ledgerHistoryService, never()).getHistory(any(), anyInt(), anyInt());
+		verify(ledgerHistoryService, never()).getHistory(any(), any(), anyInt(), anyInt());
 	}
 
 	@Test
@@ -153,14 +166,14 @@ class LedgerEntryControllerTest {
 		mockMvc.perform(get(PATH, "not-a-uuid"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(ledgerHistoryService, never()).getHistory(any(), anyInt(), anyInt());
+		verify(ledgerHistoryService, never()).getHistory(any(), any(), anyInt(), anyInt());
 	}
 
 	@Test
 	@DisplayName("없는 고객이면 404 CUSTOMER_NOT_FOUND")
 	void unknown_customer_is_404() throws Exception {
 		// given
-		given(ledgerHistoryService.getHistory(CUSTOMER_ID, 0, 20))
+		given(ledgerHistoryService.getHistory(STORE_ID, CUSTOMER_ID, 0, 20))
 				.willThrow(new CustomerNotFoundException(CUSTOMER_ID));
 
 		// when / then

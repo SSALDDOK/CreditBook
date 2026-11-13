@@ -21,6 +21,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @Tag("REQ-30")
 class EmployeeManagementTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant CREATED_AT = Instant.parse("2026-11-01T00:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-11-03T03:00:00Z");
 	private static final String HASH = "$2a$10$initialinitialinitialinitialinitialinitialinitialini";
@@ -29,11 +31,11 @@ class EmployeeManagementTest {
 	private static final Duration LOCK = Duration.ofMinutes(5);
 
 	private static Employee owner() {
-		return Employee.createOwner("kim.owner", HASH, "김사장", CREATED_AT);
+		return Employee.createOwner(STORE_ID, "kim.owner", HASH, "김사장", CREATED_AT);
 	}
 
 	private static Employee staff() {
-		return Employee.createStaff("lee.staff", HASH, "이직원", CREATED_AT);
+		return Employee.createStaff(STORE_ID, "lee.staff", HASH, "이직원", CREATED_AT);
 	}
 
 	private static void lock(Employee employee) {
@@ -299,8 +301,8 @@ class EmployeeManagementTest {
 	@Test
 	@DisplayName("비밀번호를 바꿔야 하는 계정의 인증 상태도 활성·미폐기면 인증할 수 있다 (막는 것은 권한 단계)")
 	void must_change_password_status_still_authenticates() {
-		assertThat(new EmployeeAuthStatus(true, Role.STAFF, false, true).canAuthenticate()).isTrue();
-		assertThat(new EmployeeAuthStatus(true, Role.STAFF, false, true).mustChangePassword()).isTrue();
+		assertThat(new EmployeeAuthStatus(STORE_ID, true, Role.STAFF, false, true).canAuthenticate()).isTrue();
+		assertThat(new EmployeeAuthStatus(STORE_ID, true, Role.STAFF, false, true).mustChangePassword()).isTrue();
 	}
 
 }

@@ -17,6 +17,8 @@ import jakarta.persistence.Table;
  * <p>
  * 연락처는 정규형(숫자 9–11자리)만 받는다. 하이픈 같은 입력 형식을 숫자로 바꾸는 일은 입력을 받는 쪽(controller)이 한다.
  * 시각은 직접 구하지 않고 인자로 받는다 (서비스가 Clock 으로 넘긴다).
+ * <p>
+ * 고객은 한 매장에 속하고 매장은 바뀌지 않는다 (REQ-36). 연락처 중복 확인도 같은 매장 안에서만 한다.
  */
 @Entity
 @Table(name = "customers")
@@ -34,6 +36,10 @@ public class Customer {
 	@Id
 	@Column(name = "id", nullable = false, updatable = false)
 	private UUID id;
+
+	/** 이 고객이 속한 매장 (stores.id). 계좌·거래도 같은 매장이다 (복합 외래 키). */
+	@Column(name = "store_id", nullable = false, updatable = false)
+	private UUID storeId;
 
 	@Column(name = "name", nullable = false, length = NAME_MAX_LENGTH)
 	private String name;
@@ -57,8 +63,9 @@ public class Customer {
 		// JPA 전용
 	}
 
-	private Customer(String name, String phone, String memo, Instant registeredAt) {
+	private Customer(UUID storeId, String name, String phone, String memo, Instant registeredAt) {
 		this.id = UUID.randomUUID();
+		this.storeId = Objects.requireNonNull(storeId, "storeId");
 		this.name = requireValidName(name);
 		this.phone = requireValidPhone(phone);
 		this.memo = normalizeMemo(memo);
@@ -71,25 +78,29 @@ public class Customer {
 	 * 고객을 등록한다 (REQ-1). 이름은 앞뒤 공백을 지워 저장한다.
 	 * 연락처는 필수다. DB(customers.phone NOT NULL, V2)와 이 도메인 검증이 함께 지킨다.
 	 *
+	 * @param storeId 고객을 등록하는 매장 (필수)
 	 * @param phone 숫자 9–11자리
 	 * @throws InvalidCustomerNameException 이름이 null·공백뿐이거나 20자를 넘을 때
 	 * @throws InvalidPhoneNumberException 연락처가 null 이거나 숫자 9–11자리가 아닐 때
+	 * @throws NullPointerException 매장이 없을 때
 	 */
-	public static Customer register(String name, String phone, Instant registeredAt) {
-		return register(name, phone, null, registeredAt);
+	public static Customer register(UUID storeId, String name, String phone, Instant registeredAt) {
+		return register(storeId, name, phone, null, registeredAt);
 	}
 
 	/**
 	 * 메모와 함께 고객을 등록한다 (REQ-1). 메모는 선택이다 — 앞뒤 공백을 지우고, 비었거나 공백뿐이면 메모 없음(null)으로 저장한다.
 	 *
+	 * @param storeId 고객을 등록하는 매장 (필수)
 	 * @param phone 숫자 9–11자리
 	 * @param memo 메모 (null 가능). 공백을 지운 뒤 200자 이하
 	 * @throws InvalidCustomerNameException 이름이 null·공백뿐이거나 20자를 넘을 때
 	 * @throws InvalidPhoneNumberException 연락처가 null 이거나 숫자 9–11자리가 아닐 때
 	 * @throws InvalidCustomerMemoException 메모가 200자를 넘을 때
+	 * @throws NullPointerException 매장이 없을 때
 	 */
-	public static Customer register(String name, String phone, String memo, Instant registeredAt) {
-		return new Customer(name, phone, memo, registeredAt);
+	public static Customer register(UUID storeId, String name, String phone, String memo, Instant registeredAt) {
+		return new Customer(storeId, name, phone, memo, registeredAt);
 	}
 
 	/**
@@ -190,6 +201,10 @@ public class Customer {
 
 	public UUID getId() {
 		return id;
+	}
+
+	public UUID getStoreId() {
+		return storeId;
 	}
 
 	public String getName() {

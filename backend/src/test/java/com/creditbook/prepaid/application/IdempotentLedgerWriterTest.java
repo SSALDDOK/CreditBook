@@ -53,6 +53,8 @@ import com.creditbook.prepaid.domain.ReversalConflictException;
 @Tag("REQ-10")
 class IdempotentLedgerWriterTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-11T01:00:00Z");
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID OTHER_CUSTOMER_ID = UUID.fromString("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d");
@@ -76,7 +78,7 @@ class IdempotentLedgerWriterTest {
 	@BeforeEach
 	void setUp() {
 		writer = new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager);
-		account = PrepaidAccount.open(CUSTOMER_ID, NOW.minusSeconds(3600));
+		account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW.minusSeconds(3600));
 	}
 
 	private static IdempotentRequest chargeRequest(long amount, String memo) {
@@ -96,10 +98,10 @@ class IdempotentLedgerWriterTest {
 	@DisplayName("처음 온 요청 키면 거래를 만들어 요청 키와 함께 저장한다")
 	void first_request_writes_entry_with_key() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when
-		LedgerWriteOutcome outcome = writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
+		LedgerWriteOutcome outcome = writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료"));
 
 		// then
@@ -115,10 +117,10 @@ class IdempotentLedgerWriterTest {
 		// given
 		LedgerEntry stored = storedCharge();
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(stored));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when
-		LedgerWriteOutcome outcome = writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
+		LedgerWriteOutcome outcome = writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료"));
 
 		// then
@@ -136,10 +138,10 @@ class IdempotentLedgerWriterTest {
 		// given
 		LedgerEntry stored = storedCharge();
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(stored));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, chargeRequest(amount, memo),
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(amount, memo),
 				chargeOperation(amount, memo)))
 				.isInstanceOf(IdempotencyKeyReusedException.class)
 				.hasMessage("같은 요청 키로 다른 거래를 요청했습니다. 새로 시도해 주세요.");
@@ -153,11 +155,11 @@ class IdempotentLedgerWriterTest {
 		// given
 		LedgerEntry stored = storedCharge();
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(stored));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		IdempotentRequest useRequest = IdempotentRequest.original(LedgerEntryType.USE, BigDecimal.valueOf(10_000), "음료");
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, useRequest,
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, useRequest,
 				target -> target.use(BigDecimal.valueOf(10_000), EMPLOYEE_ID, NOW, "음료", KEY)))
 				.isInstanceOf(IdempotencyKeyReusedException.class);
 		assertThat(account.getBalance()).isEqualByComparingTo("10000");
@@ -165,21 +167,16 @@ class IdempotentLedgerWriterTest {
 	}
 
 	@Test
-	@DisplayName("같은 요청 키로 다른 고객이나 계좌가 없는 고객을 요청하면 거절한다")
+	@DisplayName("같은 요청 키로 같은 매장의 다른 고객을 요청하면 거절한다")
 	void same_key_different_customer_is_rejected() {
 		// given
 		LedgerEntry stored = storedCharge();
-		PrepaidAccount otherAccount = PrepaidAccount.open(OTHER_CUSTOMER_ID, NOW);
-		UUID customerWithoutAccount = UUID.randomUUID();
+		PrepaidAccount otherAccount = PrepaidAccount.open(STORE_ID, OTHER_CUSTOMER_ID, NOW);
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(stored));
-		given(prepaidAccountRepository.findByCustomerId(OTHER_CUSTOMER_ID)).willReturn(Optional.of(otherAccount));
-		given(prepaidAccountRepository.findByCustomerId(customerWithoutAccount)).willReturn(Optional.empty());
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(OTHER_CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(otherAccount));
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(OTHER_CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
-				chargeOperation(10_000, "음료")))
-				.isInstanceOf(IdempotencyKeyReusedException.class);
-		assertThatThrownBy(() -> writer.write(customerWithoutAccount, KEY, chargeRequest(10_000, "음료"),
+		assertThatThrownBy(() -> writer.write(STORE_ID, OTHER_CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료")))
 				.isInstanceOf(IdempotencyKeyReusedException.class);
 		assertThat(otherAccount.getBalance()).isEqualByComparingTo("0");
@@ -187,19 +184,35 @@ class IdempotentLedgerWriterTest {
 	}
 
 	@Test
+	@Tag("REQ-36")
+	@DisplayName("요청한 직원의 매장에 그 고객의 계좌가 없으면(없는 고객·다른 매장 고객) 요청 키를 보기 전에 거절한다")
+	void account_outside_store_is_rejected_before_key_lookup() {
+		// given — 이 매장에서는 그 고객의 계좌가 보이지 않는다 (요청 키로 저장된 거래가 있는지는 보지도 않아야 한다)
+		UUID customerOutsideStore = UUID.randomUUID();
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(customerOutsideStore, STORE_ID)).willReturn(Optional.empty());
+
+		// when / then — 재응답(저장된 거래)이 나가지 않고 404, 키는 조회하지 않는다
+		assertThatThrownBy(() -> writer.write(STORE_ID, customerOutsideStore, KEY, chargeRequest(10_000, "음료"),
+				chargeOperation(10_000, "음료")))
+				.isInstanceOf(PrepaidAccountNotFoundException.class);
+		verify(ledgerEntryRepository, never()).findByIdempotencyKey(any());
+		verify(ledgerEntryRepository, never()).add(any());
+	}
+
+	@Test
 	@DisplayName("처음 요청이 잔액 부족으로 실패하면 키가 저장되지 않아 같은 키로 다시 요청하면 다시 판정한다")
 	void failed_first_request_does_not_consume_key() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		IdempotentRequest useRequest = IdempotentRequest.original(LedgerEntryType.USE, BigDecimal.valueOf(5_000), null);
 		Function<PrepaidAccount, LedgerEntry> use = target -> target.use(BigDecimal.valueOf(5_000), EMPLOYEE_ID, NOW,
 				null, KEY);
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, useRequest, use))
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, useRequest, use))
 				.isInstanceOf(InsufficientBalanceException.class);
 		account.charge(BigDecimal.valueOf(10_000), POLICY, EMPLOYEE_ID, NOW, null, IdempotencyKey.of("top-up"));
 
 		// when
-		LedgerWriteOutcome outcome = writer.write(CUSTOMER_ID, KEY, useRequest, use);
+		LedgerWriteOutcome outcome = writer.write(STORE_ID, CUSTOMER_ID, KEY, useRequest, use);
 
 		// then
 		assertThat(outcome.replayed()).isFalse();
@@ -211,10 +224,10 @@ class IdempotentLedgerWriterTest {
 	@DisplayName("요청 키가 처음이고 고객의 계좌가 없으면 거절한다")
 	void first_request_for_unknown_customer_is_rejected() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.empty());
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, null),
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, null),
 				chargeOperation(10_000, null)))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
 		verify(ledgerEntryRepository, never()).add(any());
@@ -224,18 +237,18 @@ class IdempotentLedgerWriterTest {
 	@DisplayName("같은 키 동시 요청으로 저장이 유니크 위반이 되면 새 읽기 전용 트랜잭션에서 먼저 저장된 거래를 찾아 재응답한다")
 	void unique_violation_replays_from_new_read_only_transaction() {
 		// given: 이 요청이 조회할 때는 없었지만 저장 직전에 다른 요청이 같은 키로 먼저 저장했다
-		PrepaidAccount winnerView = PrepaidAccount.open(CUSTOMER_ID, NOW);
+		PrepaidAccount winnerView = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 		LedgerEntry storedByOther = winnerView.charge(BigDecimal.valueOf(10_000), POLICY, EMPLOYEE_ID, NOW, "음료",
 				KEY);
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY))
 				.willReturn(Optional.empty(), Optional.of(storedByOther));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID))
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID))
 				.willReturn(Optional.of(account), Optional.of(winnerView));
 		willThrow(new IdempotencyKeyConflictException(new RuntimeException("duplicate key")))
 				.given(ledgerEntryRepository).add(any());
 
 		// when
-		LedgerWriteOutcome outcome = writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
+		LedgerWriteOutcome outcome = writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료"));
 
 		// then
@@ -254,17 +267,17 @@ class IdempotentLedgerWriterTest {
 	@DisplayName("같은 키 동시 요청에서 먼저 저장된 거래가 다른 요청이면 거절한다")
 	void unique_violation_with_different_stored_request_is_rejected() {
 		// given
-		PrepaidAccount winnerView = PrepaidAccount.open(CUSTOMER_ID, NOW);
+		PrepaidAccount winnerView = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 		LedgerEntry storedByOther = winnerView.charge(BigDecimal.valueOf(20_000), POLICY, EMPLOYEE_ID, NOW, null, KEY);
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY))
 				.willReturn(Optional.empty(), Optional.of(storedByOther));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID))
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID))
 				.willReturn(Optional.of(account), Optional.of(winnerView));
 		willThrow(new IdempotencyKeyConflictException(new RuntimeException("duplicate key")))
 				.given(ledgerEntryRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료")))
 				.isInstanceOf(IdempotencyKeyReusedException.class);
 	}
@@ -273,13 +286,13 @@ class IdempotentLedgerWriterTest {
 	@DisplayName("같은 키 동시 요청에서 먼저 저장된 거래를 찾지 못하면 충돌로 거절한다")
 	void unique_violation_without_stored_entry_is_conflict() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		IdempotencyKeyConflictException conflict =
 				new IdempotencyKeyConflictException(new RuntimeException("duplicate key"));
 		willThrow(conflict).given(ledgerEntryRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY, chargeRequest(10_000, "음료"),
 				chargeOperation(10_000, "음료")))
 				.isSameAs(conflict);
 		verify(ledgerEntryRepository, times(2)).findByIdempotencyKey(KEY);
@@ -298,7 +311,7 @@ class IdempotentLedgerWriterTest {
 		// given: 이 요청이 판정할 때는 취소가 없었지만, 저장 직전에 다른 요청이 같은 사용 건을 먼저 취소하고 커밋했다
 		// (목이라 두 시도에 같은 계좌 객체를 준다 — 재시도가 계좌를 새로 읽는 것은 통합 테스트가 확인한다)
 		LedgerEntry use = storedUse();
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		List<LedgerEntry> committedCancels = new ArrayList<>();
 		Function<PrepaidAccount, LedgerEntry> cancel = target -> {
 			LedgerEntry made = target.cancelUse(use, committedCancels.stream().findFirst(), "동시 취소", EMPLOYEE_ID,
@@ -310,7 +323,7 @@ class IdempotentLedgerWriterTest {
 				.given(ledgerEntryRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY,
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY,
 				IdempotentRequest.reversal(LedgerEntryType.USE_CANCEL, use.getId(), "동시 취소"), cancel))
 				.isInstanceOf(AlreadyCancelledException.class);
 		verify(ledgerEntryRepository, times(1)).add(any());
@@ -325,14 +338,14 @@ class IdempotentLedgerWriterTest {
 	void repeated_reversal_violation_is_conflict() {
 		// given
 		LedgerEntry use = storedUse();
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		Function<PrepaidAccount, LedgerEntry> cancel = target -> target.cancelUse(use, Optional.empty(), "동시 취소",
 				EMPLOYEE_ID, NOW, KEY);
 		willThrow(new ReversalConflictException(new RuntimeException("duplicate key")))
 				.given(ledgerEntryRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> writer.write(CUSTOMER_ID, KEY,
+		assertThatThrownBy(() -> writer.write(STORE_ID, CUSTOMER_ID, KEY,
 				IdempotentRequest.reversal(LedgerEntryType.USE_CANCEL, use.getId(), "동시 취소"), cancel))
 				.isInstanceOf(ReversalConflictException.class);
 		verify(ledgerEntryRepository, times(2)).add(any());

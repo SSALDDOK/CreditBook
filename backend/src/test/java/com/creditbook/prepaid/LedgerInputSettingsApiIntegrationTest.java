@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Clock;
+import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.servlet.http.Cookie;
 
@@ -55,6 +59,17 @@ class LedgerInputSettingsApiIntegrationTest {
 
 	@Autowired
 	Clock clock;
+
+	@Autowired
+	JdbcTemplate jdbcTemplate;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	@ParameterizedTest
 	@EnumSource(Role.class)
@@ -93,7 +108,7 @@ class LedgerInputSettingsApiIntegrationTest {
 
 	// 역할만 다른 직원을 새로 만들어 세션 쿠키를 받는다
 	private Cookie loginAs(String loginId, Role role) {
-		Employee employee = TestEmployees.ready(loginId, passwordEncoder.encode("test1234!"), "테스트직원", role,
+		Employee employee = TestEmployees.ready(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원", role,
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -18,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @Tag("REQ-1")
 class CustomerMemoTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-18T01:10:00Z");
 
 	@Test
@@ -27,7 +30,7 @@ class CustomerMemoTest {
 		String memo = "단골, 아메리카노 선호";
 
 		// when
-		Customer customer = Customer.register("박서준", "01033814821", memo, NOW);
+		Customer customer = Customer.register(STORE_ID, "박서준", "01033814821", memo, NOW);
 
 		// then
 		assertThat(customer.getMemo()).isEqualTo("단골, 아메리카노 선호");
@@ -40,7 +43,7 @@ class CustomerMemoTest {
 		String padded = "  단골 \t";
 
 		// when
-		Customer customer = Customer.register("박서준", "01033814821", padded, NOW);
+		Customer customer = Customer.register(STORE_ID, "박서준", "01033814821", padded, NOW);
 
 		// then
 		assertThat(customer.getMemo()).isEqualTo("단골");
@@ -54,7 +57,7 @@ class CustomerMemoTest {
 		// given: null, 빈 문자열, 공백·탭·줄바꿈·전각 공백
 
 		// when
-		Customer customer = Customer.register("박서준", "01033814821", memo, NOW);
+		Customer customer = Customer.register(STORE_ID, "박서준", "01033814821", memo, NOW);
 
 		// then
 		assertThat(customer.getMemo()).isNull();
@@ -64,7 +67,7 @@ class CustomerMemoTest {
 	@DisplayName("메모 없이 등록하는 기존 방식은 메모 없음으로 등록된다")
 	void register_without_memo_argument_has_no_memo() {
 		// when
-		Customer customer = Customer.register("박서준", "01033814821", NOW);
+		Customer customer = Customer.register(STORE_ID, "박서준", "01033814821", NOW);
 
 		// then
 		assertThat(customer.getMemo()).isNull();
@@ -78,7 +81,7 @@ class CustomerMemoTest {
 		String memo = "메".repeat(length);
 
 		// when
-		Customer customer = Customer.register("박서준", "01033814821", memo, NOW);
+		Customer customer = Customer.register(STORE_ID, "박서준", "01033814821", memo, NOW);
 
 		// then
 		assertThat(customer.getMemo()).isEqualTo(memo);
@@ -92,7 +95,7 @@ class CustomerMemoTest {
 		String memo = "메".repeat(length);
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register("박서준", "01033814821", memo, NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, "박서준", "01033814821", memo, NOW))
 				.isInstanceOf(InvalidCustomerMemoException.class)
 				.hasMessage("메모는 200자 이하여야 합니다.");
 	}
@@ -105,8 +108,8 @@ class CustomerMemoTest {
 		String emoji = "😀".repeat(200);
 
 		// when
-		Customer paddedCustomer = Customer.register("박서준", "01033814821", padded, NOW);
-		Customer emojiCustomer = Customer.register("박서준", "01033814821", emoji, NOW);
+		Customer paddedCustomer = Customer.register(STORE_ID, "박서준", "01033814821", padded, NOW);
+		Customer emojiCustomer = Customer.register(STORE_ID, "박서준", "01033814821", emoji, NOW);
 
 		// then
 		assertThat(paddedCustomer.getMemo()).isEqualTo("메".repeat(200));
@@ -120,7 +123,7 @@ class CustomerMemoTest {
 		String emoji = "😀".repeat(201);
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register("박서준", "01033814821", emoji, NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, "박서준", "01033814821", emoji, NOW))
 				.isInstanceOf(InvalidCustomerMemoException.class);
 	}
 

@@ -13,10 +13,10 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * 매장 정보의 매장명 규칙 (REQ-29 경계 조건: 앞뒤 공백 제거 후 1–30자).
+ * 매장의 매장명 규칙 (REQ-29 경계 조건: 앞뒤 공백 제거 후 1–30자).
  */
 @Tag("REQ-29")
-class StoreProfileTest {
+class StoreTest {
 
 	private static final Instant OPENED_AT = Instant.parse("2026-10-30T01:00:00Z");
 
@@ -24,20 +24,21 @@ class StoreProfileTest {
 	@DisplayName("매장을 열면 매장명과 개설 시각이 기록된다")
 	void open_records_name_and_time() {
 		// when
-		StoreProfile store = StoreProfile.open("카페 새벽", OPENED_AT);
+		Store store = Store.open("카페 새벽", OPENED_AT);
 
 		// then
 		assertThat(store.getId()).isNotNull();
 		assertThat(store.getName()).isEqualTo("카페 새벽");
 		assertThat(store.getCreatedAt()).isEqualTo(OPENED_AT);
 		assertThat(store.getUpdatedAt()).isEqualTo(OPENED_AT);
+		assertThat(store.getInviteCodeId()).isNull(); // 초대 코드 없이 연 매장
 	}
 
 	@Test
 	@DisplayName("매장명은 앞뒤 공백을 빼고 저장된다")
 	void name_is_stripped() {
 		// when
-		StoreProfile store = StoreProfile.open("  카페 새벽 \t", OPENED_AT);
+		Store store = Store.open("  카페 새벽 \t", OPENED_AT);
 
 		// then
 		assertThat(store.getName()).isEqualTo("카페 새벽");
@@ -51,7 +52,7 @@ class StoreProfileTest {
 		String name = "  " + "가".repeat(length) + "  ";
 
 		// when
-		StoreProfile store = StoreProfile.open(name, OPENED_AT);
+		Store store = Store.open(name, OPENED_AT);
 
 		// then
 		assertThat(store.getName()).hasSize(length);
@@ -60,7 +61,7 @@ class StoreProfileTest {
 	@Test
 	@DisplayName("매장명이 앞뒤 공백 제거 후 31자이면 매장을 열 수 없다")
 	void name_over_30_is_rejected() {
-		assertThatThrownBy(() -> StoreProfile.open("가".repeat(31), OPENED_AT))
+		assertThatThrownBy(() -> Store.open("가".repeat(31), OPENED_AT))
 				.isInstanceOf(InvalidStoreNameException.class)
 				.hasMessage("매장명은 30자 이하여야 합니다.");
 	}
@@ -72,8 +73,8 @@ class StoreProfileTest {
 		String thirtyEmoji = "😀".repeat(30);
 
 		// when / then
-		assertThat(StoreProfile.open(thirtyEmoji, OPENED_AT).getName()).isEqualTo(thirtyEmoji);
-		assertThatThrownBy(() -> StoreProfile.open(thirtyEmoji + "😀", OPENED_AT))
+		assertThat(Store.open(thirtyEmoji, OPENED_AT).getName()).isEqualTo(thirtyEmoji);
+		assertThatThrownBy(() -> Store.open(thirtyEmoji + "😀", OPENED_AT))
 				.isInstanceOf(InvalidStoreNameException.class);
 	}
 
@@ -82,7 +83,7 @@ class StoreProfileTest {
 	@ValueSource(strings = { "   ", "\t" })
 	@DisplayName("매장명이 비었거나 공백뿐이면 매장을 열 수 없다")
 	void blank_name_is_rejected(String blank) {
-		assertThatThrownBy(() -> StoreProfile.open(blank, OPENED_AT))
+		assertThatThrownBy(() -> Store.open(blank, OPENED_AT))
 				.isInstanceOf(InvalidStoreNameException.class)
 				.hasMessage("매장명을 입력해 주세요.");
 	}
@@ -90,21 +91,18 @@ class StoreProfileTest {
 	@Test
 	@DisplayName("개설 시각이 없으면 매장을 열 수 없다")
 	void null_time_is_rejected() {
-		assertThatThrownBy(() -> StoreProfile.open("카페 새벽", null))
+		assertThatThrownBy(() -> Store.open("카페 새벽", null))
 				.isInstanceOf(NullPointerException.class);
 	}
 
 	@Test
-	@DisplayName("이미 개설된 매장 예외는 화면 안내 문구를 갖고 원인을 남길 수 있다")
-	void setup_already_completed_keeps_cause() {
-		// given
-		RuntimeException cause = new RuntimeException("duplicate key");
-
+	@DisplayName("이미 개설된 매장 예외는 화면 안내 문구를 갖는다")
+	void setup_already_completed_has_message() {
 		// when
-		SetupAlreadyCompletedException ex = new SetupAlreadyCompletedException(cause);
+		SetupAlreadyCompletedException ex = new SetupAlreadyCompletedException();
 
 		// then
-		assertThat(ex).hasMessage("이미 개설된 매장입니다. 로그인해 주세요.").hasCause(cause);
+		assertThat(ex).hasMessage("이미 개설된 매장입니다. 로그인해 주세요.");
 	}
 
 }

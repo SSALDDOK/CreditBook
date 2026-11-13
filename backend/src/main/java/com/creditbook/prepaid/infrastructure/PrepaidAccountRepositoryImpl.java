@@ -36,13 +36,13 @@ class PrepaidAccountRepositoryImpl implements PrepaidAccountRepository {
 	}
 
 	@Override
-	public Optional<PrepaidAccount> findByCustomerId(UUID customerId) {
-		return jpaRepository.findByCustomerId(customerId);
+	public Optional<PrepaidAccount> findByCustomerIdAndStoreId(UUID customerId, UUID storeId) {
+		return jpaRepository.findByCustomerIdAndStoreId(customerId, storeId);
 	}
 
 	@Override
-	public Optional<PrepaidAccount> findByCustomerIdAndIncrementVersion(UUID customerId) {
-		return jpaRepository.findForVersionIncrementByCustomerId(customerId);
+	public Optional<PrepaidAccount> findByCustomerIdAndStoreIdAndIncrementVersion(UUID customerId, UUID storeId) {
+		return jpaRepository.findForVersionIncrementByCustomerIdAndStoreId(customerId, storeId);
 	}
 
 }

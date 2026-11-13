@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -31,8 +30,8 @@ import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.auth.domain.Role;
 import com.creditbook.store.domain.InvalidStoreNameException;
 import com.creditbook.store.domain.SetupAlreadyCompletedException;
-import com.creditbook.store.domain.StoreProfile;
-import com.creditbook.store.domain.StoreProfileRepository;
+import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreRepository;
 
 /**
  * 매장 개설 유스케이스 (REQ-29). 저장소는 목, 비밀번호 해시는 실제 BCrypt(테스트용 낮은 비용 계수)를 쓴다.
@@ -45,9 +44,9 @@ class StoreSetupServiceTest {
 	private static final Instant NOW = Instant.parse("2026-10-30T01:00:00Z");
 
 	private final EmployeeRepository employeeRepository = mock(EmployeeRepository.class);
-	private final StoreProfileRepository storeProfileRepository = mock(StoreProfileRepository.class);
+	private final StoreRepository storeRepository = mock(StoreRepository.class);
 	private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
-	private final StoreSetupService service = new StoreSetupService(employeeRepository, storeProfileRepository,
+	private final StoreSetupService service = new StoreSetupService(employeeRepository, storeRepository,
 			passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC));
 
 	@Test
@@ -71,17 +70,18 @@ class StoreSetupServiceTest {
 		StoreSetupResult result = service.setUp(" 카페 새벽 ", " 김사장 ", "kim.owner", "s3cure-pass");
 
 		// then — 매장 INSERT 가 직원 INSERT 보다 먼저 (동시 요청은 매장 단계에서 막힌다)
-		ArgumentCaptor<StoreProfile> store = ArgumentCaptor.forClass(StoreProfile.class);
+		ArgumentCaptor<Store> store = ArgumentCaptor.forClass(Store.class);
 		ArgumentCaptor<Employee> admin = ArgumentCaptor.forClass(Employee.class);
-		InOrder order = inOrder(employeeRepository, storeProfileRepository);
+		InOrder order = inOrder(employeeRepository, storeRepository);
 		order.verify(employeeRepository).existsAny();
-		order.verify(storeProfileRepository).add(store.capture());
+		order.verify(storeRepository).add(store.capture());
 		order.verify(employeeRepository).add(admin.capture());
 
 		assertThat(store.getValue().getName()).isEqualTo("카페 새벽");
 		assertThat(store.getValue().getCreatedAt()).isEqualTo(NOW);
 
 		Employee created = admin.getValue();
+		assertThat(created.getStoreId()).isEqualTo(store.getValue().getId()); // 사장은 새 매장에 속한다 (REQ-36)
 		assertThat(created.getLoginId()).isEqualTo("kim.owner");
 		assertThat(created.getName()).isEqualTo("김사장");
 		assertThat(created.getRole()).isEqualTo(Role.ADMIN);
@@ -109,21 +109,7 @@ class StoreSetupServiceTest {
 		// when / then
 		assertThatThrownBy(() -> service.setUp("카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
 				.isInstanceOf(SetupAlreadyCompletedException.class);
-		verifyNoInteractions(storeProfileRepository);
-		verify(employeeRepository, never()).add(any());
-	}
-
-	@Test
-	@DisplayName("동시 요청이 매장을 먼저 만들었으면 매장 개설을 거절하고 ADMIN 계정을 만들지 않는다")
-	void setup_rejected_when_store_singleton_violated() {
-		// given — 두 요청 모두 직원 0명을 봤지만 다른 요청의 매장 행이 먼저 들어갔다
-		given(employeeRepository.existsAny()).willReturn(false);
-		willThrow(new SetupAlreadyCompletedException(new RuntimeException("duplicate key")))
-				.given(storeProfileRepository).add(any());
-
-		// when / then
-		assertThatThrownBy(() -> service.setUp("카페 새벽", "김사장", "kim.owner", "s3cure-pass"))
-				.isInstanceOf(SetupAlreadyCompletedException.class);
+		verifyNoInteractions(storeRepository);
 		verify(employeeRepository, never()).add(any());
 	}
 
@@ -136,7 +122,7 @@ class StoreSetupServiceTest {
 		// when / then
 		assertThatThrownBy(() -> service.setUp("   ", "김사장", "kim.owner", "s3cure-pass"))
 				.isInstanceOf(InvalidStoreNameException.class);
-		verifyNoInteractions(storeProfileRepository);
+		verifyNoInteractions(storeRepository);
 		verify(employeeRepository, never()).add(any());
 	}
 

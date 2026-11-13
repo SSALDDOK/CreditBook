@@ -27,7 +27,9 @@ import com.creditbook.prepaid.domain.ReversalConflictException;
  * 요청 키(Idempotency-Key)로 거래를 한 번만 만든다 (REQ-10). 충전·사용(이후 사용 취소)이 같은 순서를 쓴다.
  * 순서와 트랜잭션만 맡고, "같은 요청인가" 판단은 {@link LedgerEntry#isSameRequest}, 잔액 계산은 {@link PrepaidAccount} 가 한다.
  * <ol>
- * <li>쓰기 트랜잭션: 키로 저장된 거래가 있으면 재응답(같은 요청) 또는 거절(다른 요청). 없으면 도메인 연산으로 거래를 만들어 저장</li>
+ * <li>쓰기 트랜잭션: 먼저 요청한 직원의 매장에서 고객의 계좌를 찾는다 — 없거나 다른 매장 고객이면 키를 보기 전에 404 (REQ-36).
+ * 다른 매장 직원이 남의 매장 키를 다시 보내도 저장된 응답이 나가지 않는다. 그다음 키로 저장된 거래가 있으면 재응답(같은 요청) 또는
+ * 거절(다른 요청 — 다른 매장 거래면 계좌가 달라 여기로 온다). 없으면 도메인 연산으로 거래를 만들어 저장</li>
  * <li>저장이 ux_ledger_entries_idem 에 걸리면(같은 키 동시 요청) 쓰기 트랜잭션은 롤백된다. 실패한 트랜잭션에서는 더 조회할 수
  * 없으므로 <b>새 읽기 전용 트랜잭션(REQUIRES_NEW)</b>에서 먼저 저장된 거래를 찾아 1과 같은 규칙으로 응답한다.
  * 그래도 없으면(드묾) 충돌 예외를 그대로 올려 409 로 응답한다</li>
@@ -59,43 +61,50 @@ class IdempotentLedgerWriter {
 	}
 
 	/**
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param customerId 거래할 고객
 	 * @param key 요청 키
 	 * @param request 같은 요청인지 비교할 기준
 	 * @param operation 계좌에 거래를 만드는 도메인 호출 (거래에 {@code key} 를 담아 만든다)
 	 * @return 만들어진 거래 또는 먼저 저장된 거래(재응답)
-	 * @throws PrepaidAccountNotFoundException 키가 처음이고 고객의 계좌가 없을 때
+	 * @throws PrepaidAccountNotFoundException 그 매장에 고객의 계좌가 없을 때 (없는 고객·다른 매장 고객). 키를 보기 전에 거절한다
 	 * @throws IdempotencyKeyReusedException 키가 이미 다른 요청에 쓰였을 때
 	 * @throws IdempotencyKeyConflictException 같은 키 동시 요청에서 먼저 저장된 거래를 찾지 못했을 때
 	 * @throws ReversalConflictException 같은 원본 동시 반제에서 다시 판정해도 또 반제가 겹쳤을 때 (드묾)
 	 */
-	LedgerWriteOutcome write(UUID customerId, IdempotencyKey key, IdempotentRequest request,
+	LedgerWriteOutcome write(UUID storeId, UUID customerId, IdempotencyKey key, IdempotentRequest request,
 			Function<PrepaidAccount, LedgerEntry> operation) {
+		Objects.requireNonNull(storeId, "storeId");
 		Objects.requireNonNull(customerId, "customerId");
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(request, "request");
 		Objects.requireNonNull(operation, "operation");
 		try {
-			return writeOrReplay(customerId, key, request, operation);
+			return writeOrReplay(storeId, customerId, key, request, operation);
 		}
 		catch (ReversalConflictException conflict) {
 			// 같은 원본을 다른 요청이 먼저 반제하고 커밋했다. 쓰기 트랜잭션은 이미 롤백됐으므로 새 쓰기 트랜잭션에서
 			// 한 번 더 판정한다 — 먼저 커밋된 반제를 본 도메인이 '이미 취소됨'으로 거절한다
 			log.info("reversal conflict: retrying once to re-validate, keyPrefix={}", key.logPrefix());
-			return writeOrReplay(customerId, key, request, operation);
+			return writeOrReplay(storeId, customerId, key, request, operation);
 		}
 	}
 
-	private LedgerWriteOutcome writeOrReplay(UUID customerId, IdempotencyKey key, IdempotentRequest request,
-			Function<PrepaidAccount, LedgerEntry> operation) {
+	private LedgerWriteOutcome writeOrReplay(UUID storeId, UUID customerId, IdempotencyKey key,
+			IdempotentRequest request, Function<PrepaidAccount, LedgerEntry> operation) {
 		try {
-			return writeTransaction.execute(status -> replayOrWrite(customerId, key, request, operation));
+			return writeTransaction.execute(status -> replayOrWrite(storeId, customerId, key, request, operation));
 		}
 		catch (IdempotencyKeyConflictException conflict) {
-			// 쓰기 트랜잭션은 이미 롤백됐다. 먼저 커밋된 같은 키의 거래를 새 트랜잭션에서 찾는다
-			Optional<LedgerWriteOutcome> replayed = replayLookupTransaction.execute(status -> ledgerEntryRepository
-					.findByIdempotencyKey(key)
-					.map(stored -> replay(stored, customerId, key, request)));
+			// 쓰기 트랜잭션은 이미 롤백됐다. 먼저 커밋된 같은 키의 거래를 새 트랜잭션에서 찾는다.
+			// 계좌는 쓰기 트랜잭션에서 이미 그 매장에서 찾았다 — 여기서도 같은 매장 조건으로 다시 읽어 비교한다
+			Optional<LedgerWriteOutcome> replayed = replayLookupTransaction.execute(status -> {
+				UUID requestAccountId = prepaidAccountRepository.findByCustomerIdAndStoreId(customerId, storeId)
+						.map(PrepaidAccount::getId)
+						.orElse(null);
+				return ledgerEntryRepository.findByIdempotencyKey(key)
+						.map(stored -> replay(stored, requestAccountId, key, request));
+			});
 			return replayed.orElseThrow(() -> {
 				log.warn("idempotent write conflict: stored entry not found, keyPrefix={}", key.logPrefix());
 				return conflict;
@@ -103,24 +112,25 @@ class IdempotentLedgerWriter {
 		}
 	}
 
-	private LedgerWriteOutcome replayOrWrite(UUID customerId, IdempotencyKey key, IdempotentRequest request,
-			Function<PrepaidAccount, LedgerEntry> operation) {
+	private LedgerWriteOutcome replayOrWrite(UUID storeId, UUID customerId, IdempotencyKey key,
+			IdempotentRequest request, Function<PrepaidAccount, LedgerEntry> operation) {
+		// 매장 조건을 건 계좌 조회가 키 조회보다 먼저다 — 다른 매장 고객이면 저장된 거래를 보기 전에 404
+		PrepaidAccount account = prepaidAccountRepository.findByCustomerIdAndStoreId(customerId, storeId)
+				.orElseThrow(() -> new PrepaidAccountNotFoundException(customerId));
 		Optional<LedgerEntry> stored = ledgerEntryRepository.findByIdempotencyKey(key);
 		if (stored.isPresent()) {
-			return replay(stored.get(), customerId, key, request);
+			return replay(stored.get(), account.getId(), key, request);
 		}
-		PrepaidAccount account = prepaidAccountRepository.findByCustomerId(customerId)
-				.orElseThrow(() -> new PrepaidAccountNotFoundException(customerId));
 		LedgerEntry entry = operation.apply(account);
 		ledgerEntryRepository.add(entry);
 		return new LedgerWriteOutcome(entry, false);
 	}
 
-	private LedgerWriteOutcome replay(LedgerEntry stored, UUID customerId, IdempotencyKey key,
+	/**
+	 * @param requestAccountId 이번 요청 고객의 계좌 (그 매장에서 찾은 것). 못 찾았으면 null — 저장된 거래와 같을 수 없으므로 다른 요청이다
+	 */
+	private LedgerWriteOutcome replay(LedgerEntry stored, UUID requestAccountId, IdempotencyKey key,
 			IdempotentRequest request) {
-		UUID requestAccountId = prepaidAccountRepository.findByCustomerId(customerId)
-				.map(PrepaidAccount::getId)
-				.orElse(null);
 		if (!stored.isSameRequest(requestAccountId, request)) {
 			// 정상적인 거절이므로 WARN. 고객 ID·금액·메모는 남기지 않는다 (키 재사용 시도의 내용이 아니라 사실만 남긴다)
 			log.warn("idempotency key reused for a different request: storedAccountId={}, storedEntryId={}, keyPrefix={}",

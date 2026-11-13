@@ -53,16 +53,17 @@ public class ChargeService {
 	 * 같은 요청 키로 같은 요청이 다시 오면 새로 충전하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10) —
 	 * 이때는 재활성화도 다시 하지 않는다.
 	 *
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다. 다른 매장 고객이면 404
 	 * @param customerId 충전할 고객
 	 * @param amount 충전 금액 (형식·범위·1회 한도 검증은 도메인이 한다)
 	 * @param memo 메모 (선택)
 	 * @param performedBy 처리 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param idempotencyKey 요청 키
-	 * @throws PrepaidAccountNotFoundException 고객의 계좌가 없을 때
+	 * @throws PrepaidAccountNotFoundException 그 매장에 고객의 계좌가 없을 때 (없는 고객·다른 매장 고객)
 	 * @throws com.creditbook.prepaid.domain.InvalidAmountException 금액이 규칙에 맞지 않을 때 (1회 한도 초과 포함). 아무것도 저장하지 않는다
 	 * @throws com.creditbook.prepaid.domain.IdempotencyKeyReusedException 요청 키가 다른 요청에 이미 쓰였을 때
 	 */
-	public ChargeResult charge(UUID customerId, BigDecimal amount, String memo, UUID performedBy,
+	public ChargeResult charge(UUID storeId, UUID customerId, BigDecimal amount, String memo, UUID performedBy,
 			IdempotencyKey idempotencyKey) {
 		Objects.requireNonNull(customerId, "customerId");
 		Objects.requireNonNull(performedBy, "performedBy");
@@ -71,7 +72,7 @@ public class ChargeService {
 		// 재활성화 여부는 커밋된 뒤에만 로그로 남긴다 — 커밋 전에 남기면 롤백된 재활성화가 로그에 남는다
 		AtomicBoolean reactivated = new AtomicBoolean(false);
 
-		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
+		LedgerWriteOutcome outcome = ledgerWriter.write(storeId, customerId, idempotencyKey, request,
 				account -> chargeAndReactivate(account, amount, memo, performedBy, idempotencyKey, reactivated));
 
 		if (!outcome.replayed()) {
@@ -95,7 +96,7 @@ public class ChargeService {
 			IdempotencyKey idempotencyKey, AtomicBoolean reactivated) {
 		Instant now = clock.instant();
 		LedgerEntry entry = account.charge(amount, chargePolicy, performedBy, now, memo, idempotencyKey);
-		Customer customer = customerRepository.findById(account.getCustomerId())
+		Customer customer = customerRepository.findByIdAndStoreId(account.getCustomerId(), account.getStoreId())
 				.orElseThrow(() -> new CustomerNotFoundException(account.getCustomerId()));
 		reactivated.set(customer.reactivate(now));
 		return entry;

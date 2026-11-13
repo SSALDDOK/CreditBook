@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,7 @@ import com.creditbook.global.security.JwtTestSupport.MutableClock;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 /**
  * 로그인 잠금(423)·IP 레이트 리밋(429) 통합 테스트 (REQ-15·TC-53).
@@ -76,6 +78,14 @@ class LoginLockApiIntegrationTest {
 
 	@Autowired
 	MutableClock clock;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	// 서버 시계를 테스트가 옮길 수 있는 시계로 바꿈
 	@TestConfiguration
@@ -376,7 +386,7 @@ class LoginLockApiIntegrationTest {
 	//테스트용 직원 (트랜잭션을 열어 저장하고 바로 커밋)
 	private void saveEmployee(String loginId) {
 		transactionTemplate.executeWithoutResult(status -> employeeRepository.add(
-				TestEmployees.readyStaff(loginId, passwordEncoder.encode(PASSWORD), "잠금테스트", clock.instant())));
+				TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode(PASSWORD), "잠금테스트", clock.instant())));
 	}
 
 	//DB 칸 직접 읽기

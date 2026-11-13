@@ -24,4 +24,15 @@ class SecurityContextCurrentEmployee implements CurrentEmployee {
 		return null;
 	}
 
+	/** 매장은 {@link EmployeeJwtAuthenticationConverter} 가 DB 에서 읽어 인증 정보에 넣은 값이다. 그 밖의 인증이면 null(→ 401). */
+	@Override
+	public UUID storeId() {
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+		if (authentication instanceof EmployeeAuthenticationToken employeeAuthentication
+				&& employeeAuthentication.isAuthenticated()) {
+			return employeeAuthentication.getStoreId();
+		}
+		return null;
+	}
+
 }

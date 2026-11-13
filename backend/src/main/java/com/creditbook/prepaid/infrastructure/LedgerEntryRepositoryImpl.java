@@ -43,6 +43,8 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 	 * <li>직원 LEFT JOIN — 이름이 없다고 거래가 빠지면 안 된다 (고객 상세의 최근 거래와 같은 방식)</li>
 	 * <li>반제 LEFT JOIN — 원본 1건당 반제는 최대 1건(ux_ledger_entries_reverses)이라 행이 늘지 않는다. 있으면 취소된 거래</li>
 	 * </ul>
+	 * 매장 조건(REQ-36)은 계좌를 고를 때 한 번(다른 매장 고객이면 계좌가 없어 0행), 거래에 한 번 더 건다 (이중 방어 —
+	 * 거래의 매장은 계좌의 매장과 같다는 것이 fk_ledger_entries_store_account 로 보장되지만 쿼리가 그 보장에만 기대지 않게).
 	 */
 	static final String HISTORY_QUERY = """
 			select new com.creditbook.prepaid.domain.LedgerHistoryEntry(
@@ -51,14 +53,16 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 			from LedgerEntry e
 			left join Employee emp on emp.id = e.performedBy
 			left join LedgerEntry r on r.reversesId = e.id
-			where e.accountId = (select a.id from PrepaidAccount a where a.customerId = :customerId)
+			where e.accountId = (select a.id from PrepaidAccount a where a.customerId = :customerId and a.storeId = :storeId)
+			  and e.storeId = :storeId
 			order by e.seq desc
 			""";
 
 	/** 거래 이력 전체 건수. {@link #HISTORY_QUERY} 와 같은 조건이다. */
 	static final String HISTORY_COUNT_QUERY = """
 			select count(e) from LedgerEntry e
-			where e.accountId = (select a.id from PrepaidAccount a where a.customerId = :customerId)
+			where e.accountId = (select a.id from PrepaidAccount a where a.customerId = :customerId and a.storeId = :storeId)
+			  and e.storeId = :storeId
 			""";
 
 	@PersistenceContext
@@ -97,8 +101,12 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 	}
 
 	@Override
-	public Optional<LedgerEntry> findById(UUID id) {
-		return Optional.ofNullable(em.find(LedgerEntry.class, id));
+	public Optional<LedgerEntry> findByIdAndStoreId(UUID id, UUID storeId) {
+		return em.createQuery("select e from LedgerEntry e where e.id = :id and e.storeId = :storeId", LedgerEntry.class)
+				.setParameter("id", id)
+				.setParameter("storeId", storeId)
+				.getResultStream()
+				.findFirst();
 	}
 
 	@Override
@@ -114,18 +122,20 @@ class LedgerEntryRepositoryImpl implements LedgerEntryRepository {
 	 * 건수를 읽은 행으로 알 수 있으므로 세지 않는다 ({@link PageableExecutionUtils}).
 	 */
 	@Override
-	public Page<LedgerHistoryEntry> findHistoryByCustomerId(UUID customerId, Pageable pageable) {
+	public Page<LedgerHistoryEntry> findHistoryByCustomerId(UUID storeId, UUID customerId, Pageable pageable) {
 		// 오프셋이 int 를 넘는 페이지(page 가 아주 큰 값)는 행이 있을 수 없다 — 형 변환 오버플로로 음수 오프셋이 되지 않게 읽지 않는다
 		List<LedgerHistoryEntry> content = pageable.getOffset() > Integer.MAX_VALUE
 				? List.of()
 				: em.createQuery(HISTORY_QUERY, LedgerHistoryEntry.class)
 						.setParameter("customerId", customerId)
+						.setParameter("storeId", storeId)
 						.setFirstResult((int) pageable.getOffset())
 						.setMaxResults(pageable.getPageSize())
 						.getResultList();
 		return PageableExecutionUtils.getPage(content, pageable, () -> em
 				.createQuery(HISTORY_COUNT_QUERY, Long.class)
 				.setParameter("customerId", customerId)
+				.setParameter("storeId", storeId)
 				.getSingleResult());
 	}
 

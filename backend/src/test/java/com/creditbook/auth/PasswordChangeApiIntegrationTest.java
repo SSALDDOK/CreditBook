@@ -12,10 +12,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import java.time.Clock;
+import java.util.UUID;
 
 import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,7 @@ import com.creditbook.auth.domain.EmployeeRepository;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 import com.jayway.jsonpath.JsonPath;
 
 /**
@@ -72,6 +75,14 @@ class PasswordChangeApiIntegrationTest {
 
 	@Autowired
 	Clock clock;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	// 이 클래스가 만든 직원만 지움 (커밋된 데이터라 롤백되지 않음)
 	@AfterEach
@@ -229,7 +240,7 @@ class PasswordChangeApiIntegrationTest {
 	// 사장 저장 후 로그인 쿠키까지 (트랜잭션을 열어 저장하고 바로 커밋)
 	private Cookie ownerSession(String loginId) throws Exception {
 		transactionTemplate.executeWithoutResult(status -> {
-			Employee owner = TestEmployees.owner(loginId, passwordEncoder.encode(OWNER_PASSWORD), "테스트사장",
+			Employee owner = TestEmployees.owner(storeId, loginId, passwordEncoder.encode(OWNER_PASSWORD), "테스트사장",
 					clock.instant());
 			employeeRepository.add(owner);
 		});

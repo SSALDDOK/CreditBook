@@ -50,6 +50,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-5")
 class ChargeControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID ACCOUNT_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 	private static final UUID ENTRY_ID = UUID.fromString("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f");
@@ -71,6 +73,7 @@ class ChargeControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private static ChargeResult charged(long amount, long balanceAfter, String memo) {
@@ -82,7 +85,7 @@ class ChargeControllerTest {
 	@DisplayName("잔액 0원 고객에게 50,000원 충전을 등록하면 잔액이 50,000원이 되고 CHARGE 유형 거래가 1건 생성된다")
 	void charge_returns_201_with_location_and_charge_entry() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY))
+		given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(charged(50_000, 50_000, "음료"));
 
 		// when / then
@@ -108,7 +111,7 @@ class ChargeControllerTest {
 	@DisplayName("메모 없이 충전할 수 있다")
 	void charge_without_memo_is_accepted() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY))
+		given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(charged(10_000, 10_000, null));
 
 		// when / then
@@ -134,7 +137,7 @@ class ChargeControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -149,7 +152,7 @@ class ChargeControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedAt"));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -165,7 +168,7 @@ class ChargeControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("amount"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("금액을 입력해 주세요."));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -179,10 +182,10 @@ class ChargeControllerTest {
 	void invalid_amount_is_rejected_with_reason(String amount, String expectedCode, String expectedMessage)
 			throws Exception {
 		// given: 서비스 대신 실제 도메인 규칙이 금액을 판단하게 한다 (한도는 application.yml 과 같은 300,000원)
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 		ChargePolicy policy = ChargePolicy.ofMaxAmount(300_000);
-		given(chargeService.charge(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
-			account.charge(invocation.getArgument(1), policy, EMPLOYEE_ID, NOW, invocation.getArgument(2), KEY);
+		given(chargeService.charge(eq(STORE_ID), eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
+			account.charge(invocation.getArgument(2), policy, EMPLOYEE_ID, NOW, invocation.getArgument(3), KEY);
 			throw new AssertionError("도메인이 금액을 거절해야 한다");
 		});
 
@@ -201,7 +204,7 @@ class ChargeControllerTest {
 	@DisplayName("1회 충전 한도와 같은 금액은 충전할 수 있다")
 	void charge_at_limit_is_accepted() throws Exception {
 		// given
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("300000"), null, EMPLOYEE_ID, KEY))
+		given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("300000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(charged(300_000, 300_000, null));
 
 		// when / then
@@ -226,7 +229,7 @@ class ChargeControllerTest {
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("memo"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("메모는 200자 이하여야 합니다."));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -234,7 +237,7 @@ class ChargeControllerTest {
 	void charge_accepts_memo_of_max_length() throws Exception {
 		// given
 		String memo = "가".repeat(200);
-		given(chargeService.charge(CUSTOMER_ID, new BigDecimal("10000"), memo, EMPLOYEE_ID, KEY))
+		given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("10000"), memo, EMPLOYEE_ID, KEY))
 				.willReturn(charged(10_000, 10_000, memo));
 
 		// when / then
@@ -248,7 +251,7 @@ class ChargeControllerTest {
 	@DisplayName("고객이 없으면 404로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(chargeService.charge(any(), any(), any(), any(), any()))
+		given(chargeService.charge(any(), any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
@@ -269,7 +272,7 @@ class ChargeControllerTest {
 				.content("{\"amount\": 10000}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -282,7 +285,7 @@ class ChargeControllerTest {
 				.content(body))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -298,7 +301,7 @@ class ChargeControllerTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
-		verify(chargeService, never()).charge(any(), any(), any(), any(), any());
+		verify(chargeService, never()).charge(any(), any(), any(), any(), any(), any());
 	}
 
 }

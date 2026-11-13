@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import jakarta.persistence.EntityManager;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,6 +38,7 @@ import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 import com.creditbook.support.WithMockEmployee;
 
 /**
@@ -77,6 +79,14 @@ class LedgerEntryImmutabilityApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	// 매장 (REQ-36) — @WithMockEmployee 직원의 기본 매장. 고객도 이 매장에 만든다
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.ensure(jdbcTemplate, TestStores.DEFAULT_STORE_ID);
+	}
+
 	@ParameterizedTest(name = "{0} {1}")
 	@CsvSource({
 			"PUT,    /api/transactions/{id}",
@@ -89,11 +99,11 @@ class LedgerEntryImmutabilityApiIntegrationTest {
 	@Tag("TC-10")
 	void modifying_or_deleting_a_ledger_entry_is_rejected(String method, String path) throws Exception {
 		// given — 충전 거래 1건 (/api/ledger-entries/{id}는 충전 응답 Location 헤더가 가리키는 경로)
-		Employee employee = TestEmployees.readyStaff("tc10-staff", passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, "tc10-staff", passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
-		RegisteredCustomer customer = customerService.register("불변성TC10", "01010100010");
-		ChargeResult charge = chargeService.charge(customer.customerId(), new BigDecimal("10000"), null,
+		RegisteredCustomer customer = customerService.register(storeId, "불변성TC10", "01010100010");
+		ChargeResult charge = chargeService.charge(storeId, customer.customerId(), new BigDecimal("10000"), null,
 				employee.getId(), IdempotencyKey.of("tc10-charge"));
 		entityManager.flush(); //JPA메모리 -> DB로 보내기
 		Map<String, Object> before = ledgerRow(charge.entryId()); // (원본) 거래 수정·삭제 전 행 사진 찍어 두기

@@ -58,7 +58,12 @@ public class WebSecurityTestConfig {
 			}
 
 			@Override
-			public List<Employee> findAllForManagement() {
+			public Optional<Employee> findByIdAndStoreIdForUpdate(UUID id, UUID storeId) {
+				return Optional.empty();
+			}
+
+			@Override
+			public List<Employee> findAllForManagement(UUID storeId) {
 				return List.of();
 			}
 

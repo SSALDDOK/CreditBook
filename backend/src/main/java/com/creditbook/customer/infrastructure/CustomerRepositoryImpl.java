@@ -50,6 +50,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
 	 * <li>직원 LEFT JOIN — performed_by 는 NOT NULL FK 지만, 이름이 없다고 거래가 빠지면 안 되므로 LEFT</li>
 	 * </ul>
 	 * ledger_entries 는 읽기만 한다. 활성 여부 조건은 없다 (비활성 고객도 조회됨).
+	 * 매장 조건(c.store_id, REQ-36)으로 다른 매장 고객은 0행이다. 계좌·거래·처리 직원은 복합 외래 키로 고객과 같은 매장이다.
 	 */
 	static final String FIND_DETAIL_SQL = """
 			SELECT c.id            AS customer_id,
@@ -80,6 +81,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
 			LEFT JOIN employees emp ON emp.id = e.performed_by
 			LEFT JOIN ledger_entries r ON r.reverses_id = e.id
 			WHERE c.id = :customerId
+			  AND c.store_id = :storeId
 			ORDER BY e.seq DESC
 			""";
 
@@ -98,46 +100,48 @@ class CustomerRepositoryImpl implements CustomerRepository {
 	}
 
 	@Override
-	public Optional<Customer> findById(UUID id) {
-		return jpaRepository.findById(id);
+	public Optional<Customer> findByIdAndStoreId(UUID id, UUID storeId) {
+		return jpaRepository.findByIdAndStoreId(id, storeId);
 	}
 
 	@Override
-	public List<SamePhoneCustomer> findAllByPhone(String phone) {
-		return jpaRepository.findAllByPhone(phone);
+	public List<SamePhoneCustomer> findAllByStoreIdAndPhone(UUID storeId, String phone) {
+		return jpaRepository.findAllByStoreIdAndPhone(storeId, phone);
 	}
 
 	@Override
-	public Page<CustomerSummary> search(CustomerSearchKeyword keyword, boolean includeInactive, Pageable pageable) {
+	public Page<CustomerSummary> search(UUID storeId, CustomerSearchKeyword keyword, boolean includeInactive,
+			Pageable pageable) {
 		// 정렬은 쿼리에 고정돼 있다 — 호출자가 넘긴 정렬이 ORDER BY 에 덧붙지 않도록 떼어 낸다
 		Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
 		return switch (keyword.type()) {
 			case NONE -> includeInactive
-					? jpaRepository.findAllSummaries(unsorted)
-					: jpaRepository.findActiveSummaries(unsorted);
+					? jpaRepository.findAllSummaries(storeId, unsorted)
+					: jpaRepository.findActiveSummaries(storeId, unsorted);
 			case NAME -> {
 				String pattern = "%" + escapeLike(keyword.value().toLowerCase(Locale.ROOT)) + "%";
 				yield includeInactive
-						? jpaRepository.findAllSummariesByNameLike(pattern, unsorted)
-						: jpaRepository.findActiveSummariesByNameLike(pattern, unsorted);
+						? jpaRepository.findAllSummariesByNameLike(storeId, pattern, unsorted)
+						: jpaRepository.findActiveSummariesByNameLike(storeId, pattern, unsorted);
 			}
 			case PHONE_SUFFIX -> {
 				String pattern = "%" + escapeLike(keyword.value());
 				yield includeInactive
-						? jpaRepository.findAllSummariesByPhoneLike(pattern, unsorted)
-						: jpaRepository.findActiveSummariesByPhoneLike(pattern, unsorted);
+						? jpaRepository.findAllSummariesByPhoneLike(storeId, pattern, unsorted)
+						: jpaRepository.findActiveSummariesByPhoneLike(storeId, pattern, unsorted);
 			}
 		};
 	}
 
 	@Override
-	public Optional<CustomerDetail> findDetail(UUID id, int recentEntryLimit) {
+	public Optional<CustomerDetail> findDetail(UUID storeId, UUID id, int recentEntryLimit) {
 		if (recentEntryLimit < 1) {
 			throw new IllegalArgumentException("recentEntryLimit must be >= 1");
 		}
 		@SuppressWarnings("unchecked")
 		List<Tuple> rows = em.createNativeQuery(FIND_DETAIL_SQL, Tuple.class)
 				.setParameter("customerId", id)
+				.setParameter("storeId", storeId)
 				.setParameter("limit", recentEntryLimit)
 				.getResultList();
 		if (rows.isEmpty()) {

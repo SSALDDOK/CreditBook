@@ -56,6 +56,8 @@ import com.creditbook.prepaid.domain.ReversalConflictException;
 @Tag("REQ-7")
 class ChargeCancelServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	/** KST 2026-10-15 10:00 */
 	private static final Instant NOW = Instant.parse("2026-10-15T01:00:00Z");
@@ -89,8 +91,8 @@ class ChargeCancelServiceTest {
 
 	/** 잔액 0원 계좌. 저장소가 이 고객의 계좌로 돌려준다. */
 	private PrepaidAccount account() {
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW.minusSeconds(86_400 * 30));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW.minusSeconds(86_400 * 30));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		return account;
 	}
 
@@ -99,7 +101,7 @@ class ChargeCancelServiceTest {
 		LedgerEntry charge = account.charge(BigDecimal.valueOf(amount), POLICY, EMPLOYEE_ID, chargedAt, null,
 				IdempotencyKey.of("setup-charge-" + amount));
 		// 잔액 준비용 충전은 조회되지 않으므로 lenient 로 둔다
-		lenient().when(ledgerEntryRepository.findById(charge.getId())).thenReturn(Optional.of(charge));
+		lenient().when(ledgerEntryRepository.findByIdAndStoreId(charge.getId(), STORE_ID)).thenReturn(Optional.of(charge));
 		return charge;
 	}
 
@@ -112,7 +114,7 @@ class ChargeCancelServiceTest {
 		LedgerEntry charge = storedCharge(account, 30_000, NOW.minusSeconds(3600));
 
 		// when
-		ChargeCancelResult result = service.cancelCharge(CUSTOMER_ID, charge.getId(), " " + REASON + " ",
+		ChargeCancelResult result = service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), " " + REASON + " ",
 				EMPLOYEE_ID, KEY);
 
 		// then
@@ -150,7 +152,7 @@ class ChargeCancelServiceTest {
 		LedgerEntry charge = storedCharge(account, 10_000, NOW.minusSeconds(60));
 
 		// when
-		service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
+		service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		verifyNoInteractions(customerRepository);
@@ -164,7 +166,7 @@ class ChargeCancelServiceTest {
 		LedgerEntry charge = storedCharge(account, 10_000, Instant.parse("2026-10-14T15:30:00Z"));
 
 		// when
-		ChargeCancelResult result = service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
+		ChargeCancelResult result = service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(result.balanceAfter()).isEqualByComparingTo("0");
@@ -178,7 +180,7 @@ class ChargeCancelServiceTest {
 		LedgerEntry charge = storedCharge(account, 10_000, Instant.parse("2026-10-14T14:59:59Z"));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(ChargeCancelNotSameDayException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 		assertThat(account.getBalance()).isEqualByComparingTo("10000");
@@ -198,7 +200,7 @@ class ChargeCancelServiceTest {
 		account.use(BigDecimal.valueOf(4_500), EMPLOYEE_ID, NOW, null, IdempotencyKey.of("setup-use"));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(ChargeAlreadyUsedException.class, e -> {
 					assertThat(e.getBalance()).isEqualByComparingTo("5500");
 					assertThat(e.getChargeAmount()).isEqualByComparingTo("10000");
@@ -219,10 +221,10 @@ class ChargeCancelServiceTest {
 		storedCharge(account, 10_000, NOW.minusSeconds(60));
 		LedgerEntry use = account.use(BigDecimal.valueOf(3_000), EMPLOYEE_ID, NOW, null,
 				IdempotencyKey.of("setup-use"));
-		given(ledgerEntryRepository.findById(use.getId())).willReturn(Optional.of(use));
+		given(ledgerEntryRepository.findByIdAndStoreId(use.getId(), STORE_ID)).willReturn(Optional.of(use));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidCancelTargetException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 		assertThat(account.getBalance()).isEqualByComparingTo("7000");
@@ -244,7 +246,7 @@ class ChargeCancelServiceTest {
 		given(ledgerEntryRepository.findByReversesId(charge.getId())).willReturn(Optional.of(firstCancel));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(AlreadyCancelledException.class,
 						e -> assertThat(e.getCancelEntryId()).isEqualTo(firstCancel.getId()));
 		verify(ledgerEntryRepository, never()).add(any());
@@ -261,10 +263,10 @@ class ChargeCancelServiceTest {
 		// given
 		account();
 		UUID unknownEntry = UUID.randomUUID();
-		given(ledgerEntryRepository.findById(unknownEntry)).willReturn(Optional.empty());
+		given(ledgerEntryRepository.findByIdAndStoreId(unknownEntry, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, unknownEntry, REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, unknownEntry, REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(LedgerEntryNotFoundException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 	}
@@ -278,7 +280,7 @@ class ChargeCancelServiceTest {
 		String reason = "로그금지사유문구";
 
 		// when
-		service.cancelCharge(CUSTOMER_ID, charge.getId(), reason, EMPLOYEE_ID, KEY);
+		service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), reason, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(output.getOut().lines().filter(line -> line.contains("balance changed")))
@@ -296,13 +298,13 @@ class ChargeCancelServiceTest {
 		// given
 		PrepaidAccount account = account();
 		LedgerEntry charge = storedCharge(account, 10_000, NOW.minusSeconds(60));
-		ChargeCancelResult first = service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
+		ChargeCancelResult first = service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		ChargeCancelResult again = service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
+		ChargeCancelResult again = service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(again.replayed()).isTrue();
@@ -324,7 +326,7 @@ class ChargeCancelServiceTest {
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(useCancel));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(IdempotencyKeyReusedException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 	}
@@ -344,7 +346,7 @@ class ChargeCancelServiceTest {
 				.willReturn(Optional.empty(), Optional.of(committedCancel));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelCharge(CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelCharge(STORE_ID, CUSTOMER_ID, charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(AlreadyCancelledException.class);
 		verify(ledgerEntryRepository, times(1)).add(any());
 	}

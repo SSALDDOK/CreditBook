@@ -15,6 +15,8 @@ import jakarta.persistence.Table;
 /**
  * 직원 (employees). 로그인 주체이자 거래의 처리 직원(ledger_entries.performed_by)이다.
  * <p>
+ * 직원은 한 매장에 속하고 매장은 바뀌지 않는다 (REQ-36). 로그인 아이디는 매장과 관계없이 전체에서 유일하다.
+ * <p>
  * 직원은 삭제하지 않고 {@code active} 로 비활성화한다 — 비활성 직원은 로그인할 수 없고, 이미 발급된 토큰도 다음 요청부터 거절된다.
  * {@code passwordHash} 는 BCrypt 해시다. 응답 DTO·로그·{@link #toString()} 에 내보내지 않는다.
  */
@@ -28,6 +30,10 @@ public class Employee {
 	@Id
 	@Column(name = "id", nullable = false, updatable = false)
 	private UUID id;
+
+	/** 이 직원이 속한 매장 (stores.id). 처리한 거래·관리하는 직원·고객은 모두 이 매장 것이다. */
+	@Column(name = "store_id", nullable = false, updatable = false)
+	private UUID storeId;
 
 	@Column(name = "login_id", nullable = false, length = LOGIN_ID_MAX_LENGTH)
 	private String loginId;
@@ -70,9 +76,10 @@ public class Employee {
 		// JPA 전용
 	}
 
-	private Employee(String loginId, String passwordHash, String name, Role role, boolean mustChangePassword,
-			Instant createdAt) {
+	private Employee(UUID storeId, String loginId, String passwordHash, String name, Role role,
+			boolean mustChangePassword, Instant createdAt) {
 		this.id = UUID.randomUUID();
+		this.storeId = Objects.requireNonNull(storeId, "storeId");
 		this.loginId = requireText(loginId, "loginId");
 		this.passwordHash = requireText(passwordHash, "passwordHash");
 		this.name = requireValidName(name);
@@ -88,20 +95,26 @@ public class Employee {
 	 * ({@code mustChangePassword = false}). ADMIN 은 이 경로로만 생긴다 — 앱에 권한 변경 기능이 없다.
 	 * 비밀번호는 이미 해시된 값을 받는다 (해시는 애플리케이션 계층의 PasswordEncoder 가 한다). 이름은 앞뒤 공백을 빼고 저장한다.
 	 *
+	 * @param storeId 새로 연 매장
 	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있거나, 이름이 {@value EmployeeCredentialRules#NAME_MAX_LENGTH}자를 넘을 때
+	 * @throws NullPointerException 매장이 없을 때
 	 */
-	public static Employee createOwner(String loginId, String passwordHash, String name, Instant createdAt) {
-		return new Employee(loginId, passwordHash, name, Role.ADMIN, false, createdAt);
+	public static Employee createOwner(UUID storeId, String loginId, String passwordHash, String name,
+			Instant createdAt) {
+		return new Employee(storeId, loginId, passwordHash, name, Role.ADMIN, false, createdAt);
 	}
 
 	/**
 	 * 사장이 직원(STAFF) 계정을 추가한다 (REQ-30 — 직원 추가는 STAFF 로만). 초기 비밀번호는 사장이 건네주는 값이므로
 	 * 첫 로그인 뒤 바꾸게 한다 ({@code mustChangePassword = true}).
 	 *
+	 * @param storeId 사장의 매장 — 직원은 추가한 사장과 같은 매장에 속한다
 	 * @throws IllegalArgumentException 아이디·해시·이름이 비어 있거나, 이름이 {@value EmployeeCredentialRules#NAME_MAX_LENGTH}자를 넘을 때
+	 * @throws NullPointerException 매장이 없을 때
 	 */
-	public static Employee createStaff(String loginId, String passwordHash, String name, Instant createdAt) {
-		return new Employee(loginId, passwordHash, name, Role.STAFF, true, createdAt);
+	public static Employee createStaff(UUID storeId, String loginId, String passwordHash, String name,
+			Instant createdAt) {
+		return new Employee(storeId, loginId, passwordHash, name, Role.STAFF, true, createdAt);
 	}
 
 	private static String requireText(String value, String field) {
@@ -251,6 +264,10 @@ public class Employee {
 
 	public UUID getId() {
 		return id;
+	}
+
+	public UUID getStoreId() {
+		return storeId;
 	}
 
 	public String getLoginId() {

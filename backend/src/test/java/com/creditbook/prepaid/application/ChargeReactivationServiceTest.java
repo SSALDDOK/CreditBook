@@ -43,6 +43,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-33")
 class ChargeReactivationServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant DEACTIVATED_AT = Instant.parse("2026-10-11T03:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-10-12T05:00:00Z");
@@ -71,8 +73,8 @@ class ChargeReactivationServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
-		account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
+		customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
+		account = PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT);
 		service = new ChargeService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
 				customerRepository, POLICY, Clock.fixed(NOW, ZoneOffset.UTC));
@@ -83,8 +85,8 @@ class ChargeReactivationServiceTest {
 	}
 
 	private void givenStoredCustomerAndAccount() {
-		given(prepaidAccountRepository.findByCustomerId(customer.getId())).willReturn(Optional.of(account));
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(account));
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
 	}
 
 	@Test
@@ -95,7 +97,7 @@ class ChargeReactivationServiceTest {
 		givenStoredCustomerAndAccount();
 
 		// when
-		ChargeResult result = service.charge(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		ChargeResult result = service.charge(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -116,7 +118,7 @@ class ChargeReactivationServiceTest {
 		givenStoredCustomerAndAccount();
 
 		// when
-		service.charge(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		service.charge(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(customer.isActive()).isTrue();
@@ -129,13 +131,13 @@ class ChargeReactivationServiceTest {
 	void rejected_charge_does_not_reactivate() {
 		// given
 		deactivateCustomer();
-		given(prepaidAccountRepository.findByCustomerId(customer.getId())).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(account));
 
 		// when / then
-		assertThatThrownBy(() -> service.charge(customer.getId(), new BigDecimal("300001"), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.charge(STORE_ID, customer.getId(), new BigDecimal("300001"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(ChargeLimitExceededException.class);
 		verify(ledgerEntryRepository, never()).add(any());
-		verify(customerRepository, never()).findById(any());
+		verify(customerRepository, never()).findByIdAndStoreId(any(), any());
 		assertThat(customer.isActive()).isFalse();
 		assertThat(account.getBalance()).isEqualByComparingTo("0");
 	}
@@ -147,7 +149,7 @@ class ChargeReactivationServiceTest {
 		// given: 처음 충전(재활성화 포함)이 커밋된 뒤 잔액을 모두 쓰고 다시 비활성화된 고객
 		deactivateCustomer();
 		givenStoredCustomerAndAccount();
-		ChargeResult first = service.charge(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		ChargeResult first = service.charge(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		account.use(new BigDecimal("10000"), EMPLOYEE_ID, NOW, null, IdempotencyKey.of("setup-use"));
@@ -155,7 +157,7 @@ class ChargeReactivationServiceTest {
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		ChargeResult again = service.charge(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		ChargeResult again = service.charge(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(again.replayed()).isTrue();
@@ -163,7 +165,7 @@ class ChargeReactivationServiceTest {
 		assertThat(customer.isActive()).isFalse();
 		assertThat(account.getBalance()).isEqualByComparingTo("0");
 		verify(ledgerEntryRepository).add(any());
-		verify(customerRepository).findById(customer.getId());
+		verify(customerRepository).findByIdAndStoreId(customer.getId(), STORE_ID);
 	}
 
 }

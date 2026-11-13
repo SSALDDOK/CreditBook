@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -45,17 +46,21 @@ class PrepaidJpaMappingTest {
 
 	private static final ChargePolicy POLICY = ChargePolicy.ofMaxAmount(300_000);
 
+	private UUID storeId;
 	private UUID employeeId;
 	private UUID customerId;
 
 	@BeforeEach
 	void setUp() {
+		// 매장 (REQ-36) — 직원·고객·계좌·거래는 같은 매장이어야 저장된다
+		storeId = TestStores.create(jdbcTemplate);
 		String loginId = "mapper-" + UUID.randomUUID().toString().substring(0, 8);
 		employeeId = jdbcTemplate.queryForObject(
-				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, ?, ?, 'STAFF') RETURNING id",
-				UUID.class, loginId, "hashed-password", "매핑 테스트 직원");
+				"INSERT INTO employees (store_id, login_id, password_hash, name, role) VALUES (?, ?, ?, ?, 'STAFF') RETURNING id",
+				UUID.class, storeId, loginId, "hashed-password", "매핑 테스트 직원");
 		customerId = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id", UUID.class, "매핑고객", "01012345678");
+				"INSERT INTO customers (store_id, name, phone) VALUES (?, ?, ?) RETURNING id", UUID.class, storeId, "매핑고객",
+				"01012345678");
 	}
 
 	@Test
@@ -64,7 +69,7 @@ class PrepaidJpaMappingTest {
 	void persisted_entries_read_back_db_generated_columns() {
 		// given
 		Instant now = Instant.parse("2026-09-30T01:00:00Z");
-		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		PrepaidAccount account = PrepaidAccount.open(storeId, customerId, now);
 		em.persist(account);
 		LedgerEntry charge = account.charge(BigDecimal.valueOf(50_000), POLICY, employeeId, now, "음료");
 		em.persist(charge);
@@ -100,7 +105,7 @@ class PrepaidJpaMappingTest {
 	void use_cancel_is_persisted_as_reversal() {
 		// given
 		Instant now = Instant.parse("2026-09-30T01:00:00Z");
-		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		PrepaidAccount account = PrepaidAccount.open(storeId, customerId, now);
 		em.persist(account);
 		em.persist(account.charge(BigDecimal.valueOf(10_000), POLICY, employeeId, now, null));
 		LedgerEntry use = account.use(BigDecimal.valueOf(3_000), employeeId, now, null);
@@ -127,7 +132,7 @@ class PrepaidJpaMappingTest {
 	void second_use_cancel_is_blocked_by_db_unique_index() {
 		// given: 서비스가 기존 취소 조회를 빠뜨려 도메인에 empty 를 두 번 넘긴 상황
 		Instant now = Instant.parse("2026-09-30T01:00:00Z");
-		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		PrepaidAccount account = PrepaidAccount.open(storeId, customerId, now);
 		em.persist(account);
 		em.persist(account.charge(BigDecimal.valueOf(10_000), POLICY, employeeId, now, null));
 		LedgerEntry use = account.use(BigDecimal.valueOf(3_000), employeeId, now, null);
@@ -153,7 +158,7 @@ class PrepaidJpaMappingTest {
 	void version_increments_when_balance_changes() {
 		// given
 		Instant now = Instant.parse("2026-09-30T01:00:00Z");
-		PrepaidAccount account = PrepaidAccount.open(customerId, now);
+		PrepaidAccount account = PrepaidAccount.open(storeId, customerId, now);
 		em.persist(account);
 		em.flush();
 		Long initialVersion = account.getVersion();

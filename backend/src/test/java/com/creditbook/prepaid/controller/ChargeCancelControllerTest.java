@@ -55,6 +55,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-7")
 class ChargeCancelControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID ACCOUNT_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
@@ -82,6 +84,7 @@ class ChargeCancelControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private static MockHttpServletRequestBuilder cancelRequest(String body) {
@@ -97,7 +100,7 @@ class ChargeCancelControllerTest {
 
 	/** 빈 계좌. 공개 API(open)로만 만든다. */
 	private static PrepaidAccount realAccount() {
-		return PrepaidAccount.open(CUSTOMER_ID, NOW);
+		return PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 	}
 
 	private static LedgerEntry charge(PrepaidAccount account, long amount, Instant chargedAt) {
@@ -107,7 +110,7 @@ class ChargeCancelControllerTest {
 
 	/** 서비스 대신 실제 도메인 규칙이 취소 가능 여부를 판단하게 한다. */
 	private void cancelOnRealAccount(PrepaidAccount account, LedgerEntry target, Optional<LedgerEntry> existingCancel) {
-		given(cancelService.cancelCharge(CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelCharge(STORE_ID, CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willAnswer(invocation -> {
 					account.cancelCharge(target, existingCancel, REASON, EMPLOYEE_ID, NOW, SEOUL, KEY);
 					throw new AssertionError("도메인이 취소를 거절해야 한다");
@@ -118,7 +121,7 @@ class ChargeCancelControllerTest {
 	@DisplayName("충전 건을 취소하면 201과 함께 CHARGE_CANCEL 거래·줄어든 잔액·사유·원 거래 ID 가 응답된다")
 	void cancel_charge_returns_201_with_location_and_charge_cancel_entry() throws Exception {
 		// given
-		given(cancelService.cancelCharge(CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelCharge(STORE_ID, CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, false));
 
 		// when / then
@@ -146,7 +149,8 @@ class ChargeCancelControllerTest {
 	void admin_can_cancel_charge() throws Exception {
 		// given
 		given(currentEmployee.id()).willReturn(ADMIN_ID);
-		given(cancelService.cancelCharge(CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, ADMIN_ID, KEY))
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+		given(cancelService.cancelCharge(STORE_ID, CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, ADMIN_ID, KEY))
 				.willReturn(cancelled(REASON, false));
 
 		// when / then
@@ -160,7 +164,7 @@ class ChargeCancelControllerTest {
 	@DisplayName("같은 요청 키로 같은 충전 취소를 다시 보내면 201로 처음 취소 거래를 돌려주고 Idempotent-Replayed: true 를 싣는다")
 	void replayed_cancel_returns_201_with_replayed_header() throws Exception {
 		// given
-		given(cancelService.cancelCharge(CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelCharge(STORE_ID, CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, true));
 
 		// when / then
@@ -181,7 +185,7 @@ class ChargeCancelControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("reason"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("취소 사유를 입력해 주세요."));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -196,7 +200,7 @@ class ChargeCancelControllerTest {
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("reason"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("취소 사유는 200자 이하여야 합니다."));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -281,7 +285,7 @@ class ChargeCancelControllerTest {
 	@DisplayName("고객이 없으면 404 CUSTOMER_NOT_FOUND 로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(cancelService.cancelCharge(any(), any(), any(), any(), any()))
+		given(cancelService.cancelCharge(any(), any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
@@ -294,7 +298,7 @@ class ChargeCancelControllerTest {
 	@DisplayName("거래가 없으면 404 LEDGER_ENTRY_NOT_FOUND 로 응답한다")
 	void unknown_entry_is_rejected_with_404() throws Exception {
 		// given
-		given(cancelService.cancelCharge(any(), any(), any(), any(), any()))
+		given(cancelService.cancelCharge(any(), any(), any(), any(), any(), any()))
 				.willThrow(new LedgerEntryNotFoundException(CHARGE_ENTRY_ID));
 
 		// when / then
@@ -311,7 +315,7 @@ class ChargeCancelControllerTest {
 		mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(BODY))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_IDEMPOTENCY_KEY"));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -322,7 +326,7 @@ class ChargeCancelControllerTest {
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -335,7 +339,7 @@ class ChargeCancelControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 }

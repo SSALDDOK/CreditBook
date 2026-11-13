@@ -10,14 +10,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * 매장 정보 (store_profile). 단일 매장용이라 행은 하나뿐이다 — 두 번째 행은 DB 의 ux_store_profile_singleton 이 막는다.
- * 매장은 매장 개설(REQ-29)로 처음 ADMIN 계정과 함께 한 번 만든다.
+ * 매장 (stores, REQ-36). 직원·고객·계좌·거래는 모두 한 매장에 속한다 — 매장 사이 연결은 DB 의 복합 외래 키가 막는다.
+ * 매장 이름은 중복을 허용한다(매장은 id 로 구분한다). 매장은 매장 개설(REQ-29)로 첫 사장(ADMIN) 계정과 함께 만든다.
  */
 @Entity
-@Table(name = "store_profile")
-public class StoreProfile {
+@Table(name = "stores")
+public class Store {
 
-	/** store_profile.name VARCHAR(30). 앞뒤 공백을 뺀 글자 수. */
+	/** stores.name VARCHAR(30). 앞뒤 공백을 뺀 글자 수. */
 	public static final int NAME_MAX_LENGTH = 30;
 
 	@Id
@@ -27,30 +27,36 @@ public class StoreProfile {
 	@Column(name = "name", nullable = false, length = NAME_MAX_LENGTH)
 	private String name;
 
+	/** 이 매장을 열 때 쓴 초대 코드 (store_invite_codes.id). 초대 코드 없이 열린 매장은 null — 운영자만 본다. */
+	@Column(name = "invite_code_id", updatable = false)
+	private UUID inviteCodeId;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
-	protected StoreProfile() {
+	protected Store() {
 		// JPA 전용
 	}
 
-	private StoreProfile(String name, Instant openedAt) {
+	private Store(String name, UUID inviteCodeId, Instant openedAt) {
 		this.id = UUID.randomUUID();
 		this.name = requireValidName(name);
+		this.inviteCodeId = inviteCodeId;
 		this.createdAt = Objects.requireNonNull(openedAt, "openedAt");
 		this.updatedAt = openedAt;
 	}
 
 	/**
-	 * 매장을 연다. 매장명은 앞뒤 공백을 빼고 저장한다.
+	 * 초대 코드 없이 매장을 연다 (지금의 매장 개설 경로). 매장명은 앞뒤 공백을 빼고 저장한다.
+	 * 초대 코드로 여는 경로는 초대 코드 API 와 함께 추가한다.
 	 *
 	 * @throws InvalidStoreNameException 매장명이 비었거나 공백뿐이거나, 앞뒤 공백을 빼고 {@value #NAME_MAX_LENGTH}자를 넘을 때
 	 */
-	public static StoreProfile open(String name, Instant openedAt) {
-		return new StoreProfile(name, openedAt);
+	public static Store open(String name, Instant openedAt) {
+		return new Store(name, null, openedAt);
 	}
 
 	/** 글자 수는 코드 포인트로 센다 (PostgreSQL VARCHAR 의 글자 수와 같다). */
@@ -71,6 +77,10 @@ public class StoreProfile {
 
 	public String getName() {
 		return name;
+	}
+
+	public UUID getInviteCodeId() {
+		return inviteCodeId;
 	}
 
 	public Instant getCreatedAt() {

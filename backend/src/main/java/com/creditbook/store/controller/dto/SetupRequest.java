@@ -5,7 +5,7 @@ import com.creditbook.global.validation.MaxUtf8Bytes;
 import com.creditbook.global.validation.PasswordConfirmation;
 import com.creditbook.global.validation.PasswordConfirmed;
 import com.creditbook.global.validation.StrippedLength;
-import com.creditbook.store.domain.StoreProfile;
+import com.creditbook.store.domain.Store;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -18,7 +18,7 @@ import jakarta.validation.constraints.Size;
 @PasswordConfirmed
 public record SetupRequest(
 		@NotNull(message = "매장명을 입력해 주세요.")
-		@StrippedLength(min = 1, max = StoreProfile.NAME_MAX_LENGTH, message = "매장명은 1–30자여야 합니다.")
+		@StrippedLength(min = 1, max = Store.NAME_MAX_LENGTH, message = "매장명은 1–30자여야 합니다.")
 		String storeName,
 
 		@NotNull(message = "사장 이름을 입력해 주세요.")

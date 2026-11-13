@@ -57,6 +57,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-34")
 class CancelControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID ACCOUNT_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 	private static final UUID USE_ENTRY_ID = UUID.fromString("5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b");
@@ -82,6 +84,7 @@ class CancelControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private static MockHttpServletRequestBuilder cancelRequest(String body) {
@@ -97,7 +100,7 @@ class CancelControllerTest {
 
 	/** 잔액 10,000원인 실제 계좌. 공개 API(open → charge)로만 만든다. */
 	private static PrepaidAccount realAccount() {
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 		account.charge(new BigDecimal("10000"), ChargePolicy.ofMaxAmount(300_000), EMPLOYEE_ID, NOW, null,
 				IdempotencyKey.of("setup-charge"));
 		return account;
@@ -106,7 +109,7 @@ class CancelControllerTest {
 	/** 서비스 대신 실제 도메인 규칙이 취소 대상·사유를 판단하게 한다. */
 	private void cancelOnRealAccount(PrepaidAccount account, LedgerEntry target, Optional<LedgerEntry> existingCancel,
 			String reason) {
-		given(cancelService.cancelUse(CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY)).willAnswer(invocation -> {
+		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY)).willAnswer(invocation -> {
 			account.cancelUse(target, existingCancel, reason, EMPLOYEE_ID, NOW, KEY);
 			throw new AssertionError("도메인이 취소를 거절해야 한다");
 		});
@@ -116,7 +119,7 @@ class CancelControllerTest {
 	@DisplayName("사용 건을 취소하면 201과 함께 USE_CANCEL 거래·복구된 잔액·사유·원 거래 ID 가 응답된다")
 	void cancel_use_returns_201_with_location_and_use_cancel_entry() throws Exception {
 		// given
-		given(cancelService.cancelUse(CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, false));
 
 		// when / then
@@ -144,7 +147,8 @@ class CancelControllerTest {
 	void admin_can_cancel_use() throws Exception {
 		// given
 		given(currentEmployee.id()).willReturn(ADMIN_ID);
-		given(cancelService.cancelUse(CUSTOMER_ID, USE_ENTRY_ID, REASON, ADMIN_ID, KEY))
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, REASON, ADMIN_ID, KEY))
 				.willReturn(cancelled(REASON, false));
 
 		// when / then
@@ -158,7 +162,7 @@ class CancelControllerTest {
 	@DisplayName("같은 요청 키로 같은 취소를 다시 보내면 201로 처음 취소 거래를 돌려주고 Idempotent-Replayed: true 를 싣는다")
 	void replayed_cancel_returns_201_with_replayed_header() throws Exception {
 		// given
-		given(cancelService.cancelUse(CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, true));
 
 		// when / then
@@ -174,7 +178,7 @@ class CancelControllerTest {
 	void reason_of_200_chars_is_accepted() throws Exception {
 		// given
 		String reason = "가".repeat(LedgerEntry.MEMO_MAX_LENGTH);
-		given(cancelService.cancelUse(CUSTOMER_ID, USE_ENTRY_ID, reason, EMPLOYEE_ID, KEY))
+		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, reason, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(reason, false));
 
 		// when / then
@@ -194,7 +198,7 @@ class CancelControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("reason"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("취소 사유를 입력해 주세요."));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -223,7 +227,7 @@ class CancelControllerTest {
 		PrepaidAccount account = realAccount();
 		LedgerEntry target = switch (targetKind) {
 			case "다른 고객의 사용 건" -> {
-				PrepaidAccount other = PrepaidAccount.open(UUID.randomUUID(), NOW);
+				PrepaidAccount other = PrepaidAccount.open(STORE_ID, UUID.randomUUID(), NOW);
 				other.charge(new BigDecimal("10000"), ChargePolicy.ofMaxAmount(300_000), EMPLOYEE_ID, NOW, null,
 						IdempotencyKey.of("other-charge"));
 				yield other.use(new BigDecimal("3000"), EMPLOYEE_ID, NOW, null, IdempotencyKey.of("other-use"));
@@ -271,7 +275,7 @@ class CancelControllerTest {
 	@DisplayName("고객이 없으면 404 CUSTOMER_NOT_FOUND 로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+		given(cancelService.cancelUse(any(), any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
@@ -285,7 +289,7 @@ class CancelControllerTest {
 	@DisplayName("거래가 없으면 404 LEDGER_ENTRY_NOT_FOUND 로 응답한다")
 	void unknown_entry_is_rejected_with_404() throws Exception {
 		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+		given(cancelService.cancelUse(any(), any(), any(), any(), any(), any()))
 				.willThrow(new LedgerEntryNotFoundException(USE_ENTRY_ID));
 
 		// when / then
@@ -300,7 +304,7 @@ class CancelControllerTest {
 	@DisplayName("같은 계좌를 동시에 바꿔 충돌하면 409 CONCURRENT_MODIFICATION 으로 응답한다")
 	void concurrent_modification_is_rejected_with_409() throws Exception {
 		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+		given(cancelService.cancelUse(any(), any(), any(), any(), any(), any()))
 				.willThrow(new ObjectOptimisticLockingFailureException(PrepaidAccount.class, ACCOUNT_ID));
 
 		// when / then
@@ -313,7 +317,7 @@ class CancelControllerTest {
 	@DisplayName("같은 사용 건 동시 취소가 다시 판정해도 겹치면 500이 아니라 409 CONCURRENT_MODIFICATION 으로 응답한다")
 	void repeated_reversal_conflict_is_rejected_with_409() throws Exception {
 		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+		given(cancelService.cancelUse(any(), any(), any(), any(), any(), any()))
 				.willThrow(new ReversalConflictException(new RuntimeException("duplicate key")));
 
 		// when / then
@@ -333,7 +337,7 @@ class CancelControllerTest {
 				.content(BODY))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] 키 [{0}]")
@@ -347,7 +351,7 @@ class CancelControllerTest {
 				.content(BODY))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_IDEMPOTENCY_KEY"));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -359,7 +363,7 @@ class CancelControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_IDEMPOTENCY_KEY"))
 				.andExpect(jsonPath("$.message").value("요청 키(Idempotency-Key)를 확인해 주세요."));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -367,7 +371,7 @@ class CancelControllerTest {
 	@DisplayName("같은 요청 키로 다른 취소를 요청하면 422 IDEMPOTENCY_KEY_REUSED 로 거절한다")
 	void reused_key_is_rejected_with_422() throws Exception {
 		// given
-		given(cancelService.cancelUse(any(), any(), any(), any(), any()))
+		given(cancelService.cancelUse(any(), any(), any(), any(), any(), any()))
 				.willThrow(new IdempotencyKeyReusedException(CANCEL_ENTRY_ID));
 
 		// when / then
@@ -385,7 +389,7 @@ class CancelControllerTest {
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -399,7 +403,7 @@ class CancelControllerTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -412,7 +416,7 @@ class CancelControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 }

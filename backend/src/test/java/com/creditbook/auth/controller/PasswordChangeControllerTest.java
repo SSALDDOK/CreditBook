@@ -54,6 +54,8 @@ import jakarta.servlet.http.Cookie;
 @Tag("REQ-30")
 class PasswordChangeControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID EMPLOYEE_ID = UUID.fromString("7d0c2f4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f");
 	private static final String VALID_BODY = """
 			{"currentPassword":"Rv7m-Kq2x-9Tn4","newPassword":"my-new-pass-77","newPasswordConfirm":"my-new-pass-77"}
@@ -82,7 +84,7 @@ class PasswordChangeControllerTest {
 
 	private void givenStatus(Role role, boolean mustChangePassword) {
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, role, false, mustChangePassword)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(STORE_ID, true, role, false, mustChangePassword)));
 	}
 
 	private ResultActions changePassword(String body) throws Exception {

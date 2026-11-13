@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @Tag("REQ-15")
 class EmployeeLoginLockTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant CREATED_AT = Instant.parse("2026-10-01T00:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-11-03T01:00:00Z");
 	private static final String HASH = "$2a$10$abcdefghijklmnopqrstuuJ8m0zW8V0u1Yy3s3b4c5d6e7f8g9h0i";
@@ -31,7 +34,7 @@ class EmployeeLoginLockTest {
 
 	@BeforeEach
 	void setUp() {
-		employee = Employee.createStaff("staff1", HASH, "이직원", CREATED_AT);
+		employee = Employee.createStaff(STORE_ID, "staff1", HASH, "이직원", CREATED_AT);
 	}
 
 	private boolean fail(Instant at) {

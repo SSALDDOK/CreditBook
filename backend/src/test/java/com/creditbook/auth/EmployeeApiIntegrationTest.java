@@ -12,9 +12,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Clock;
+import java.util.UUID;
 
 import jakarta.servlet.http.Cookie;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 import com.jayway.jsonpath.JsonPath;
 
 /**
@@ -79,6 +82,14 @@ class EmployeeApiIntegrationTest {
 
 	@Autowired
 	Clock clock;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	@Test
 	@DisplayName("STAFF 토큰으로 직원 목록 조회 — 403")
@@ -231,7 +242,7 @@ class EmployeeApiIntegrationTest {
 		Employee staffAccount = saveStaff("tc27.staff2");
 		Cookie owner = sessionOf(ownerAccount);
 		Cookie staff = sessionOf(staffAccount);
-		RegisteredCustomer customer = customerService.register("이름", "01027270001");
+		RegisteredCustomer customer = customerService.register(storeId, "이름", "01027270001");
 
 		// staff 활성화 상태확인 - 고객목록으로 확인하는 이유는 staff는 직원관리 페이지 접근 불가.
 		mockMvc.perform(withSession(get("/api/customers"), staff))
@@ -255,14 +266,14 @@ class EmployeeApiIntegrationTest {
 
 	// 사장 저장 (매장 개설 계정과 같음)
 	private Employee saveOwner(String loginId) {
-		Employee owner = TestEmployees.owner(loginId, passwordEncoder.encode(PASSWORD), "테스트사장", clock.instant());
+		Employee owner = TestEmployees.owner(storeId, loginId, passwordEncoder.encode(PASSWORD), "테스트사장", clock.instant());
 		employeeRepository.add(owner);
 		return owner;
 	}
 
 	// 직원 저장 (첫 비밀번호 변경까지 마친 상태)
 	private Employee saveStaff(String loginId) {
-		Employee staff = TestEmployees.readyStaff(loginId, passwordEncoder.encode(PASSWORD), "테스트직원", clock.instant());
+		Employee staff = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode(PASSWORD), "테스트직원", clock.instant());
 		employeeRepository.add(staff);
 		return staff;
 	}

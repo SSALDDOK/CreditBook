@@ -50,18 +50,20 @@ public class LedgerHistoryService {
 	/**
 	 * 고객의 거래 이력 한 페이지 (seq 내림차순, 최신이 0번). 계좌·거래가 없는 고객이면 빈 페이지다.
 	 *
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param customerId 고객 ID
 	 * @param page 0부터 시작하는 페이지 번호 (형식 검증은 controller 가 한다)
 	 * @param size 페이지 크기
-	 * @throws CustomerNotFoundException 고객이 없을 때
+	 * @throws CustomerNotFoundException 고객이 없거나 다른 매장 고객일 때 (REQ-36)
 	 */
 	@Transactional(readOnly = true)
-	public Page<LedgerHistoryItem> getHistory(UUID customerId, int page, int size) {
+	public Page<LedgerHistoryItem> getHistory(UUID storeId, UUID customerId, int page, int size) {
+		Objects.requireNonNull(storeId, "storeId");
 		Objects.requireNonNull(customerId, "customerId");
-		if (customerRepository.findById(customerId).isEmpty()) {
+		if (customerRepository.findByIdAndStoreId(customerId, storeId).isEmpty()) {
 			throw new CustomerNotFoundException(customerId);
 		}
-		Page<LedgerHistoryEntry> entries = ledgerEntryRepository.findHistoryByCustomerId(customerId,
+		Page<LedgerHistoryEntry> entries = ledgerEntryRepository.findHistoryByCustomerId(storeId, customerId,
 				PageRequest.of(page, size));
 		Instant now = clock.instant();
 		// 고객 이름·연락처는 로그에 남기지 않는다 (운영 점검 가이드 §6)

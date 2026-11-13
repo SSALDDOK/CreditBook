@@ -49,6 +49,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @ExtendWith(MockitoExtension.class)
 class UsageServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant OPENED_AT = NOW.minusSeconds(3600);
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
@@ -76,8 +78,8 @@ class UsageServiceTest {
 	@BeforeEach
 	void setUp() {
 		// 계좌가 없는 경우처럼 고객 조회까지 가지 않는 테스트도 있어 lenient 로 둔다
-		lenient().when(customerRepository.findById(CUSTOMER_ID))
-				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", NOW.minusSeconds(7_200))));
+		lenient().when(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID))
+				.thenReturn(Optional.of(Customer.register(STORE_ID, "김단골", "01012345678", NOW.minusSeconds(7_200))));
 		service = new UsageService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
 				customerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
@@ -85,12 +87,12 @@ class UsageServiceTest {
 
 	/** 잔액이 {@code balance} 원인 계좌. 공개 API(open → charge)로만 만든다. */
 	private PrepaidAccount accountWithBalance(long balance) {
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, OPENED_AT);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, OPENED_AT);
 		if (balance > 0) {
 			account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, OPENED_AT, null,
 					IdempotencyKey.of("setup-charge"));
 		}
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		return account;
 	}
 
@@ -102,7 +104,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(50_000);
 
 		// when
-		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY);
+		UsageResult result = service.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -132,7 +134,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 
 		// when
-		UsageResult result = service.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
+		UsageResult result = service.use(STORE_ID, CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -152,7 +154,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(3_000);
 
 		// when / then
-		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal("5000"), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.use(STORE_ID, CUSTOMER_ID, new BigDecimal("5000"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(InsufficientBalanceException.class, e -> {
 					assertThat(e.getBalance()).isEqualByComparingTo("3000");
 					assertThat(e.getShortage()).isEqualByComparingTo("2000");
@@ -176,13 +178,13 @@ class UsageServiceTest {
 
 		// when / then
 		if (accepted) {
-			UsageResult result = service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY);
+			UsageResult result = service.use(STORE_ID, CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY);
 			assertThat(result.balanceAfter()).isEqualByComparingTo(BigDecimal.valueOf(balance - amount));
 			assertThat(account.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(balance - amount));
 			verify(ledgerEntryRepository).add(any());
 		}
 		else {
-			assertThatThrownBy(() -> service.use(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
+			assertThatThrownBy(() -> service.use(STORE_ID, CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
 					.isInstanceOfSatisfying(InsufficientBalanceException.class,
 							e -> assertThat(e.getShortage()).isEqualByComparingTo(BigDecimal.valueOf(shortage)));
 			verify(ledgerEntryRepository, never()).add(any());
@@ -199,7 +201,7 @@ class UsageServiceTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 
 		// when / then
-		assertThatThrownBy(() -> service.use(CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.use(STORE_ID, CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidAmountException.class)
 				.isNotInstanceOf(InsufficientBalanceException.class);
 		verify(ledgerEntryRepository, never()).add(any());
@@ -212,10 +214,10 @@ class UsageServiceTest {
 	void use_fails_when_account_not_found() {
 		// given
 		UUID unknownCustomer = UUID.randomUUID();
-		given(prepaidAccountRepository.findByCustomerId(unknownCustomer)).willReturn(Optional.empty());
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(unknownCustomer, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.use(unknownCustomer, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.use(STORE_ID, unknownCustomer, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 	}
@@ -226,13 +228,13 @@ class UsageServiceTest {
 	void use_with_same_key_replays_first_entry() {
 		// given
 		PrepaidAccount account = accountWithBalance(10_000);
-		UsageResult first = service.use(CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
+		UsageResult first = service.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		UsageResult again = service.use(CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
+		UsageResult again = service.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(first.replayed()).isFalse();

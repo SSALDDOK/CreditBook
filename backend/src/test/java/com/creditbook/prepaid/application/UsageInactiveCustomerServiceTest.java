@@ -44,6 +44,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-33")
 class UsageInactiveCustomerServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-10-12T05:00:00Z");
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
@@ -71,8 +73,8 @@ class UsageInactiveCustomerServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
-		account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
+		customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
+		account = PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT);
 		customer.deactivate(account, REGISTERED_AT.plusSeconds(60));
 		service = new UsageService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
@@ -80,8 +82,8 @@ class UsageInactiveCustomerServiceTest {
 	}
 
 	private void givenStoredCustomerAndAccount() {
-		given(prepaidAccountRepository.findByCustomerId(customer.getId())).willReturn(Optional.of(account));
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(account));
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
 	}
 
 	@ParameterizedTest(name = "[{index}] 금액 {0}원")
@@ -92,7 +94,7 @@ class UsageInactiveCustomerServiceTest {
 		givenStoredCustomerAndAccount();
 
 		// when / then
-		assertThatThrownBy(() -> service.use(customer.getId(), BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.use(STORE_ID, customer.getId(), BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(CustomerInactiveException.class,
 						ex -> assertThat(ex.getCustomerId()).isEqualTo(customer.getId()))
 				.hasMessage("비활성 고객입니다. 충전하면 다시 활성화됩니다.");
@@ -112,7 +114,7 @@ class UsageInactiveCustomerServiceTest {
 		customer.reactivate(REGISTERED_AT);
 
 		// when
-		UsageResult result = service.use(customer.getId(), new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
+		UsageResult result = service.use(STORE_ID, customer.getId(), new BigDecimal("4000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(result.balanceAfter()).isEqualByComparingTo("6000");
@@ -128,14 +130,14 @@ class UsageInactiveCustomerServiceTest {
 		customer.reactivate(REGISTERED_AT);
 		account.charge(new BigDecimal("10000"), SETUP_POLICY, EMPLOYEE_ID, REGISTERED_AT, null,
 				IdempotencyKey.of("setup-charge"));
-		UsageResult first = service.use(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		UsageResult first = service.use(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		customer.deactivate(account, NOW);
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		UsageResult again = service.use(customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		UsageResult again = service.use(STORE_ID, customer.getId(), new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(again.replayed()).isTrue();

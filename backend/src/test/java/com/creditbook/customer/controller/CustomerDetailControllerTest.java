@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.domain.CustomerDetail;
 import com.creditbook.customer.domain.CustomerNotFoundException;
+import com.creditbook.global.security.CurrentEmployee;
 import com.creditbook.global.security.WebSecurityTestConfig;
 import com.creditbook.prepaid.domain.LedgerEntryType;
 import com.creditbook.support.WithMockEmployee;
@@ -40,6 +42,8 @@ import com.creditbook.support.WithMockEmployee;
 @Import(WebSecurityTestConfig.class)
 @Tag("REQ-11")
 class CustomerDetailControllerTest {
+
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
 
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID USE_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
@@ -62,12 +66,21 @@ class CustomerDetailControllerTest {
 	@MockitoBean
 	CustomerService customerService;
 
+	@MockitoBean
+	CurrentEmployee currentEmployee;
+
+	// 매장 (REQ-36) — 컨트롤러가 현재 직원의 매장을 서비스에 넘긴다
+	@BeforeEach
+	void stubCurrentStore() {
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
+	}
+
 	@Test
 	@WithMockEmployee(role = "STAFF")
 	@DisplayName("직원이 고객 상세를 조회하면 잔액·활성 여부와 최근 거래를 최신순으로 200 응답한다")
 	void staff_gets_detail_with_recent_entries() throws Exception {
 		// given
-		given(customerService.getDetail(CUSTOMER_ID)).willReturn(KIM);
+		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(KIM);
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -98,7 +111,7 @@ class CustomerDetailControllerTest {
 	@DisplayName("사장도 고객 상세를 조회할 수 있다")
 	void admin_gets_detail() throws Exception {
 		// given
-		given(customerService.getDetail(CUSTOMER_ID)).willReturn(KIM);
+		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(KIM);
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -114,7 +127,7 @@ class CustomerDetailControllerTest {
 		// given
 		CustomerDetail inactive = new CustomerDetail(CUSTOMER_ID, "박휴면", "0200001234", BigDecimal.ZERO, false,
 				Instant.parse("2026-10-01T01:00:00Z"), List.of());
-		given(customerService.getDetail(CUSTOMER_ID)).willReturn(inactive);
+		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(inactive);
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -131,7 +144,7 @@ class CustomerDetailControllerTest {
 	@DisplayName("상세 응답에는 연락처 원문이 어디에도 없고 수정·비활성화용 필드도 없다")
 	void response_has_no_raw_phone_nor_mutation_fields() throws Exception {
 		// given
-		given(customerService.getDetail(CUSTOMER_ID)).willReturn(KIM);
+		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(KIM);
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -149,7 +162,7 @@ class CustomerDetailControllerTest {
 	@DisplayName("없는 고객이면 404 CUSTOMER_NOT_FOUND 로 응답하고 details 를 싣지 않는다")
 	void unknown_customer_is_mapped_to_404() throws Exception {
 		// given
-		given(customerService.getDetail(CUSTOMER_ID)).willThrow(new CustomerNotFoundException(CUSTOMER_ID));
+		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willThrow(new CustomerNotFoundException(CUSTOMER_ID));
 
 		// when / then
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
@@ -169,7 +182,7 @@ class CustomerDetailControllerTest {
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("id"))
 				.andExpect(jsonPath("$.details").doesNotExist())
 				.andExpect(content().string(not(containsString("not-a-uuid"))));
-		verify(customerService, never()).getDetail(any());
+		verify(customerService, never()).getDetail(any(), any());
 	}
 
 	@Test
@@ -179,7 +192,7 @@ class CustomerDetailControllerTest {
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-		verify(customerService, never()).getDetail(any());
+		verify(customerService, never()).getDetail(any(), any());
 	}
 
 }

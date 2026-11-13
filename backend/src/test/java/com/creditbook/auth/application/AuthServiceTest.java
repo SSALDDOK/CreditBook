@@ -51,6 +51,8 @@ import com.creditbook.global.security.UnauthenticatedException;
 @Tag("REQ-22")
 class AuthServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-07T00:30:00Z");
 	private static final String PASSWORD = "correct-horse-9";
 
@@ -70,7 +72,7 @@ class AuthServiceTest {
 	void setUp() {
 		authService = new AuthService(employeeRepository, revokedTokenRepository, passwordEncoder, tokenService, clock,
 				loginLockProperties);
-		owner = Employee.createOwner("owner", passwordEncoder.encode(PASSWORD), "김사장",
+		owner = Employee.createOwner(STORE_ID, "owner", passwordEncoder.encode(PASSWORD), "김사장",
 				Instant.parse("2026-10-01T00:00:00Z"));
 		given(employeeRepository.findByLoginIdForUpdate("owner")).willReturn(Optional.of(owner));
 		clearInvocations(passwordEncoder);
@@ -146,7 +148,7 @@ class AuthServiceTest {
 		// given
 		String password72 = "가".repeat(24);
 		assertThat(password72.getBytes(StandardCharsets.UTF_8)).hasSize(72);
-		Employee staff = Employee.createStaff("staff1", passwordEncoder.encode(password72), "이직원", NOW);
+		Employee staff = Employee.createStaff(STORE_ID, "staff1", passwordEncoder.encode(password72), "이직원", NOW);
 		given(employeeRepository.findByLoginIdForUpdate("staff1")).willReturn(Optional.of(staff));
 
 		// when

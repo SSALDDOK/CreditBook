@@ -75,6 +75,11 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 		return jpaRepository.findByIdForUpdate(id);
 	}
 
+	@Override
+	public Optional<Employee> findByIdAndStoreIdForUpdate(UUID id, UUID storeId) {
+		return jpaRepository.findByIdAndStoreIdForUpdate(id, storeId);
+	}
+
 	/**
 	 * 한 행만 읽는다 (LIMIT 1). JPQL 이라 같은 트랜잭션에서 아직 보내지 않은 직원 INSERT 도 먼저 flush 돼 판정에 들어간다.
 	 */
@@ -92,8 +97,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 	}
 
 	@Override
-	public List<Employee> findAllForManagement() {
-		return jpaRepository.findAllForManagement();
+	public List<Employee> findAllForManagement(UUID storeId) {
+		return jpaRepository.findAllForManagement(storeId);
 	}
 
 	@Override
@@ -101,11 +106,15 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
 		return jpaRepository.findByLoginIdForUpdate(loginId);
 	}
 
-	/** 비밀번호 변경 필요 여부는 값을 못 읽으면(null) 참으로 본다 — 별칭이 어긋나도 차단이 조용히 꺼지지 않게 한다. */
+	/**
+	 * 비밀번호 변경 필요 여부는 값을 못 읽으면(null) 참으로 본다 — 별칭이 어긋나도 차단이 조용히 꺼지지 않게 한다.
+	 * 매장은 못 읽으면 null 그대로 넘긴다 — 인증 변환기가 401 로 거절한다 (매장 조건 없이 요청이 처리되지 않게).
+	 */
 	@Override
 	public Optional<EmployeeAuthStatus> findAuthStatus(UUID employeeId, UUID jti) {
 		return jpaRepository.findAuthStatus(employeeId, jti)
 				.map(row -> new EmployeeAuthStatus(
+						row.getStoreId(),
 						Boolean.TRUE.equals(row.getActive()),
 						Role.valueOf(row.getRole()),
 						Boolean.TRUE.equals(row.getRevoked()),

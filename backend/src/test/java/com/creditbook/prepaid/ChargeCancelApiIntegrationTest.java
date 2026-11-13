@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -72,6 +74,14 @@ class ChargeCancelApiIntegrationTest {
     @Autowired
     Clock clock;
 
+    // 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+    UUID storeId;
+
+    @BeforeEach
+    void createStore() {
+        storeId = TestStores.create(jdbcTemplate);
+    }
+
     @Test
     @DisplayName("오늘 등록된 충전 건에 대해 사유를 입력해 취소하면 원 거래는 남고 반제(CHARGE_CANCEL) 거래가 추가되어 잔액이 충전 금액만큼 줄어든다")
     @Tag("TC-43")
@@ -80,7 +90,7 @@ class ChargeCancelApiIntegrationTest {
         // given — 직원 로그인, 고객 A에 30,000원 충전 (충전 거래 id 꺼내 두기)
         String loginId = "tc43-staff";
         Cookie session = loginAsNewStaff(loginId);
-        RegisteredCustomer customer = customerService.register("TC43", "01043431001");
+        RegisteredCustomer customer = customerService.register(storeId, "TC43", "01043431001");
         String chargeBody = mockMvc
                 .perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
                         .header("Idempotency-Key", "tc43-charge")
@@ -122,7 +132,7 @@ class ChargeCancelApiIntegrationTest {
         // 20,000원 사용 post("/api/customers/{id}/uses", ...), 본문 {"amount": 20000}
         String loginId = "tc43-staffB";
         Cookie session = loginAsNewStaff(loginId);
-        RegisteredCustomer customer = customerService.register("TC43", "01043432002");
+        RegisteredCustomer customer = customerService.register(storeId, "TC43", "01043432002");
         // 10000원 충전
         String chargeBody = mockMvc
                 .perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
@@ -170,7 +180,7 @@ class ChargeCancelApiIntegrationTest {
     void cancel_fails_when_balance_is_one_won_short() throws Exception {
         // given — 직원 로그인, 고객 C 20,000원 충전(이 건을 취소할 것) → 1원 사용, 잔액 19,999원
         Cookie session = loginAsNewStaff("tc43-staffC");
-        RegisteredCustomer customer = customerService.register("TC43", "01043433003");
+        RegisteredCustomer customer = customerService.register(storeId, "TC43", "01043433003");
         // 20000원 충전
         String chargeBody = mockMvc
                 .perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
@@ -216,7 +226,7 @@ class ChargeCancelApiIntegrationTest {
         // → 10,000원 충전 건 취소까지 해서 잔액 0원
         // (항목 2 테스트에 기대지 않으려고 여기서 다시 준비한다)
         Cookie session = loginAsNewStaff("tc43-staffB2");
-        RegisteredCustomer customer = customerService.register("TC43", "01043434004");
+        RegisteredCustomer customer = customerService.register(storeId, "TC43", "01043434004");
         // 10000원 충전
         String firstChargeBody = mockMvc
                 .perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
@@ -270,7 +280,7 @@ class ChargeCancelApiIntegrationTest {
 
     // 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
     private Cookie loginAsNewStaff(String loginId) {
-        Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+        Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
                 clock.instant());
         employeeRepository.add(employee);
         return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

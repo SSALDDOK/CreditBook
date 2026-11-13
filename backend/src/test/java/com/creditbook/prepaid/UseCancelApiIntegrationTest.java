@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -75,6 +77,14 @@ class UseCancelApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@ParameterizedTest(name = "사유 {0}자 → {1}")
 	@CsvSource({
 			// 사유 길이, 기대 상태, 기대 잔액, USE_CANCEL 건수
@@ -87,7 +97,7 @@ class UseCancelApiIntegrationTest {
 			throws Exception {
 		// given — 직원 로그인, 고객 충전 10,000 → 사용 3,000, 응답에서 사용 거래 id 꺼내기
 		Cookie session = loginAsNewStaff("tc42-staff");
-		RegisteredCustomer customer = customerService.register("TC42", "01012345678");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42", "01012345678");
 		mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
 				.header("Idempotency-Key", "tc42-charge")
 				.content("{\"amount\": 10000}"))
@@ -126,7 +136,7 @@ class UseCancelApiIntegrationTest {
 	void cancel_without_session_is_rejected_with_401() throws Exception {
 		// given — 잔액 7,000원 (10,000 충전 → 3,000 사용)
 		Cookie session = loginAsNewStaff("tc42-401-staff");
-		RegisteredCustomer customer = customerService.register("TC42인증", "01042420001");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42인증", "01042420001");
 		String useId = chargeThenUse(session, customer, "tc42-401");
 
 		// when — 쿠키 없이 취소
@@ -151,7 +161,7 @@ class UseCancelApiIntegrationTest {
 	void staff_cancels_use_and_balance_is_restored() throws Exception {
 		// given — STAFF 로그인, 잔액 7,000원
 		Cookie session = loginAsNewStaff("tc42-ok-staff");
-		RegisteredCustomer customer = customerService.register("TC42정상", "01042420002");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42정상", "01042420002");
 		String useId = chargeThenUse(session, customer, "tc42-ok");
 
 		// when — 사유 넣어 취소
@@ -181,7 +191,7 @@ class UseCancelApiIntegrationTest {
 	void cancel_with_blank_reason_is_rejected_with_400(String reason) throws Exception {
 		// given — 잔액 7,000원
 		Cookie session = loginAsNewStaff("tc42-blank-staff");
-		RegisteredCustomer customer = customerService.register("TC42사유", "01042420003");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42사유", "01042420003");
 		String useId = chargeThenUse(session, customer, "tc42-blank");
 
 		// when — 빈 사유로 취소
@@ -204,7 +214,7 @@ class UseCancelApiIntegrationTest {
 	void cancel_of_charge_entry_is_rejected_with_400() throws Exception {
 		// given — 충전 거래 ID를 꺼내 둔다
 		Cookie session = loginAsNewStaff("tc42-charge-staff");
-		RegisteredCustomer customer = customerService.register("TC42충전", "01042420004");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42충전", "01042420004");
 		String chargeBody = mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()),
 						session)
 				.header("Idempotency-Key", "tc42-charge-charge")
@@ -235,8 +245,8 @@ class UseCancelApiIntegrationTest {
 	void cancel_of_other_customers_use_is_rejected_with_400() throws Exception {
 		// given — 고객 A·B 각각 잔액 7,000원, B의 사용 거래 ID
 		Cookie session = loginAsNewStaff("tc42-idor-staff");
-		RegisteredCustomer customerA = customerService.register("TC42고객A", "01042420005");
-		RegisteredCustomer customerB = customerService.register("TC42고객B", "01042420006");
+		RegisteredCustomer customerA = customerService.register(storeId, "TC42고객A", "01042420005");
+		RegisteredCustomer customerB = customerService.register(storeId, "TC42고객B", "01042420006");
 		chargeThenUse(session, customerA, "tc42-idor-a");
 		String useIdOfB = chargeThenUse(session, customerB, "tc42-idor-b");
 
@@ -262,7 +272,7 @@ class UseCancelApiIntegrationTest {
 	void cancel_twice_is_rejected_with_409() throws Exception {
 		// given — 사용 건을 한 번 취소해 잔액 10,000원
 		Cookie session = loginAsNewStaff("tc42-twice-staff");
-		RegisteredCustomer customer = customerService.register("TC42재취소", "01042420007");
+		RegisteredCustomer customer = customerService.register(storeId, "TC42재취소", "01042420007");
 		String useId = chargeThenUse(session, customer, "tc42-twice");
 		mockMvc.perform(withSession(post("/api/customers/{customerId}/uses/{useEntryId}/cancel",
 						customer.customerId(), useId), session)
@@ -286,7 +296,7 @@ class UseCancelApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

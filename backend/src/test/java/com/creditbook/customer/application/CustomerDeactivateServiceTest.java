@@ -40,6 +40,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-4")
 class CustomerDeactivateServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-10-11T03:00:00Z");
 	private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-00000000a001");
@@ -58,7 +60,7 @@ class CustomerDeactivateServiceTest {
 	}
 
 	private static PrepaidAccount accountOf(Customer customer, long balance) {
-		PrepaidAccount account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT);
 		if (balance > 0) {
 			account.charge(BigDecimal.valueOf(balance), ChargePolicy.ofMaxAmount(300_000), ADMIN_ID, REGISTERED_AT,
 					null, IdempotencyKey.of("setup-charge"));
@@ -70,34 +72,34 @@ class CustomerDeactivateServiceTest {
 	@DisplayName("잔액이 0원인 고객을 비활성화하면 서버 시각으로 비활성 상태가 된다")
 	void deactivate_marks_customer_inactive_with_server_clock() {
 		// given
-		Customer customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
+		Customer customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
 		PrepaidAccount account = accountOf(customer, 0);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
-		given(prepaidAccountRepository.findByCustomerIdAndIncrementVersion(customer.getId()))
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreIdAndIncrementVersion(customer.getId(), STORE_ID))
 				.willReturn(Optional.of(account));
 
 		// when
-		service.deactivate(customer.getId(), ADMIN_ID);
+		service.deactivate(STORE_ID, customer.getId(), ADMIN_ID);
 
 		// then
 		assertThat(customer.isActive()).isFalse();
 		assertThat(customer.getUpdatedAt()).isEqualTo(NOW);
 		// 동시 충전과 겹치면 한쪽이 충돌하도록 version 을 올리는 조회를 쓴다 (일반 조회는 쓰지 않는다)
-		verify(prepaidAccountRepository, never()).findByCustomerId(any());
+		verify(prepaidAccountRepository, never()).findByCustomerIdAndStoreId(any(), any());
 	}
 
 	@Test
 	@DisplayName("잔액이 남은 고객은 비활성화하지 않고 잔액을 담은 예외로 거절한다")
 	void deactivate_rejects_customer_with_balance() {
 		// given
-		Customer customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
+		Customer customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
 		PrepaidAccount account = accountOf(customer, 5_000);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
-		given(prepaidAccountRepository.findByCustomerIdAndIncrementVersion(customer.getId()))
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreIdAndIncrementVersion(customer.getId(), STORE_ID))
 				.willReturn(Optional.of(account));
 
 		// when / then
-		assertThatThrownBy(() -> service.deactivate(customer.getId(), ADMIN_ID))
+		assertThatThrownBy(() -> service.deactivate(STORE_ID, customer.getId(), ADMIN_ID))
 				.isInstanceOfSatisfying(CustomerBalanceNotZeroException.class,
 						ex -> assertThat(ex.getBalance()).isEqualByComparingTo("5000"));
 		assertThat(customer.isActive()).isTrue();
@@ -107,15 +109,15 @@ class CustomerDeactivateServiceTest {
 	@DisplayName("이미 비활성인 고객은 오류 없이 그대로 둔다")
 	void deactivate_is_idempotent() {
 		// given
-		Customer customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
+		Customer customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
 		PrepaidAccount account = accountOf(customer, 0);
 		customer.deactivate(account, REGISTERED_AT);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
-		given(prepaidAccountRepository.findByCustomerIdAndIncrementVersion(customer.getId()))
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreIdAndIncrementVersion(customer.getId(), STORE_ID))
 				.willReturn(Optional.of(account));
 
 		// when
-		service.deactivate(customer.getId(), ADMIN_ID);
+		service.deactivate(STORE_ID, customer.getId(), ADMIN_ID);
 
 		// then
 		assertThat(customer.isActive()).isFalse();
@@ -127,26 +129,26 @@ class CustomerDeactivateServiceTest {
 	void deactivate_rejects_unknown_customer() {
 		// given
 		UUID unknownId = UUID.randomUUID();
-		given(customerRepository.findById(unknownId)).willReturn(Optional.empty());
+		given(customerRepository.findByIdAndStoreId(unknownId, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.deactivate(unknownId, ADMIN_ID))
+		assertThatThrownBy(() -> service.deactivate(STORE_ID, unknownId, ADMIN_ID))
 				.isInstanceOfSatisfying(CustomerNotFoundException.class,
 						ex -> assertThat(ex.getCustomerId()).isEqualTo(unknownId));
-		verify(prepaidAccountRepository, never()).findByCustomerIdAndIncrementVersion(any());
+		verify(prepaidAccountRepository, never()).findByCustomerIdAndStoreIdAndIncrementVersion(any(), any());
 	}
 
 	@Test
 	@DisplayName("고객의 계좌가 없으면 고객 없음으로 거절하고 상태를 바꾸지 않는다")
 	void deactivate_rejects_customer_without_account() {
 		// given
-		Customer customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
-		given(prepaidAccountRepository.findByCustomerIdAndIncrementVersion(customer.getId()))
+		Customer customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreIdAndIncrementVersion(customer.getId(), STORE_ID))
 				.willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.deactivate(customer.getId(), ADMIN_ID))
+		assertThatThrownBy(() -> service.deactivate(STORE_ID, customer.getId(), ADMIN_ID))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
 		assertThat(customer.isActive()).isTrue();
 	}
