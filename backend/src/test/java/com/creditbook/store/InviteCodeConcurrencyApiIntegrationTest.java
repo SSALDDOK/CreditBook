@@ -1,10 +1,22 @@
 package com.creditbook.store;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -17,6 +29,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.store.domain.StoreInviteCode;
 import com.creditbook.support.RequiresDocker;
+
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 초대 코드 동시 가입 상한 통합 테스트 (REQ-36, TC-61 3번).
@@ -32,24 +46,67 @@ class InviteCodeConcurrencyApiIntegrationTest {
 	// 초대 코드 문자 (헷갈리는 I·L·O·0·1 제외 31자, 운영 점검 가이드 10.4와 같음)
 	private static final String CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+	private static final JsonMapper JSON = JsonMapper.builder().build();
+
 	@Autowired
 	MockMvc mockMvc;
 
 	@Autowired
 	JdbcTemplate jdbcTemplate;
 
-	// TODO(사용자 작성) — TC-61 3번 본문·단언
-	// @Test
-	// @DisplayName("사용이 한 번 남은 초대 코드로 동시에 2번 가입하면 1개만 성공하고 매장도 1개만 생긴다")
-	// @Tag("TC-61")
-	// @Tag("REQ-36")
-	// void concurrent_signups_with_last_use_of_code_create_only_one_store() throws Exception {
-	// 	// given —
-	//
-	// 	// when —
-	//
-	// 	// then —
-	// }
+	@Test
+	@DisplayName("사용이 한 번 남은 초대 코드로 동시에 2번 가입하면 1개만 성공하고 매장도 1개만 생긴다")
+	@Tag("TC-61")
+	@Tag("REQ-36")
+	void concurrent_signups_with_last_use_of_code_create_only_one_store() throws Exception {
+		// given — 사용이 한 번 남은 초대 코드
+		// 1번 쓸 수 있는 새 코드 (사용 9회)
+		String rawCode = newRawCode();
+		UUID codeId = insertInviteCode(rawCode, 10, 9);
+
+		// when — 2건 동시에 가입
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		CountDownLatch start = new CountDownLatch(1);
+		CountDownLatch ready = new CountDownLatch(2); // 두 일꾼이 출발선에 섰는지
+
+		try {
+			List<Future<MvcResult>> futures = new ArrayList<>();
+			for (int i = 0; i < 2; i++) {
+				futures.add(executor.submit(() -> {
+					ready.countDown(); // 출발선에 섰다
+					start.await(); // 둘 다 여기서 기다렸다가 동시에 출발
+					return signup("10.61.3.1", signupBody(rawCode, newLoginId("tc61.owner1")));
+				}));
+			}
+
+			assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue(); // 둘 다 섰는지 확인하고 쏜다
+			start.countDown();
+
+			List<MvcResult> results = new ArrayList<>();
+			for (Future<MvcResult> f : futures) {
+				results.add(f.get(10, TimeUnit.SECONDS));
+			}
+
+			// then — 메인 스레드에서만 단언
+			// 201은 정확히 1건, 나머지는 400
+			List<Integer> statuses = results.stream().map(r -> r.getResponse().getStatus()).toList();
+			assertThat(statuses).containsOnlyOnce(201);
+			for (MvcResult r : results) {
+				if (r.getResponse().getStatus() == 201)
+					continue;
+				String code = JSON.readTree(r.getResponse().getContentAsString(StandardCharsets.UTF_8)).get("code")
+						.asString();
+				// 겹치든 안 겹치든 진 쪽은 400 — 조건부 UPDATE가 0행
+				assertThat(r.getResponse().getStatus() + " " + code)
+						.isEqualTo("400 INVALID_INVITE_CODE");
+			}
+			// 매장 1개만 생성 , 사용 횟수 상한 확인
+			assertThat(storesOpenedWith(codeId)).isEqualTo(1);
+			assertThat(usedCountOf(codeId)).isEqualTo(10);
+		} finally {
+			executor.shutdownNow();
+		}
+	}
 
 	// 비로그인 가입 요청을 보내고 결과를 통째로 돌려준다 (검사는 메인 스레드에서)
 	private MvcResult signup(String ip, String body) throws Exception {
