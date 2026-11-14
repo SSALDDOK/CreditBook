@@ -8,7 +8,6 @@ import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
 import com.creditbook.auth.domain.EmployeeAuthStatus;
@@ -18,6 +17,7 @@ import com.creditbook.auth.domain.EmployeeRepository;
  * 서명·만료 검증을 통과한 토큰을 인증 정보로 바꾼다. 요청마다 DB 를 한 번 조회해 다음을 함께 확인한다.
  * <ul>
  * <li>직원이 있고 활성 상태인가 (비활성화되면 이미 받은 토큰도 다음 요청부터 401)</li>
+ * <li>직원의 매장(store_id)을 읽었는가 — 못 읽으면 401. 매장 조건 없이 요청이 처리되지 않게 한다 (REQ-36)</li>
  * <li>로그아웃으로 폐기된 토큰이 아닌가</li>
  * <li>권한(ROLE_ADMIN/ROLE_STAFF)은 토큰이 아니라 이 조회의 DB 역할로 붙인다</li>
  * <li>비밀번호를 바꿔야 하는 계정(REQ-30)에는 역할 대신 {@value #PASSWORD_CHANGE_REQUIRED_AUTHORITY} 권한만 붙인다 —
@@ -51,8 +51,12 @@ public class EmployeeJwtAuthenticationConverter implements Converter<Jwt, Abstra
 		if (status.tokenRevoked()) {
 			throw new InvalidBearerTokenException("token revoked");
 		}
+		if (status.storeId() == null) {
+			throw new InvalidBearerTokenException("employee store unknown");
+		}
 		String authority = status.mustChangePassword() ? PASSWORD_CHANGE_REQUIRED_AUTHORITY : status.role().authority();
-		return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(authority)), employeeId.toString());
+		return new EmployeeAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(authority)), employeeId,
+				status.storeId());
 	}
 
 	private static UUID parseUuid(String value, String claim) {

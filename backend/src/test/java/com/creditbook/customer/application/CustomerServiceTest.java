@@ -47,6 +47,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-09-30T01:00:00Z");
 
 	@Mock
@@ -71,7 +73,7 @@ class CustomerServiceTest {
 		String phone = "01012345678";
 
 		// when
-		RegisteredCustomer result = service.register(name, phone);
+		RegisteredCustomer result = service.register(STORE_ID, name, phone);
 
 		// then
 		ArgumentCaptor<Customer> customerCaptor = ArgumentCaptor.forClass(Customer.class);
@@ -100,7 +102,7 @@ class CustomerServiceTest {
 		String name = "김단골";
 
 		// when
-		RegisteredCustomer result = service.register(name, "01012345678");
+		RegisteredCustomer result = service.register(STORE_ID, name, "01012345678");
 
 		// then
 		ArgumentCaptor<PrepaidAccount> accountCaptor = ArgumentCaptor.forClass(PrepaidAccount.class);
@@ -117,7 +119,7 @@ class CustomerServiceTest {
 		String invalidPhone = "0101234";
 
 		// when / then
-		assertThatThrownBy(() -> service.register("김단골", invalidPhone))
+		assertThatThrownBy(() -> service.register(STORE_ID, "김단골", invalidPhone))
 				.isInstanceOf(InvalidPhoneNumberException.class);
 		verify(customerRepository, never()).add(any());
 		verify(prepaidAccountRepository, never()).add(any());
@@ -135,15 +137,15 @@ class CustomerServiceTest {
 		// given: 저장소는 검색어에 맞는 고객만 잔액과 함께 돌려준다 (30명 중 조건 걸러내기는 쿼리가 한다 — S3 통합 테스트)
 		CustomerSummary matched = new CustomerSummary(UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c"), "김단골",
 				"01000005678", new BigDecimal("15000"), NOW, true);
-		given(customerRepository.search(any(), eq(false), any()))
+		given(customerRepository.search(eq(STORE_ID), any(), eq(false), any()))
 				.willReturn(new PageImpl<>(List.of(matched), PageRequest.of(0, 20), 1));
 
 		// when
-		Page<CustomerSummary> result = service.search(query, false, 0, 20);
+		Page<CustomerSummary> result = service.search(STORE_ID, query, false, 0, 20);
 
 		// then
 		ArgumentCaptor<CustomerSearchKeyword> keywordCaptor = ArgumentCaptor.forClass(CustomerSearchKeyword.class);
-		verify(customerRepository).search(keywordCaptor.capture(), eq(false), any());
+		verify(customerRepository).search(eq(STORE_ID), keywordCaptor.capture(), eq(false), any());
 		assertThat(keywordCaptor.getValue().type()).isEqualTo(expectedType);
 		assertThat(keywordCaptor.getValue().value()).isEqualTo(expectedValue);
 
@@ -156,14 +158,14 @@ class CustomerServiceTest {
 	@DisplayName("검색어가 없으면 전체 목록을 요청한 페이지 번호와 크기로 조회한다")
 	void search_without_query_requests_all_with_page() {
 		// given
-		given(customerRepository.search(any(), eq(false), any())).willReturn(Page.empty());
+		given(customerRepository.search(eq(STORE_ID), any(), eq(false), any())).willReturn(Page.empty());
 
 		// when
-		service.search(null, false, 3, 50);
+		service.search(STORE_ID, null, false, 3, 50);
 
 		// then
 		ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
-		verify(customerRepository).search(eq(CustomerSearchKeyword.parse(null)), eq(false),
+		verify(customerRepository).search(eq(STORE_ID), eq(CustomerSearchKeyword.parse(null)), eq(false),
 				pageCaptor.capture());
 		assertThat(pageCaptor.getValue().getPageNumber()).isEqualTo(3);
 		assertThat(pageCaptor.getValue().getPageSize()).isEqualTo(50);
@@ -178,14 +180,14 @@ class CustomerServiceTest {
 		// given
 		CustomerSummary inactive = new CustomerSummary(UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"), "이휴면",
 				"01000001234", BigDecimal.ZERO, NOW, false);
-		given(customerRepository.search(any(), eq(includeInactive), any()))
+		given(customerRepository.search(eq(STORE_ID), any(), eq(includeInactive), any()))
 				.willReturn(new PageImpl<>(List.of(inactive), PageRequest.of(0, 20), 1));
 
 		// when
-		Page<CustomerSummary> result = service.search("휴면", includeInactive, 0, 20);
+		Page<CustomerSummary> result = service.search(STORE_ID, "휴면", includeInactive, 0, 20);
 
 		// then
-		verify(customerRepository).search(eq(CustomerSearchKeyword.parse("휴면")), eq(includeInactive), any());
+		verify(customerRepository).search(eq(STORE_ID), eq(CustomerSearchKeyword.parse("휴면")), eq(includeInactive), any());
 		assertThat(result.getContent()).containsExactly(inactive);
 	}
 

@@ -62,6 +62,8 @@ import jakarta.servlet.http.Cookie;
 @Tag("REQ-30")
 class EmployeeControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final String ADMIN_ID = "00000000-0000-0000-0000-00000000a001";
 	private static final UUID OWNER = UUID.fromString(ADMIN_ID);
 	private static final UUID STAFF_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
@@ -85,6 +87,7 @@ class EmployeeControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(OWNER);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private ResultActions addEmployee(String body) throws Exception {
@@ -99,7 +102,7 @@ class EmployeeControllerTest {
 	void admin_lists_employees() throws Exception {
 		// given
 		Instant lastLogin = Instant.parse("2026-11-03T00:00:00Z");
-		given(employeeManagementService.list()).willReturn(List.of(
+		given(employeeManagementService.list(STORE_ID)).willReturn(List.of(
 				new EmployeeSummary(OWNER, "김사장", "kim.owner", Role.ADMIN, true, lastLogin),
 				new EmployeeSummary(STAFF_ID, "이직원", "lee.staff", Role.STAFF, false, null)));
 
@@ -147,7 +150,7 @@ class EmployeeControllerTest {
 		// given
 		Cookie session = new Cookie("CB_SESSION", tokenService.issue(OWNER).value());
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, true)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(STORE_ID, true, Role.ADMIN, false, true)));
 
 		// when / then
 		mockMvc.perform(get("/api/employees").cookie(session))
@@ -163,8 +166,8 @@ class EmployeeControllerTest {
 		// given
 		Cookie session = new Cookie("CB_SESSION", tokenService.issue(OWNER).value());
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
-		given(employeeManagementService.list()).willReturn(List.of());
+				.willReturn(Optional.of(new EmployeeAuthStatus(STORE_ID, true, Role.ADMIN, false, false)));
+		given(employeeManagementService.list(STORE_ID)).willReturn(List.of());
 
 		// when / then
 		mockMvc.perform(get("/api/employees").cookie(session))
@@ -179,7 +182,7 @@ class EmployeeControllerTest {
 	@DisplayName("직원을 추가하면 201 과 STAFF 권한·초기 비밀번호를 돌려주고 Location 헤더는 없다")
 	void admin_adds_staff() throws Exception {
 		// given
-		given(employeeManagementService.addStaff("박직원", "park.staff", OWNER))
+		given(employeeManagementService.addStaff(STORE_ID, "박직원", "park.staff", OWNER))
 				.willReturn(new StaffAddedResult(STAFF_ID, "박직원", "park.staff", Role.STAFF, INITIAL));
 
 		// when / then
@@ -206,7 +209,7 @@ class EmployeeControllerTest {
 		addEmployee(body)
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(employeeManagementService, never()).addStaff(any(), any(), any());
+		verify(employeeManagementService, never()).addStaff(any(), any(), any(), any());
 	}
 
 	@Test
@@ -228,7 +231,7 @@ class EmployeeControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value(field));
-		verify(employeeManagementService, never()).addStaff(any(), any(), any());
+		verify(employeeManagementService, never()).addStaff(any(), any(), any(), any());
 	}
 
 	@Test
@@ -236,7 +239,7 @@ class EmployeeControllerTest {
 	@DisplayName("같은 아이디가 있으면 409 DUPLICATE_LOGIN_ID 로 응답한다")
 	void duplicate_login_id_is_409() throws Exception {
 		// given
-		given(employeeManagementService.addStaff(any(), any(), any())).willThrow(new DuplicateLoginIdException());
+		given(employeeManagementService.addStaff(any(), any(), any(), any())).willThrow(new DuplicateLoginIdException());
 
 		// when / then
 		addEmployee("{\"name\":\"박직원\",\"loginId\":\"lee.staff\"}")
@@ -252,7 +255,7 @@ class EmployeeControllerTest {
 	@DisplayName("비밀번호를 초기화하면 200 과 새 초기 비밀번호를 돌려준다 (요청 본문 없음)")
 	void admin_resets_password() throws Exception {
 		// given
-		given(employeeManagementService.resetPassword(STAFF_ID, OWNER))
+		given(employeeManagementService.resetPassword(STORE_ID, STAFF_ID, OWNER))
 				.willReturn(new PasswordResetResult(STAFF_ID, INITIAL));
 
 		// when / then
@@ -269,8 +272,8 @@ class EmployeeControllerTest {
 	void reset_errors_are_mapped() throws Exception {
 		// given
 		UUID unknown = UUID.randomUUID();
-		given(employeeManagementService.resetPassword(unknown, OWNER)).willThrow(new EmployeeNotFoundException(unknown));
-		given(employeeManagementService.resetPassword(OWNER, OWNER)).willThrow(new AdminAccountProtectedException());
+		given(employeeManagementService.resetPassword(STORE_ID, unknown, OWNER)).willThrow(new EmployeeNotFoundException(unknown));
+		given(employeeManagementService.resetPassword(STORE_ID, OWNER, OWNER)).willThrow(new AdminAccountProtectedException());
 
 		// when / then
 		mockMvc.perform(post("/api/employees/{id}/reset-password", unknown))
@@ -306,7 +309,7 @@ class EmployeeControllerTest {
 		mockMvc.perform(patch("/api/employees/{id}/deactivate", STAFF_ID))
 				.andExpect(status().isNoContent())
 				.andExpect(content().string(""));
-		verify(employeeManagementService).deactivate(STAFF_ID, OWNER);
+		verify(employeeManagementService).deactivate(STORE_ID, STAFF_ID, OWNER);
 	}
 
 	@Test
@@ -314,7 +317,7 @@ class EmployeeControllerTest {
 	@DisplayName("사장·본인 계정 비활성화는 409 ADMIN_ACCOUNT_PROTECTED 로 응답한다")
 	void deactivate_protected_is_409() throws Exception {
 		// given
-		willThrow(new AdminAccountProtectedException()).given(employeeManagementService).deactivate(OWNER, OWNER);
+		willThrow(new AdminAccountProtectedException()).given(employeeManagementService).deactivate(STORE_ID, OWNER, OWNER);
 
 		// when / then
 		mockMvc.perform(patch("/api/employees/{id}/deactivate", OWNER))
@@ -332,7 +335,7 @@ class EmployeeControllerTest {
 		// when / then
 		mockMvc.perform(patch("/api/employees/{id}/deactivate", STAFF_ID))
 				.andExpect(status().isUnauthorized());
-		verify(employeeManagementService, never()).deactivate(any(), any());
+		verify(employeeManagementService, never()).deactivate(any(), any(), any());
 	}
 
 }

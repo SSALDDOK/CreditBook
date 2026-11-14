@@ -23,7 +23,7 @@ import jakarta.validation.Valid;
 /**
  * 충전 API (REQ-5). 요청 형식 검증과 DTO 변환만 하고, 금액 규칙과 잔액 계산은 서비스·도메인이 판단한다.
  * <p>
- * 처리 직원은 {@link CurrentEmployee} 에서만 꺼낸다 (요청 본문·헤더로 받지 않는다). 구현 빈이 없거나 직원을 알 수 없으면
+ * 처리 직원과 매장은 {@link CurrentEmployee} 에서만 꺼낸다 (요청 본문·헤더로 받지 않는다). 다른 매장 고객이면 404 (REQ-36). 구현 빈이 없거나 직원을 알 수 없으면
  * 거래를 만들지 않고 401 로 거절한다 — 빈이 없어도 애플리케이션은 기동한다.
  * <p>
  * 요청 키(Idempotency-Key, REQ-10)는 필수다. 없거나 형식이 틀리면 400 INVALID_IDEMPOTENCY_KEY. 같은 키로 같은 요청이 다시 오면
@@ -46,8 +46,9 @@ public class ChargeController {
 			@Valid @RequestBody ChargeRequest request,
 			@RequestHeader(name = IdempotencyHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey) {
 		UUID performedBy = requireCurrentEmployeeId();
+		UUID storeId = requireCurrentStoreId();
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
-		ChargeResult result = chargeService.charge(customerId, request.amount(), request.memo(), performedBy, key);
+		ChargeResult result = chargeService.charge(storeId, customerId, request.amount(), request.memo(), performedBy, key);
 		return IdempotencyHeaders.created(result.entryId(), result.replayed(), ChargeResponse.from(result));
 	}
 
@@ -58,6 +59,16 @@ public class ChargeController {
 			throw new UnauthenticatedException();
 		}
 		return id;
+	}
+
+	/** 현재 직원의 매장. 알 수 없으면 401 — 매장 조건 없이 처리하지 않는다 (REQ-36). */
+	private UUID requireCurrentStoreId() {
+		CurrentEmployee employee = currentEmployee.getIfAvailable();
+		UUID storeId = employee == null ? null : employee.storeId();
+		if (storeId == null) {
+			throw new UnauthenticatedException();
+		}
+		return storeId;
 	}
 
 }

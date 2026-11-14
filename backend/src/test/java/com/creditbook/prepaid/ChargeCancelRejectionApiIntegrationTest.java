@@ -39,6 +39,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -88,6 +89,14 @@ class ChargeCancelRejectionApiIntegrationTest {
 	@Autowired
 	EntityManager entityManager;
 
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	// 시계는 static 이라 테스트끼리 공유된다 — 앞 테스트가 옮겨 둔 시각에 기대지 않게 매번 오늘로 되돌린다
 	@BeforeEach
 	void resetClock() {
@@ -102,7 +111,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_without_session_is_rejected_with_401() throws Exception {
 		// given — 오늘 10,000원 충전
 		Cookie session = loginAsNewStaff("tc44-401-staff");
-		RegisteredCustomer customer = customerService.register("TC44인증", "01044440001");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44인증", "01044440001");
 		String chargeId = charge(session, customer, 10_000, "tc44-401-charge");
 
 		// when — 쿠키 없이 취소
@@ -129,7 +138,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_with_blank_reason_is_rejected_with_400(String reason) throws Exception {
 		// given — 오늘 10,000원 충전
 		Cookie session = loginAsNewStaff("tc44-blank-staff");
-		RegisteredCustomer customer = customerService.register("TC44사유", "01044440002");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44사유", "01044440002");
 		String chargeId = charge(session, customer, 10_000, "tc44-blank-charge");
 
 		// when — 빈 사유로 취소
@@ -154,7 +163,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 		// given — 한국 시각 어제 23:30(UTC 10-14 14:30)에 로그인·충전
 		CLOCK.set(Instant.parse("2026-10-14T14:30:00Z"));
 		Cookie session = loginAsNewStaff("tc44-day-staff");
-		RegisteredCustomer customer = customerService.register("TC44당일", "01044440003");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44당일", "01044440003");
 		String chargeId = charge(session, customer, 10_000, "tc44-day-charge");
 
 		// 한 시간 뒤 = 한국 시각 오늘 00:30. UTC로는 아직 같은 날(10-14)이라 KST 기준인지도 같이 확인된다
@@ -182,7 +191,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_of_use_entry_is_rejected_with_400() throws Exception {
 		// given — 10,000원 충전 → 3,000원 사용(잔액 7,000원), 사용 거래 ID
 		Cookie session = loginAsNewStaff("tc44-use-staff");
-		RegisteredCustomer customer = customerService.register("TC44사용", "01044440004");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44사용", "01044440004");
 		charge(session, customer, 10_000, "tc44-use-charge");
 		String useId = use(session, customer, 3_000, "tc44-use-use");
 
@@ -207,8 +216,8 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_of_other_customers_charge_is_rejected_with_400() throws Exception {
 		// given — 고객 A·B 각각 오늘 10,000원 충전, B의 충전 거래 ID
 		Cookie session = loginAsNewStaff("tc44-idor-staff");
-		RegisteredCustomer customerA = customerService.register("TC44고객A", "01044440005");
-		RegisteredCustomer customerB = customerService.register("TC44고객B", "01044440006");
+		RegisteredCustomer customerA = customerService.register(storeId, "TC44고객A", "01044440005");
+		RegisteredCustomer customerB = customerService.register(storeId, "TC44고객B", "01044440006");
 		charge(session, customerA, 10_000, "tc44-idor-a");
 		String chargeIdOfB = charge(session, customerB, 10_000, "tc44-idor-b");
 
@@ -233,7 +242,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_twice_is_rejected_with_409() throws Exception {
 		// given — 20,000원 충전 → 10,000원 충전 → 10,000원 충전 건 한 번 취소 (잔액 20,000원)
 		Cookie session = loginAsNewStaff("tc44-twice-staff");
-		RegisteredCustomer customer = customerService.register("TC44재취소", "01044440007");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44재취소", "01044440007");
 		charge(session, customer, 20_000, "tc44-twice-charge-1");
 		String chargeId = charge(session, customer, 10_000, "tc44-twice-charge-2");
 		mockMvc.perform(withSession(chargeCancel(customer, chargeId), session)
@@ -262,7 +271,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 	void cancel_of_charge_cancel_entry_is_rejected_with_400() throws Exception {
 		// given — 20,000원 충전 → 10,000원 충전 → 10,000원 충전 건 취소, 그 취소 거래 ID (잔액 20,000원)
 		Cookie session = loginAsNewStaff("tc44-rev-staff");
-		RegisteredCustomer customer = customerService.register("TC44반제", "01044440008");
+		RegisteredCustomer customer = customerService.register(storeId, "TC44반제", "01044440008");
 		charge(session, customer, 20_000, "tc44-rev-charge-1");
 		String chargeId = charge(session, customer, 10_000, "tc44-rev-charge-2");
 		String cancelBody = mockMvc.perform(withSession(chargeCancel(customer, chargeId), session)
@@ -287,7 +296,7 @@ class ChargeCancelRejectionApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기. 토큰 발급 시각도 고정한 시계를 따른다
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				CLOCK.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

@@ -2,6 +2,7 @@ package com.creditbook.store.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,63 +10,71 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.creditbook.auth.domain.DuplicateLoginIdException;
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
-import com.creditbook.store.domain.SetupAlreadyCompletedException;
-import com.creditbook.store.domain.StoreProfile;
-import com.creditbook.store.domain.StoreProfileRepository;
+import com.creditbook.store.domain.InvalidInviteCodeException;
+import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreInviteCode;
+import com.creditbook.store.domain.StoreInviteCodeRepository;
+import com.creditbook.store.domain.StoreRepository;
 
 /**
- * 매장 개설 (REQ-29, CB-44). 직원 계정이 하나도 없을 때만 매장 행과 첫 ADMIN 계정을 한 트랜잭션으로 만든다.
+ * 초대 코드 가입 (REQ-29·36). 가입 = 새 매장 + 그 매장의 사장(ADMIN). 한 트랜잭션에서 순서대로:
+ * <ol>
+ * <li>초대 코드 사용 횟수 차감 (조건부 UPDATE) — 0행이면 {@link InvalidInviteCodeException}</li>
+ * <li>아이디 중복 확인 (모든 매장, 비활성 포함) — 있으면 {@link DuplicateLoginIdException}</li>
+ * <li>매장 행 → 사장 계정 추가. 동시에 같은 아이디로 가입해 2를 함께 지나간 늦은 쪽은 ux_employees_login_id 위반이
+ * {@link DuplicateLoginIdException} 이 된다</li>
+ * </ol>
+ * 2·3에서 실패하면 트랜잭션이 되돌아가 1의 차감도 취소된다 — 실패한 가입이 코드 한도를 쓰지 않는다.
  * <p>
- * 동시 요청: 두 요청이 모두 "직원 0명" 을 보고 지나가도 ux_store_profile_singleton 이 늦은 쪽의 매장 INSERT 를 막는다.
- * 매장 행을 직원보다 먼저 INSERT·flush 하므로, 늦은 요청은 직원을 만들기 전에 {@link SetupAlreadyCompletedException} 으로
- * 거절되고 트랜잭션 전체가 롤백된다 (매장·직원 중 하나만 남는 상태가 없다).
- * <p>
- * 로그에는 새 ADMIN 직원 ID 만 남긴다 — 매장명·아이디·이름·비밀번호는 남기지 않는다. 개설 뒤 자동 로그인은 하지 않는다.
+ * 로그에는 매장·사장·초대 코드 id 만 남긴다 — 코드 원문·해시, 매장명·아이디·이름·비밀번호는 남기지 않는다. 가입 뒤 자동 로그인은 하지 않는다.
  */
 @Service
 public class StoreSetupService {
 
 	private static final Logger log = LoggerFactory.getLogger(StoreSetupService.class);
 
+	private final StoreInviteCodeRepository storeInviteCodeRepository;
 	private final EmployeeRepository employeeRepository;
-	private final StoreProfileRepository storeProfileRepository;
+	private final StoreRepository storeRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final Clock clock;
 
-	public StoreSetupService(EmployeeRepository employeeRepository, StoreProfileRepository storeProfileRepository,
-			PasswordEncoder passwordEncoder, Clock clock) {
+	public StoreSetupService(StoreInviteCodeRepository storeInviteCodeRepository, EmployeeRepository employeeRepository,
+			StoreRepository storeRepository, PasswordEncoder passwordEncoder, Clock clock) {
+		this.storeInviteCodeRepository = storeInviteCodeRepository;
 		this.employeeRepository = employeeRepository;
-		this.storeProfileRepository = storeProfileRepository;
+		this.storeRepository = storeRepository;
 		this.passwordEncoder = passwordEncoder;
 		this.clock = clock;
 	}
 
-	/** 매장 개설이 가능한가 — 직원 계정(비활성 포함)이 하나도 없을 때만. */
-	@Transactional(readOnly = true)
-	public boolean isSetupAvailable() {
-		return !employeeRepository.existsAny();
-	}
-
 	/**
-	 * 매장과 첫 ADMIN 계정을 만든다. 입력 형식(아이디 규칙·비밀번호 길이·확인 일치)은 요청 DTO 가 이미 검사했다.
+	 * 초대 코드로 새 매장과 그 사장 계정을 만든다. 입력 형식(아이디 규칙·비밀번호 길이·확인 일치·코드 길이)은 요청 DTO 가 이미 검사했다.
 	 *
-	 * @throws SetupAlreadyCompletedException 직원 계정이 이미 있거나, 다른 개설 요청이 매장을 먼저 만들었을 때
+	 * @param inviteCode 입력한 초대 코드 원문 — 공백·하이픈·대소문자는 {@link StoreInviteCode#normalize} 가 고친다
+	 * @throws InvalidInviteCodeException 없는 코드·사용 중지된 코드·한도를 다 쓴 코드 (구분하지 않는다)
+	 * @throws DuplicateLoginIdException 같은 아이디(모든 매장, 비활성 포함, 대소문자 구분)가 이미 있을 때
 	 */
 	@Transactional
-	public StoreSetupResult setUp(String storeName, String ownerName, String loginId, String rawPassword) {
-		if (employeeRepository.existsAny()) {
-			throw new SetupAlreadyCompletedException();
+	public StoreSetupResult setUp(String inviteCode, String storeName, String ownerName, String loginId,
+			String rawPassword) {
+		UUID inviteCodeId = storeInviteCodeRepository.claimUse(StoreInviteCode.hashOf(inviteCode))
+				.orElseThrow(InvalidInviteCodeException::new);
+		if (employeeRepository.existsByLoginId(loginId)) {
+			throw new DuplicateLoginIdException();
 		}
 		Instant now = clock.instant();
-		StoreProfile store = StoreProfile.open(storeName, now);
-		storeProfileRepository.add(store);
+		Store store = Store.open(storeName, inviteCodeId, now);
+		storeRepository.add(store);
 
-		Employee admin = Employee.createOwner(loginId, passwordEncoder.encode(rawPassword), ownerName, now);
+		Employee admin = Employee.createOwner(store.getId(), loginId, passwordEncoder.encode(rawPassword), ownerName, now);
 		employeeRepository.add(admin);
 
-		log.info("store setup completed: adminEmployeeId={}", admin.getId());
+		log.info("store signup completed: storeId={}, adminEmployeeId={}, inviteCodeId={}", store.getId(), admin.getId(),
+				inviteCodeId);
 		return new StoreSetupResult(store.getName(), admin.getId(), admin.getLoginId(), admin.getName(), admin.getRole());
 	}
 

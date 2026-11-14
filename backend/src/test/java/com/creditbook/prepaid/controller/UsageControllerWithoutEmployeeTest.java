@@ -52,7 +52,7 @@ class UsageControllerWithoutEmployeeTest {
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
 				.andExpect(jsonPath("$.fieldErrors").isEmpty());
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 }

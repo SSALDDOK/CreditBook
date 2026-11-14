@@ -26,12 +26,16 @@ import org.springframework.data.domain.Sort;
 import com.creditbook.customer.domain.CustomerSearchKeyword;
 import com.creditbook.customer.domain.CustomerSummary;
 
+import java.util.UUID;
+
 /**
  * 검색어·비활성 포함 여부 → 쿼리 선택과 LIKE 패턴 생성. 쿼리 자체(조인·정렬·비활성 제외)는 DB 가 있어야 검증되므로 통합 테스트에서 본다.
  */
 @ExtendWith(MockitoExtension.class)
 @Tag("REQ-2")
 class CustomerRepositoryImplTest {
+
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
 
 	@Mock
 	CustomerJpaRepository jpaRepository;
@@ -50,15 +54,15 @@ class CustomerRepositoryImplTest {
 	@DisplayName("검색어가 없으면 조건 없는 활성 고객 목록 쿼리를 쓴다")
 	void no_keyword_uses_unfiltered_query() {
 		// given
-		given(jpaRepository.findActiveSummaries(any())).willReturn(page);
+		given(jpaRepository.findActiveSummaries(eq(STORE_ID), any())).willReturn(page);
 
 		// when
-		Page<CustomerSummary> result = repository.search(CustomerSearchKeyword.parse(null), false, PageRequest.of(0, 20));
+		Page<CustomerSummary> result = repository.search(STORE_ID, CustomerSearchKeyword.parse(null), false, PageRequest.of(0, 20));
 
 		// then
 		assertThat(result).isSameAs(page);
-		verify(jpaRepository, never()).findActiveSummariesByNameLike(anyString(), any());
-		verify(jpaRepository, never()).findActiveSummariesByPhoneLike(anyString(), any());
+		verify(jpaRepository, never()).findActiveSummariesByNameLike(any(), anyString(), any());
+		verify(jpaRepository, never()).findActiveSummariesByPhoneLike(any(), anyString(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] \"{0}\" → \"{1}\"")
@@ -71,41 +75,41 @@ class CustomerRepositoryImplTest {
 	@DisplayName("이름 검색은 부분 일치 패턴으로 바꾸고 LIKE 특수문자는 글자 그대로 찾는다")
 	void name_keyword_uses_escaped_contains_pattern(String query, String expectedPattern) {
 		// given
-		given(jpaRepository.findActiveSummariesByNameLike(anyString(), any())).willReturn(page);
+		given(jpaRepository.findActiveSummariesByNameLike(eq(STORE_ID), anyString(), any())).willReturn(page);
 
 		// when
-		repository.search(CustomerSearchKeyword.parse(query), false, PageRequest.of(0, 20));
+		repository.search(STORE_ID, CustomerSearchKeyword.parse(query), false, PageRequest.of(0, 20));
 
 		// then
-		verify(jpaRepository).findActiveSummariesByNameLike(eq(expectedPattern), any());
+		verify(jpaRepository).findActiveSummariesByNameLike(eq(STORE_ID), eq(expectedPattern), any());
 	}
 
 	@Test
 	@DisplayName("연락처 검색은 끝자리 일치 패턴으로 바꾼다")
 	void phone_keyword_uses_suffix_pattern() {
 		// given
-		given(jpaRepository.findActiveSummariesByPhoneLike(anyString(), any())).willReturn(page);
+		given(jpaRepository.findActiveSummariesByPhoneLike(eq(STORE_ID), anyString(), any())).willReturn(page);
 
 		// when
-		repository.search(CustomerSearchKeyword.parse("56-78"), false, PageRequest.of(0, 20));
+		repository.search(STORE_ID, CustomerSearchKeyword.parse("56-78"), false, PageRequest.of(0, 20));
 
 		// then
-		verify(jpaRepository).findActiveSummariesByPhoneLike(eq("%5678"), any());
+		verify(jpaRepository).findActiveSummariesByPhoneLike(eq(STORE_ID), eq("%5678"), any());
 	}
 
 	@Test
 	@DisplayName("호출자가 넘긴 정렬은 버리고 페이지 번호·크기만 쿼리에 넘긴다")
 	void caller_sort_is_dropped() {
 		// given
-		given(jpaRepository.findActiveSummaries(any())).willReturn(page);
+		given(jpaRepository.findActiveSummaries(eq(STORE_ID), any())).willReturn(page);
 		Pageable sorted = PageRequest.of(2, 50, Sort.by("name"));
 
 		// when
-		repository.search(CustomerSearchKeyword.parse(""), false, sorted);
+		repository.search(STORE_ID, CustomerSearchKeyword.parse(""), false, sorted);
 
 		// then
 		ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-		verify(jpaRepository).findActiveSummaries(captor.capture());
+		verify(jpaRepository).findActiveSummaries(eq(STORE_ID), captor.capture());
 		assertThat(captor.getValue().getPageNumber()).isEqualTo(2);
 		assertThat(captor.getValue().getPageSize()).isEqualTo(50);
 		assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
@@ -117,14 +121,14 @@ class CustomerRepositoryImplTest {
 	@DisplayName("비활성 포함이면 검색어가 없을 때 활성 조건 없는 전체 목록 쿼리를 쓴다")
 	void include_inactive_without_keyword_uses_all_query() {
 		// given
-		given(jpaRepository.findAllSummaries(any())).willReturn(page);
+		given(jpaRepository.findAllSummaries(eq(STORE_ID), any())).willReturn(page);
 
 		// when
-		Page<CustomerSummary> result = repository.search(CustomerSearchKeyword.parse(null), true, PageRequest.of(0, 20));
+		Page<CustomerSummary> result = repository.search(STORE_ID, CustomerSearchKeyword.parse(null), true, PageRequest.of(0, 20));
 
 		// then
 		assertThat(result).isSameAs(page);
-		verify(jpaRepository, never()).findActiveSummaries(any());
+		verify(jpaRepository, never()).findActiveSummaries(any(), any());
 	}
 
 	@Test
@@ -133,14 +137,14 @@ class CustomerRepositoryImplTest {
 	@DisplayName("비활성 포함이면 이름 검색도 같은 이스케이프 패턴으로 활성 조건 없는 쿼리를 쓴다")
 	void include_inactive_name_keyword_uses_all_query_with_same_pattern() {
 		// given
-		given(jpaRepository.findAllSummariesByNameLike(anyString(), any())).willReturn(page);
+		given(jpaRepository.findAllSummariesByNameLike(eq(STORE_ID), anyString(), any())).willReturn(page);
 
 		// when
-		repository.search(CustomerSearchKeyword.parse("50%"), true, PageRequest.of(0, 20));
+		repository.search(STORE_ID, CustomerSearchKeyword.parse("50%"), true, PageRequest.of(0, 20));
 
 		// then
-		verify(jpaRepository).findAllSummariesByNameLike(eq("%50!%%"), any());
-		verify(jpaRepository, never()).findActiveSummariesByNameLike(anyString(), any());
+		verify(jpaRepository).findAllSummariesByNameLike(eq(STORE_ID), eq("%50!%%"), any());
+		verify(jpaRepository, never()).findActiveSummariesByNameLike(any(), anyString(), any());
 	}
 
 	@Test
@@ -149,14 +153,14 @@ class CustomerRepositoryImplTest {
 	@DisplayName("비활성 포함이면 연락처 검색도 같은 끝자리 패턴으로 활성 조건 없는 쿼리를 쓴다")
 	void include_inactive_phone_keyword_uses_all_query_with_same_pattern() {
 		// given
-		given(jpaRepository.findAllSummariesByPhoneLike(anyString(), any())).willReturn(page);
+		given(jpaRepository.findAllSummariesByPhoneLike(eq(STORE_ID), anyString(), any())).willReturn(page);
 
 		// when
-		repository.search(CustomerSearchKeyword.parse("56-78"), true, PageRequest.of(0, 20));
+		repository.search(STORE_ID, CustomerSearchKeyword.parse("56-78"), true, PageRequest.of(0, 20));
 
 		// then
-		verify(jpaRepository).findAllSummariesByPhoneLike(eq("%5678"), any());
-		verify(jpaRepository, never()).findActiveSummariesByPhoneLike(anyString(), any());
+		verify(jpaRepository).findAllSummariesByPhoneLike(eq(STORE_ID), eq("%5678"), any());
+		verify(jpaRepository, never()).findActiveSummariesByPhoneLike(any(), anyString(), any());
 	}
 
 }

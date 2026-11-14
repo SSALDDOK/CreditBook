@@ -47,6 +47,8 @@ import com.creditbook.global.security.UnauthenticatedException;
 @ExtendWith(OutputCaptureExtension.class)
 class AuthServicePasswordChangeTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-11-03T01:00:00Z");
 	private static final String INITIAL = "Rv7m-Kq2x-9Tn4";
 	private static final String NEW_PASSWORD = "my-new-pass-77";
@@ -66,7 +68,7 @@ class AuthServicePasswordChangeTest {
 				JwtTestSupport.tokenService(JwtTestSupport.randomProperties(), clock), clock,
 				new LoginLockProperties(MAX_FAILURES, LOCK));
 		// 사장이 추가해 초기 비밀번호를 받은 직원 (비밀번호 변경 필요)
-		staff = Employee.createStaff("lee.staff", passwordEncoder.encode(INITIAL), "이직원",
+		staff = Employee.createStaff(STORE_ID, "lee.staff", passwordEncoder.encode(INITIAL), "이직원",
 				Instant.parse("2026-11-01T00:00:00Z"));
 		given(employeeRepository.findByIdForUpdate(staff.getId())).willReturn(Optional.of(staff));
 		clearInvocations(passwordEncoder);
@@ -213,7 +215,7 @@ class AuthServicePasswordChangeTest {
 		// given
 		UUID unknown = UUID.randomUUID();
 		given(employeeRepository.findByIdForUpdate(unknown)).willReturn(Optional.empty());
-		Employee inactive = Employee.createStaff("old.staff", passwordEncoder.encode(INITIAL), "퇴사자", NOW);
+		Employee inactive = Employee.createStaff(STORE_ID, "old.staff", passwordEncoder.encode(INITIAL), "퇴사자", NOW);
 		inactive.deactivate(NOW);
 		given(employeeRepository.findByIdForUpdate(inactive.getId())).willReturn(Optional.of(inactive));
 

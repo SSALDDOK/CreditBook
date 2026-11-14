@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -19,17 +20,19 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 @Tag("REQ-33")
 class CustomerReactivateTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant DEACTIVATED_AT = Instant.parse("2026-10-11T03:00:00Z");
 	private static final Instant NOW = Instant.parse("2026-10-12T05:00:00Z");
 
 	private static Customer activeCustomer() {
-		return Customer.register("김단골", "01012345678", REGISTERED_AT);
+		return Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
 	}
 
 	private static Customer inactiveCustomer() {
 		Customer customer = activeCustomer();
-		customer.deactivate(PrepaidAccount.open(customer.getId(), REGISTERED_AT), DEACTIVATED_AT);
+		customer.deactivate(PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT), DEACTIVATED_AT);
 		return customer;
 	}
 

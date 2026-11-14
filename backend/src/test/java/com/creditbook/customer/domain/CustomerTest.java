@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -18,6 +19,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 @Tag("REQ-1")
 class CustomerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-09-30T01:00:00Z");
 
 	@Test
@@ -28,7 +31,7 @@ class CustomerTest {
 		String phone = "01012345678";
 
 		// when
-		Customer customer = Customer.register(name, phone, NOW);
+		Customer customer = Customer.register(STORE_ID, name, phone, NOW);
 
 		// then
 		assertThat(customer.getId()).isNotNull();
@@ -47,7 +50,7 @@ class CustomerTest {
 		String paddedName = "  김단골 ";
 
 		// when
-		Customer customer = Customer.register(paddedName, "01012345678", NOW);
+		Customer customer = Customer.register(STORE_ID, paddedName, "01012345678", NOW);
 
 		// then
 		assertThat(customer.getName()).isEqualTo("김단골");
@@ -60,7 +63,7 @@ class CustomerTest {
 		// given: null, 빈 문자열 (연락처 필수)
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register("김단골", phone, NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, "김단골", phone, NOW))
 				.isInstanceOf(InvalidPhoneNumberException.class)
 				.hasMessage("연락처를 입력해 주세요.");
 	}
@@ -72,7 +75,7 @@ class CustomerTest {
 		// given: 경계값 9자리·10자리·11자리
 
 		// when
-		Customer customer = Customer.register("김단골", phone, NOW);
+		Customer customer = Customer.register(STORE_ID, "김단골", phone, NOW);
 
 		// then
 		assertThat(customer.getPhone()).isEqualTo(phone);
@@ -86,7 +89,7 @@ class CustomerTest {
 		// given: 8자리·12자리, 하이픈·공백·문자·전각 숫자 포함, 공백뿐
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register("김단골", phone, NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, "김단골", phone, NOW))
 				.isInstanceOf(InvalidPhoneNumberException.class)
 				.hasMessage("연락처는 숫자 9–11자리여야 합니다.");
 	}
@@ -99,7 +102,7 @@ class CustomerTest {
 		// given: null, 빈 문자열, 공백·탭·전각 공백
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register(name, "01012345678", NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, name, "01012345678", NOW))
 				.isInstanceOf(InvalidCustomerNameException.class)
 				.hasMessage("이름을 입력해 주세요.");
 	}
@@ -112,7 +115,7 @@ class CustomerTest {
 		String name = "가".repeat(length);
 
 		// when
-		Customer customer = Customer.register(name, "01012345678", NOW);
+		Customer customer = Customer.register(STORE_ID, name, "01012345678", NOW);
 
 		// then
 		assertThat(customer.getName()).hasSize(length);
@@ -125,7 +128,7 @@ class CustomerTest {
 		String name = "가".repeat(21);
 
 		// when / then
-		assertThatThrownBy(() -> Customer.register(name, "01012345678", NOW))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, name, "01012345678", NOW))
 				.isInstanceOf(InvalidCustomerNameException.class)
 				.hasMessage("이름은 20자 이하여야 합니다.");
 	}
@@ -138,8 +141,8 @@ class CustomerTest {
 		String emoji = "😀".repeat(20);
 
 		// when
-		Customer strippedToLimit = Customer.register(padded, "01012345678", NOW);
-		Customer surrogatePairs = Customer.register(emoji, "01012345678", NOW);
+		Customer strippedToLimit = Customer.register(STORE_ID, padded, "01012345678", NOW);
+		Customer surrogatePairs = Customer.register(STORE_ID, emoji, "01012345678", NOW);
 
 		// then
 		assertThat(strippedToLimit.getName()).isEqualTo("가".repeat(20));
@@ -150,7 +153,7 @@ class CustomerTest {
 	@DisplayName("등록 시각 없이는 고객을 만들 수 없다")
 	void register_requires_registered_time() {
 		// when / then
-		assertThatThrownBy(() -> Customer.register("김단골", "01012345678", null))
+		assertThatThrownBy(() -> Customer.register(STORE_ID, "김단골", "01012345678", null))
 				.isInstanceOf(NullPointerException.class);
 	}
 

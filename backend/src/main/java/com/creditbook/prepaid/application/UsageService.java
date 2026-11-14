@@ -48,25 +48,26 @@ public class UsageService {
 	 * 비활성 고객은 사용할 수 없다 (REQ-33). 같은 요청 키로 같은 요청이 다시 오면 다시 빼지 않고 처음 거래를
 	 * {@code replayed = true} 로 돌려준다 (REQ-10) — 이 재응답 규칙이 비활성 고객 거부보다 먼저다.
 	 *
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다. 다른 매장 고객이면 404
 	 * @param customerId 사용할 고객
 	 * @param amount 사용 금액 (형식·범위·잔액 이하 여부는 도메인이 판단한다)
 	 * @param memo 메모 (선택)
 	 * @param performedBy 처리 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param idempotencyKey 요청 키
-	 * @throws PrepaidAccountNotFoundException 고객의 계좌가 없을 때
+	 * @throws PrepaidAccountNotFoundException 그 매장에 고객의 계좌가 없을 때 (없는 고객·다른 매장 고객)
 	 * @throws com.creditbook.prepaid.domain.InvalidAmountException 금액이 규칙에 맞지 않을 때. 아무것도 저장하지 않는다
 	 * @throws InsufficientBalanceException 금액이 잔액보다 클 때 (REQ-9). 아무것도 저장하지 않는다
 	 * @throws CustomerInactiveException 비활성 고객일 때 (REQ-33). 아무것도 저장하지 않는다
 	 * @throws com.creditbook.prepaid.domain.IdempotencyKeyReusedException 요청 키가 다른 요청에 이미 쓰였을 때
 	 */
-	public UsageResult use(UUID customerId, BigDecimal amount, String memo, UUID performedBy,
+	public UsageResult use(UUID storeId, UUID customerId, BigDecimal amount, String memo, UUID performedBy,
 			IdempotencyKey idempotencyKey) {
 		Objects.requireNonNull(customerId, "customerId");
 		Objects.requireNonNull(performedBy, "performedBy");
 		Objects.requireNonNull(idempotencyKey, "idempotencyKey");
 		IdempotentRequest request = IdempotentRequest.original(LedgerEntryType.USE, amount, memo);
 
-		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
+		LedgerWriteOutcome outcome = ledgerWriter.write(storeId, customerId, idempotencyKey, request,
 				account -> useOrWarn(account, amount, memo, performedBy, idempotencyKey));
 
 		if (!outcome.replayed()) {
@@ -81,7 +82,7 @@ public class UsageService {
 
 	private LedgerEntry useOrWarn(PrepaidAccount account, BigDecimal amount, String memo, UUID performedBy,
 			IdempotencyKey idempotencyKey) {
-		Customer customer = customerRepository.findById(account.getCustomerId())
+		Customer customer = customerRepository.findByIdAndStoreId(account.getCustomerId(), account.getStoreId())
 				.orElseThrow(() -> new CustomerNotFoundException(account.getCustomerId()));
 		try {
 			customer.ensureCanUse();

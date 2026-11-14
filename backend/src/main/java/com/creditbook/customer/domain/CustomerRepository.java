@@ -10,37 +10,42 @@ import org.springframework.data.domain.Pageable;
 /**
  * 고객 저장소. 구현은 infrastructure 에 있다.
  * 고객은 삭제하지 않는다 (비활성화만 — REQ-4). 그래서 삭제 메서드를 두지 않는다.
+ * <p>
+ * 모든 조회는 매장 조건({@code storeId})을 받는다 (REQ-36) — 다른 매장 고객은 없는 고객과 같다. 매장 조건 없는 조회는 두지 않는다.
  */
 public interface CustomerRepository {
 
 	/** 새 고객을 추가한다 (INSERT). 이미 저장된 고객을 다시 넘기면 안 된다. */
 	void add(Customer customer);
 
-	Optional<Customer> findById(UUID id);
+	/** 그 매장의 고객. 다른 매장 고객이면 빈 값이다. */
+	Optional<Customer> findByIdAndStoreId(UUID id, UUID storeId);
 
 	/**
-	 * 연락처가 같은 고객을 모두 찾는다 (REQ-1 중복 연락처 확인). 비활성 고객도 담는다 (REQ-1 — 비활성 고객의 연락처도 중복으로 본다).
+	 * 그 매장에서 연락처가 같은 고객을 모두 찾는다 (REQ-1 중복 연락처 확인 — 같은 매장 안에서만, REQ-36).
+	 * 비활성 고객도 담는다 (REQ-1 — 비활성 고객의 연락처도 중복으로 본다).
 	 * 정렬은 활성 먼저, 그 안에서 최근 등록순(등록 시각 내림차순, 같으면 id 내림차순)으로 고정한다.
 	 *
 	 * @param phone 숫자만 남긴 정규형 — 저장된 연락처도 정규형이므로 그대로 같은지 비교한다
 	 * @return 없으면 빈 목록
 	 */
-	List<SamePhoneCustomer> findAllByPhone(String phone);
+	List<SamePhoneCustomer> findAllByStoreIdAndPhone(UUID storeId, String phone);
 
 	/**
-	 * 고객을 잔액과 함께 검색한다 (REQ-2). 기본은 활성 고객만이고 비활성 고객은 목록·검색·건수에서 빠진다 (REQ-4).
+	 * 그 매장의 고객을 잔액과 함께 검색한다 (REQ-2, REQ-36). 기본은 활성 고객만이고 비활성 고객은 목록·검색·건수에서 빠진다 (REQ-4).
 	 * {@code includeInactive} 가 true 면 비활성 고객도 함께 담는다 (REQ-33).
 	 * 정렬은 최근 등록순(등록 시각 내림차순, 같으면 id 내림차순)으로 고정이며 {@code pageable} 의 정렬은 쓰지 않는다.
 	 */
-	Page<CustomerSummary> search(CustomerSearchKeyword keyword, boolean includeInactive, Pageable pageable);
+	Page<CustomerSummary> search(UUID storeId, CustomerSearchKeyword keyword, boolean includeInactive,
+			Pageable pageable);
 
 	/**
-	 * 고객 상세를 잔액·최근 거래와 함께 한 SQL 문장으로 읽는다 (REQ-11). 활성 여부와 관계없이 찾는다 (REQ-4 — 비활성 고객도 조회됨).
+	 * 그 매장의 고객 상세를 잔액·최근 거래와 함께 한 SQL 문장으로 읽는다 (REQ-11, REQ-36). 활성 여부와 관계없이 찾는다 (REQ-4 — 비활성 고객도 조회됨).
 	 * 최근 거래는 seq 내림차순으로 최대 {@code recentEntryLimit} 건이며, 각 거래에 반제 여부를 담는다.
 	 *
 	 * @param recentEntryLimit 최근 거래 최대 건수 (1 이상)
-	 * @return 고객이 없으면 빈 Optional
+	 * @return 고객이 없거나 다른 매장 고객이면 빈 Optional
 	 */
-	Optional<CustomerDetail> findDetail(UUID id, int recentEntryLimit);
+	Optional<CustomerDetail> findDetail(UUID storeId, UUID id, int recentEntryLimit);
 
 }

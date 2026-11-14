@@ -13,7 +13,9 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,7 @@ import com.creditbook.prepaid.application.ChargeService;
 import com.creditbook.prepaid.domain.IdempotencyKey;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 import com.creditbook.support.WithMockEmployee;
 import com.jayway.jsonpath.JsonPath;
 
@@ -75,16 +78,24 @@ class CustomerSearchApiIntegrationTest {
     @Autowired
     EntityManager entityManager;
 
+    // 매장 (REQ-36) — @WithMockEmployee 직원의 기본 매장. 고객도 이 매장에 만든다
+    UUID storeId;
+
+    @BeforeEach
+    void createStore() {
+        storeId = TestStores.ensure(jdbcTemplate, TestStores.DEFAULT_STORE_ID);
+    }
+
     @Test
     @DisplayName("이름 일부 검색 시 해당 고객만 잔액과 함께 반환")
     @Tag("TC-29")
     void search_by_partial_name_returns_only_matching_customers_with_balance() throws Exception {
         // given 고객 등록
-        customerService.register("김고객TC29", "01012345678");
-        customerService.register("고객TC29김", "01012341234");
-        customerService.register("김땅TC29", "01000000008");
-        customerService.register("이땅TC29", "01000000007");
-        customerService.register("박땅TC29", "01000000006");
+        customerService.register(storeId, "김고객TC29", "01012345678");
+        customerService.register(storeId, "고객TC29김", "01012341234");
+        customerService.register(storeId, "김땅TC29", "01000000008");
+        customerService.register(storeId, "이땅TC29", "01000000007");
+        customerService.register(storeId, "박땅TC29", "01000000006");
         // when 이름 일부("고객") 검색 시
         mockMvc.perform(get("/api/customers").param("q", "고객TC29"))
                 // then 200, totalElements 2, content 이름 = 고객TC29포함, 계좌 0원
@@ -100,9 +111,9 @@ class CustomerSearchApiIntegrationTest {
     @Tag("TC-29")
     void search_by_phone_last_digits_returns_only_matching_customer_with_balance() throws Exception {
         // given 고객 등록
-        customerService.register("김고객", "01011117979");
-        customerService.register("이고객", "01022223333");
-        customerService.register("박고객", "01033334444");
+        customerService.register(storeId, "김고객", "01011117979");
+        customerService.register(storeId, "이고객", "01022223333");
+        customerService.register(storeId, "박고객", "01033334444");
         // when 전화번호 뒷자리 검색 시
         mockMvc.perform(get("/api/customers").param("q", "7979"))
                 // then 200, totalElements 1, content name = 김고객, 계좌 0원, maskedPhone
@@ -119,9 +130,9 @@ class CustomerSearchApiIntegrationTest {
     void inactive_customers_are_excluded_by_default_and_included_with_toggle() throws Exception {
         // given 고객 등록(활성 3, 비활성 2)
         Employee admin = saveAdmin("tc35-admin"); // 비활성화는 ADMIN만 하므로 처리자도 ADMIN으로
-        customerService.register("TC35김고객", "01012121212");
-        customerService.register("TC35이고객", "01023232323");
-        customerService.register("TC35박고객", "01034343434");
+        customerService.register(storeId, "TC35김고객", "01012121212");
+        customerService.register(storeId, "TC35이고객", "01023232323");
+        customerService.register(storeId, "TC35박고객", "01034343434");
         RegisteredCustomer firstInactiveCustomer = registerInactiveCustomer("TC35최고객", "01045454545", admin);
         registerInactiveCustomer("TC35홍고객", "01056565656", admin);
         // when 기본 목록, 기본 검색
@@ -160,7 +171,7 @@ class CustomerSearchApiIntegrationTest {
     void paging_through_all_pages_returns_every_customer_once() throws Exception {
         // given 고객25명 등록
         for (int i = 0; i < 25; i++) {
-            customerService.register("TC36" + i + "고객", "0101212" + String.format("%04d", i)); // 전화번호 항상 11자리
+            customerService.register(storeId, "TC36" + i + "고객", "0101212" + String.format("%04d", i)); // 전화번호 항상 11자리
         }
         entityManager.flush();
         jdbcTemplate.update("UPDATE customers SET created_at = now() WHERE name LIKE 'TC36%'"); // 등록 시각 동점으로
@@ -212,11 +223,11 @@ class CustomerSearchApiIntegrationTest {
     @Tag("TC-37")
     void search_with_like_wildcards_matches_literally_without_error(String keyword) throws Exception {
         // given — 고객 5명 (이름에 %·_ 없음)
-        customerService.register("김고객TC37", "01012345678");
-        customerService.register("고객TC37김", "01012341234");
-        customerService.register("김땅TC37", "01000000008");
-        customerService.register("이땅TC37", "01000000007");
-        customerService.register("박땅TC37", "01000000006");
+        customerService.register(storeId, "김고객TC37", "01012345678");
+        customerService.register(storeId, "고객TC37김", "01012341234");
+        customerService.register(storeId, "김땅TC37", "01000000008");
+        customerService.register(storeId, "이땅TC37", "01000000007");
+        customerService.register(storeId, "박땅TC37", "01000000006");
         // when — param("q", keyword)
         mockMvc.perform(get("/api/customers").param("q", keyword))
                 // then — 200, totalElements 0, content 비어 있음
@@ -230,9 +241,9 @@ class CustomerSearchApiIntegrationTest {
     @Tag("TC-38")
     void every_customer_has_exactly_one_prepaid_account() throws Exception {
         // given 고객 등록
-        customerService.register("김고객", "01011117979");
-        customerService.register("이고객", "01022223333");
-        customerService.register("박고객", "01033334444");
+        customerService.register(storeId, "김고객", "01011117979");
+        customerService.register(storeId, "이고객", "01022223333");
+        customerService.register(storeId, "박고객", "01033334444");
         // when 계좌가 1개가 아닌 고객 수를 DB에서 센다
         entityManager.flush(); // JPA메모리 -> DB로 보내기
         Integer brokenCustomers = jdbcTemplate.queryForObject("""
@@ -249,7 +260,7 @@ class CustomerSearchApiIntegrationTest {
     void customer_list_reflects_balance_right_after_charge() throws Exception {
         // given 0원 고객1명, 충전할 직원 1명
         Employee saveAdmin = saveAdmin("tc39-admin");
-        RegisteredCustomer customer = customerService.register("TC39","01043435005");
+        RegisteredCustomer customer = customerService.register(storeId, "TC39","01043435005");
         //when 1 목록 검색으로 잔액 0원 확인
         mockMvc.perform(get("/api/customers").param("q", "TC39"))
                 // then(사전 확인) 충전 전 잔액 0원
@@ -258,7 +269,7 @@ class CustomerSearchApiIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(1));
 
         //50000원 충전 ,충전은 사전 준비라 서비스로 (처리 직원 = 저장한 ADMIN)
-        chargeService.charge(customer.customerId(), new BigDecimal("50000"), null, saveAdmin.getId(), IdempotencyKey.of("tc39-charge")); 
+        chargeService.charge(storeId, customer.customerId(), new BigDecimal("50000"), null, saveAdmin.getId(), IdempotencyKey.of("tc39-charge")); 
         
         //when 2 충전 후 고객 목록 다시 검색
         mockMvc.perform(get("/api/customers").param("q", "TC39"))
@@ -271,14 +282,14 @@ class CustomerSearchApiIntegrationTest {
 
     // 고객 등록 → 바로 비활성화 (잔액 0원이라 가능). 비활성화는 사전 준비라 API 대신 서비스로
     private RegisteredCustomer registerInactiveCustomer(String name, String phone, Employee admin) {
-        RegisteredCustomer customer = customerService.register(name, phone);
-        customerService.deactivate(customer.customerId(), admin.getId());
+        RegisteredCustomer customer = customerService.register(storeId, name, phone);
+        customerService.deactivate(storeId, customer.customerId(), admin.getId());
         return customer;
     }
 
     // ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
     private Employee saveAdmin(String loginId) {
-        Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
+        Employee admin = TestEmployees.owner(storeId, loginId, passwordEncoder.encode("test5678!"), "테스트사장",
                 clock.instant());
         employeeRepository.add(admin);
         return admin;

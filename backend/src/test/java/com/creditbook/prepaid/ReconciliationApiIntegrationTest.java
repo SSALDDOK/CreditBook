@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.assertj.core.api.SoftAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ import com.creditbook.prepaid.domain.LedgerReconciliation;
 import com.creditbook.prepaid.domain.ReconciliationResult;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.JsonNode;
@@ -136,6 +138,14 @@ class ReconciliationApiIntegrationTest {
     @Autowired
     LedgerReconciliation ledgerReconciliation;
 
+    // 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+    UUID storeId;
+
+    @BeforeEach
+    void createStore() {
+        storeId = TestStores.create(jdbcTemplate);
+    }
+
     @Test
     @Tag("TC-52")
     @DisplayName("충전 → 사용 → 사용 취소 → 충전 취소 후 정합성 점검 쿼리(§2.1·§2.2)를 돌리면 모두 0행이다")
@@ -143,7 +153,7 @@ class ReconciliationApiIntegrationTest {
         // given — STAFF 로그인, 고객 1명
         String loginId = "rec28-staff";
         Cookie session = loginAsNewStaff(loginId);
-        RegisteredCustomer customer = customerService.register("REQ28", "01043435005");
+        RegisteredCustomer customer = customerService.register(storeId, "REQ28", "01043435005");
 
         // when — 충전 2건 → 사용 → 사용 취소 → 충전 취소 (API로, 멱등키는 호출마다 다르게)
         // ① 충전 10,000 → 잔액 10,000
@@ -237,7 +247,7 @@ class ReconciliationApiIntegrationTest {
 
     // 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
     private Cookie loginAsNewStaff(String loginId) {
-        Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+        Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
                 clock.instant());
         employeeRepository.add(employee);
         return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

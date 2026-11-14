@@ -51,7 +51,7 @@ class CancelControllerWithoutEmployeeTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.fieldErrors").isEmpty());
-		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelUse(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -67,7 +67,7 @@ class CancelControllerWithoutEmployeeTest {
 				.content("{\"reason\": \"금액 잘못 입력\"}"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any());
+		verify(cancelService, never()).cancelCharge(any(), any(), any(), any(), any(), any());
 	}
 
 }

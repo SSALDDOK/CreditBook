@@ -11,6 +11,8 @@ import java.util.UUID;
 final class PrepaidFixtures {
 
 	static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
+	/** 계좌가 속한 매장 (REQ-36). */
+	static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
 	static final Instant NOW = Instant.parse("2026-09-30T01:00:00Z");
 	/** application.yml 의 creditbook.charge.max-amount 와 같은 1회 충전 한도. */
 	static final ChargePolicy POLICY = ChargePolicy.ofMaxAmount(300_000);
@@ -25,7 +27,7 @@ final class PrepaidFixtures {
 	}
 
 	static PrepaidAccount newAccount() {
-		return PrepaidAccount.open(UUID.randomUUID(), NOW);
+		return PrepaidAccount.open(STORE_ID, UUID.randomUUID(), NOW);
 	}
 
 	/** 잔액이 {@code balance} 원인 계좌. 0 이면 충전하지 않는다. */

@@ -21,6 +21,9 @@ import jakarta.persistence.Version;
  * 바뀐 뒤의 계좌 잔액과 같다 — 호출자(서비스)는 계좌와 돌려받은 거래를 같은 트랜잭션에서 저장만 한다.
  * <p>
  * 시각은 직접 구하지 않고 인자로 받는다 (서버 시각은 서비스가 Clock 으로 넘긴다 — REQ-20, 테스트 재현성).
+ * <p>
+ * 계좌는 고객과 같은 매장에 속하고(복합 외래 키), 이 계좌가 만드는 거래는 모두 계좌의 매장을 그대로 갖는다 (REQ-36) —
+ * 거래의 매장을 따로 받지 않으므로 어긋날 수 없다.
  */
 @Entity
 @Table(name = "prepaid_accounts")
@@ -32,6 +35,10 @@ public class PrepaidAccount {
 	@Id
 	@Column(name = "id", nullable = false, updatable = false)
 	private UUID id;
+
+	/** 이 계좌가 속한 매장 (stores.id) — 고객의 매장과 같다 (fk_prepaid_accounts_store_customer). */
+	@Column(name = "store_id", nullable = false, updatable = false)
+	private UUID storeId;
 
 	@Column(name = "customer_id", nullable = false, updatable = false)
 	private UUID customerId;
@@ -51,16 +58,21 @@ public class PrepaidAccount {
 		// JPA 전용
 	}
 
-	private PrepaidAccount(UUID customerId, Instant openedAt) {
+	private PrepaidAccount(UUID storeId, UUID customerId, Instant openedAt) {
 		this.id = UUID.randomUUID();
+		this.storeId = Objects.requireNonNull(storeId, "storeId");
 		this.customerId = Objects.requireNonNull(customerId, "customerId");
 		this.balance = BigDecimal.ZERO;
 		this.updatedAt = Objects.requireNonNull(openedAt, "openedAt");
 	}
 
-	/** 고객의 계좌를 잔액 0원으로 연다. */
-	public static PrepaidAccount open(UUID customerId, Instant openedAt) {
-		return new PrepaidAccount(customerId, openedAt);
+	/**
+	 * 고객의 계좌를 잔액 0원으로 연다.
+	 *
+	 * @param storeId 고객이 속한 매장 — 고객의 매장과 다르면 DB(fk_prepaid_accounts_store_customer)가 저장을 거절한다
+	 */
+	public static PrepaidAccount open(UUID storeId, UUID customerId, Instant openedAt) {
+		return new PrepaidAccount(storeId, customerId, openedAt);
 	}
 
 	/**
@@ -93,7 +105,7 @@ public class PrepaidAccount {
 			throw new ChargeLimitExceededException(policy.maxAmount());
 		}
 		BigDecimal newBalance = requireWithinRange(this.balance.add(value));
-		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.CHARGE, value, newBalance,
+		return apply(newBalance, LedgerEntry.original(storeId, id, LedgerEntryType.CHARGE, value, newBalance,
 				normalizeMemo(memo), performedBy, performedAt, idempotencyKey));
 	}
 
@@ -125,7 +137,7 @@ public class PrepaidAccount {
 			throw new InsufficientBalanceException(this.balance, value, value.subtract(this.balance));
 		}
 		BigDecimal newBalance = this.balance.subtract(value);
-		return apply(newBalance, LedgerEntry.original(id, LedgerEntryType.USE, value, newBalance,
+		return apply(newBalance, LedgerEntry.original(storeId, id, LedgerEntryType.USE, value, newBalance,
 				normalizeMemo(memo), performedBy, performedAt, idempotencyKey));
 	}
 
@@ -166,8 +178,8 @@ public class PrepaidAccount {
 		requireReversible(target, LedgerEntryType.USE_CANCEL, existingCancel);
 		String normalizedReason = requireReason(reason);
 		BigDecimal newBalance = requireWithinRange(this.balance.add(target.getAmount()));
-		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.USE_CANCEL, target.getAmount(), newBalance,
-				normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
+		return apply(newBalance, LedgerEntry.reversal(storeId, id, LedgerEntryType.USE_CANCEL, target.getAmount(),
+				newBalance, normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
 	}
 
 	/**
@@ -223,8 +235,8 @@ public class PrepaidAccount {
 			throw new ChargeAlreadyUsedException(target.getId(), this.balance, chargeAmount);
 		}
 		BigDecimal newBalance = this.balance.subtract(chargeAmount);
-		return apply(newBalance, LedgerEntry.reversal(id, LedgerEntryType.CHARGE_CANCEL, chargeAmount, newBalance,
-				normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
+		return apply(newBalance, LedgerEntry.reversal(storeId, id, LedgerEntryType.CHARGE_CANCEL, chargeAmount,
+				newBalance, normalizedReason, target.getId(), performedBy, performedAt, idempotencyKey));
 	}
 
 	/** 이 금액을 지금 사용할 수 있는가 (잔액 이하인가). */
@@ -309,6 +321,10 @@ public class PrepaidAccount {
 
 	public UUID getId() {
 		return id;
+	}
+
+	public UUID getStoreId() {
+		return storeId;
 	}
 
 	public UUID getCustomerId() {

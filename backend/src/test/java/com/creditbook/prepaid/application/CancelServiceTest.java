@@ -56,6 +56,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-34")
 class CancelServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-12T01:00:00Z");
 	private static final Instant USED_AT = NOW.minusSeconds(3600);
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
@@ -83,8 +85,8 @@ class CancelServiceTest {
 	@BeforeEach
 	void setUp() {
 		// 취소가 거절돼 고객 조회까지 가지 않는 테스트도 있어 lenient 로 둔다. 재활성화는 UseCancelReactivationServiceTest 가 본다
-		lenient().when(customerRepository.findById(CUSTOMER_ID))
-				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", USED_AT)));
+		lenient().when(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID))
+				.thenReturn(Optional.of(Customer.register(STORE_ID, "김단골", "01012345678", USED_AT)));
 		service = new CancelService(
 				new IdempotentLedgerWriter(prepaidAccountRepository, ledgerEntryRepository, transactionManager),
 				ledgerEntryRepository, customerRepository, Clock.fixed(NOW, ZoneOffset.UTC), ZoneId.of("Asia/Seoul"));
@@ -92,10 +94,10 @@ class CancelServiceTest {
 
 	/** 잔액이 {@code balance} 원인 계좌. 공개 API(open → charge)로만 만들고 저장소가 이 고객의 계좌로 돌려준다. */
 	private PrepaidAccount accountWithBalance(long balance) {
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, USED_AT);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, USED_AT);
 		account.charge(BigDecimal.valueOf(balance), SETUP_POLICY, EMPLOYEE_ID, USED_AT, null,
 				IdempotencyKey.of("setup-charge"));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 		return account;
 	}
 
@@ -103,7 +105,7 @@ class CancelServiceTest {
 	private LedgerEntry storedUse(PrepaidAccount account, long amount) {
 		LedgerEntry use = account.use(BigDecimal.valueOf(amount), EMPLOYEE_ID, USED_AT, "음료",
 				IdempotencyKey.of("setup-use"));
-		given(ledgerEntryRepository.findById(use.getId())).willReturn(Optional.of(use));
+		given(ledgerEntryRepository.findByIdAndStoreId(use.getId(), STORE_ID)).willReturn(Optional.of(use));
 		return use;
 	}
 
@@ -115,7 +117,7 @@ class CancelServiceTest {
 		LedgerEntry use = storedUse(account, 4_500);
 
 		// when
-		UseCancelResult result = service.cancelUse(CUSTOMER_ID, use.getId(), "  " + REASON + " ", EMPLOYEE_ID, KEY);
+		UseCancelResult result = service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), "  " + REASON + " ", EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -153,7 +155,7 @@ class CancelServiceTest {
 		LedgerEntry use = storedUse(account, 3_000);
 
 		// when
-		UseCancelResult result = service.cancelUse(CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY);
+		UseCancelResult result = service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -174,7 +176,7 @@ class CancelServiceTest {
 		String reason = "로그금지사유문구";
 
 		// when
-		service.cancelUse(CUSTOMER_ID, use.getId(), reason, EMPLOYEE_ID, KEY);
+		service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), reason, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(output.getOut().lines().filter(line -> line.contains("balance changed")))
@@ -191,12 +193,12 @@ class CancelServiceTest {
 	void cancel_use_fails_when_account_not_found() {
 		// given
 		UUID unknownCustomer = UUID.randomUUID();
-		given(prepaidAccountRepository.findByCustomerId(unknownCustomer)).willReturn(Optional.empty());
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(unknownCustomer, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(unknownCustomer, UUID.randomUUID(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, unknownCustomer, UUID.randomUUID(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
-		verify(ledgerEntryRepository, never()).findById(any());
+		verify(ledgerEntryRepository, never()).findByIdAndStoreId(any(), any());
 		verify(ledgerEntryRepository, never()).add(any());
 	}
 
@@ -206,10 +208,10 @@ class CancelServiceTest {
 		// given
 		PrepaidAccount account = accountWithBalance(10_000);
 		UUID unknownEntry = UUID.randomUUID();
-		given(ledgerEntryRepository.findById(unknownEntry)).willReturn(Optional.empty());
+		given(ledgerEntryRepository.findByIdAndStoreId(unknownEntry, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(CUSTOMER_ID, unknownEntry, REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, CUSTOMER_ID, unknownEntry, REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(LedgerEntryNotFoundException.class,
 						e -> assertThat(e.getEntryId()).isEqualTo(unknownEntry));
 		verify(ledgerEntryRepository, never()).add(any());
@@ -227,7 +229,7 @@ class CancelServiceTest {
 		given(ledgerEntryRepository.findByReversesId(use.getId())).willReturn(Optional.of(firstCancel));
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(AlreadyCancelledException.class,
 						e -> assertThat(e.getCancelEntryId()).isEqualTo(firstCancel.getId()))
 				.hasMessage("이미 취소된 사용 건입니다.");
@@ -247,7 +249,7 @@ class CancelServiceTest {
 		PrepaidAccount account = accountWithBalance(10_000);
 		LedgerEntry target = switch (targetKind) {
 			case "다른 고객의 사용 건" -> {
-				PrepaidAccount other = PrepaidAccount.open(UUID.randomUUID(), USED_AT);
+				PrepaidAccount other = PrepaidAccount.open(STORE_ID, UUID.randomUUID(), USED_AT);
 				other.charge(BigDecimal.valueOf(10_000), SETUP_POLICY, EMPLOYEE_ID, USED_AT, null,
 						IdempotencyKey.of("other-charge"));
 				yield other.use(BigDecimal.valueOf(3_000), EMPLOYEE_ID, USED_AT, null, IdempotencyKey.of("other-use"));
@@ -261,11 +263,11 @@ class CancelServiceTest {
 						IdempotencyKey.of("target-cancel"));
 			}
 		};
-		given(ledgerEntryRepository.findById(target.getId())).willReturn(Optional.of(target));
+		given(ledgerEntryRepository.findByIdAndStoreId(target.getId(), STORE_ID)).willReturn(Optional.of(target));
 		BigDecimal balanceBefore = account.getBalance();
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(CUSTOMER_ID, target.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, CUSTOMER_ID, target.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidCancelTargetException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 		assertThat(account.getBalance()).isEqualByComparingTo(balanceBefore);
@@ -285,7 +287,7 @@ class CancelServiceTest {
 		LedgerEntry use = storedUse(account, 3_000);
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(CUSTOMER_ID, use.getId(), reason, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), reason, EMPLOYEE_ID, KEY))
 				.isInstanceOf(CancelReasonRequiredException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 		assertThat(account.getBalance()).isEqualByComparingTo("7000");
@@ -298,13 +300,13 @@ class CancelServiceTest {
 		// given
 		PrepaidAccount account = accountWithBalance(10_000);
 		LedgerEntry use = storedUse(account, 4_000);
-		UseCancelResult first = service.cancelUse(CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY);
+		UseCancelResult first = service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), REASON, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		UseCancelResult again = service.cancelUse(CUSTOMER_ID, use.getId(), " " + REASON + " ", EMPLOYEE_ID, KEY);
+		UseCancelResult again = service.cancelUse(STORE_ID, CUSTOMER_ID, use.getId(), " " + REASON + " ", EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(first.replayed()).isFalse();
@@ -331,7 +333,7 @@ class CancelServiceTest {
 		String reason = difference.equals("다른 사유") ? "고객 요청" : REASON;
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(CUSTOMER_ID, targetId, reason, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, CUSTOMER_ID, targetId, reason, EMPLOYEE_ID, KEY))
 				.isInstanceOfSatisfying(IdempotencyKeyReusedException.class,
 						e -> assertThat(e.getStoredEntryId()).isEqualTo(stored.getId()));
 		verify(ledgerEntryRepository, never()).add(any());

@@ -173,6 +173,8 @@ jobs:
           SPRING_PROFILES_ACTIVE: local-docker
           # 로그인 IP 레이트 리밋(운영 기본 1분 10회)을 이 실행에서만 올린다 — E2E 는 테스트마다 같은 IP 에서 API 로그인을 한다
           CREDITBOOK_AUTH_LOGINRATELIMIT_MAXREQUESTS: "10000"
+          # 가입 IP 레이트 리밋(운영 기본 10분 5회)도 같은 이유로 올린다
+          CREDITBOOK_AUTH_SIGNUPRATELIMIT_MAXREQUESTS: "10000"
         run: |
           secrets="$RUNNER_TEMP/e2e-secrets/backend/"
           jar="$(ls build/libs/*.jar | grep -v -- '-plain.jar$' | head -n 1)"

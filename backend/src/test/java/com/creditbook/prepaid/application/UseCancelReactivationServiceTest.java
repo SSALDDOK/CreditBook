@@ -45,6 +45,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @Tag("REQ-34")
 class UseCancelReactivationServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant REGISTERED_AT = Instant.parse("2026-10-01T01:00:00Z");
 	private static final Instant USED_AT = Instant.parse("2026-10-10T02:00:00Z");
 	private static final Instant DEACTIVATED_AT = Instant.parse("2026-10-11T03:00:00Z");
@@ -80,8 +82,8 @@ class UseCancelReactivationServiceTest {
 	/** 10,000원 충전 → 10,000원 사용으로 잔액 0원인 고객 (비활성화할 수 있는 상태). */
 	@BeforeEach
 	void setUp() {
-		customer = Customer.register("김단골", "01012345678", REGISTERED_AT);
-		account = PrepaidAccount.open(customer.getId(), REGISTERED_AT);
+		customer = Customer.register(STORE_ID, "김단골", "01012345678", REGISTERED_AT);
+		account = PrepaidAccount.open(STORE_ID, customer.getId(), REGISTERED_AT);
 		charge = account.charge(BigDecimal.valueOf(10_000), SETUP_POLICY, EMPLOYEE_ID, USED_AT, null,
 				IdempotencyKey.of("setup-charge"));
 		use = account.use(BigDecimal.valueOf(10_000), EMPLOYEE_ID, USED_AT, "음료", IdempotencyKey.of("setup-use"));
@@ -91,8 +93,8 @@ class UseCancelReactivationServiceTest {
 	}
 
 	private void givenStored(LedgerEntry target) {
-		given(prepaidAccountRepository.findByCustomerId(customer.getId())).willReturn(Optional.of(account));
-		given(ledgerEntryRepository.findById(target.getId())).willReturn(Optional.of(target));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(account));
+		given(ledgerEntryRepository.findByIdAndStoreId(target.getId(), STORE_ID)).willReturn(Optional.of(target));
 	}
 
 	@Test
@@ -101,10 +103,10 @@ class UseCancelReactivationServiceTest {
 		// given
 		customer.deactivate(account, DEACTIVATED_AT);
 		givenStored(use);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
 
 		// when
-		UseCancelResult result = service.cancelUse(customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
+		UseCancelResult result = service.cancelUse(STORE_ID, customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -123,10 +125,10 @@ class UseCancelReactivationServiceTest {
 	void cancel_use_keeps_active_customer_unchanged() {
 		// given
 		givenStored(use);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
 
 		// when
-		service.cancelUse(customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
+		service.cancelUse(STORE_ID, customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(customer.isActive()).isTrue();
@@ -142,10 +144,10 @@ class UseCancelReactivationServiceTest {
 		givenStored(charge);
 
 		// when / then
-		assertThatThrownBy(() -> service.cancelUse(customer.getId(), charge.getId(), REASON, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.cancelUse(STORE_ID, customer.getId(), charge.getId(), REASON, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidCancelTargetException.class);
 		verify(ledgerEntryRepository, never()).add(any());
-		verify(customerRepository, never()).findById(any());
+		verify(customerRepository, never()).findByIdAndStoreId(any(), any());
 		assertThat(customer.isActive()).isFalse();
 		assertThat(account.getBalance()).isEqualByComparingTo("0");
 	}
@@ -157,8 +159,8 @@ class UseCancelReactivationServiceTest {
 		// given: 처음 취소(재활성화 포함)가 커밋된 뒤 잔액을 모두 쓰고 다시 비활성화된 고객
 		customer.deactivate(account, DEACTIVATED_AT);
 		givenStored(use);
-		given(customerRepository.findById(customer.getId())).willReturn(Optional.of(customer));
-		UseCancelResult first = service.cancelUse(customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
+		given(customerRepository.findByIdAndStoreId(customer.getId(), STORE_ID)).willReturn(Optional.of(customer));
+		UseCancelResult first = service.cancelUse(STORE_ID, customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		account.use(BigDecimal.valueOf(10_000), EMPLOYEE_ID, NOW, null, IdempotencyKey.of("setup-use-again"));
@@ -166,7 +168,7 @@ class UseCancelReactivationServiceTest {
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		UseCancelResult again = service.cancelUse(customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
+		UseCancelResult again = service.cancelUse(STORE_ID, customer.getId(), use.getId(), REASON, EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(again.replayed()).isTrue();
@@ -174,7 +176,7 @@ class UseCancelReactivationServiceTest {
 		assertThat(customer.isActive()).isFalse();
 		assertThat(account.getBalance()).isEqualByComparingTo("0");
 		verify(ledgerEntryRepository).add(any());
-		verify(customerRepository).findById(customer.getId());
+		verify(customerRepository).findByIdAndStoreId(customer.getId(), STORE_ID);
 	}
 
 }

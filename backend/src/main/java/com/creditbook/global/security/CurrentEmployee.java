@@ -17,4 +17,12 @@ public interface CurrentEmployee {
 	 */
 	UUID id();
 
+	/**
+	 * 현재 직원이 속한 매장 (employees.store_id, REQ-36). 고객·계좌·거래·직원 조회의 '내 매장' 조건이 여기서 온다.
+	 * 요청 본문·경로·헤더로 받지 않는다.
+	 *
+	 * @return 매장 ID. 인증이 없거나 매장을 알 수 없으면 null — 호출한 쪽이 401 로 거절한다
+	 */
+	UUID storeId();
+
 }

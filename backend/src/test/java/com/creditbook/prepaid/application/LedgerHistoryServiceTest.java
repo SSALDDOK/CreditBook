@@ -42,6 +42,8 @@ import com.creditbook.prepaid.domain.PrepaidAccount;
 @ExtendWith(MockitoExtension.class)
 class LedgerHistoryServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 	/** KST 2026-10-16 00:30 — UTC 로는 아직 10-15 */
@@ -80,13 +82,13 @@ class LedgerHistoryServiceTest {
 				false, null);
 		LedgerHistoryEntry oldUse = entry(LedgerEntryType.USE, Instant.parse("2026-01-01T03:00:00Z"), false, null);
 		LedgerHistoryEntry useCancel = entry(LedgerEntryType.USE_CANCEL, NOW, false, oldUse.id());
-		given(customerRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer()));
-		given(ledgerEntryRepository.findHistoryByCustomerId(CUSTOMER_ID, PageRequest.of(0, 20)))
+		given(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(customer()));
+		given(ledgerEntryRepository.findHistoryByCustomerId(STORE_ID, CUSTOMER_ID, PageRequest.of(0, 20)))
 				.willReturn(new PageImpl<>(List.of(useCancel, todayCharge, yesterdayCharge, oldUse),
 						PageRequest.of(0, 20), 4));
 
 		// when
-		Page<LedgerHistoryItem> result = service.getHistory(CUSTOMER_ID, 0, 20);
+		Page<LedgerHistoryItem> result = service.getHistory(STORE_ID, CUSTOMER_ID, 0, 20);
 
 		// then: 순서·페이지 정보는 저장소 그대로, 취소 가능만 붙는다
 		assertThat(result.getContent()).extracting(LedgerHistoryItem::entry)
@@ -100,15 +102,15 @@ class LedgerHistoryServiceTest {
 	@DisplayName("요청한 페이지 번호와 크기로 저장소를 조회한다")
 	void page_and_size_are_passed_to_repository() {
 		// given
-		given(customerRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer()));
-		given(ledgerEntryRepository.findHistoryByCustomerId(CUSTOMER_ID, PageRequest.of(2, 10)))
+		given(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(customer()));
+		given(ledgerEntryRepository.findHistoryByCustomerId(STORE_ID, CUSTOMER_ID, PageRequest.of(2, 10)))
 				.willReturn(Page.empty(PageRequest.of(2, 10)));
 
 		// when
-		Page<LedgerHistoryItem> result = service.getHistory(CUSTOMER_ID, 2, 10);
+		Page<LedgerHistoryItem> result = service.getHistory(STORE_ID, CUSTOMER_ID, 2, 10);
 
 		// then
-		verify(ledgerEntryRepository).findHistoryByCustomerId(CUSTOMER_ID, PageRequest.of(2, 10));
+		verify(ledgerEntryRepository).findHistoryByCustomerId(STORE_ID, CUSTOMER_ID, PageRequest.of(2, 10));
 		assertThat(result.getContent()).isEmpty();
 	}
 
@@ -116,12 +118,12 @@ class LedgerHistoryServiceTest {
 	@DisplayName("계좌·거래가 없는 고객은 빈 이력을 돌려준다")
 	void customer_without_entries_gets_empty_history() {
 		// given
-		given(customerRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer()));
-		given(ledgerEntryRepository.findHistoryByCustomerId(CUSTOMER_ID, PageRequest.of(0, 20)))
+		given(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(customer()));
+		given(ledgerEntryRepository.findHistoryByCustomerId(STORE_ID, CUSTOMER_ID, PageRequest.of(0, 20)))
 				.willReturn(Page.empty(PageRequest.of(0, 20)));
 
 		// when
-		Page<LedgerHistoryItem> result = service.getHistory(CUSTOMER_ID, 0, 20);
+		Page<LedgerHistoryItem> result = service.getHistory(STORE_ID, CUSTOMER_ID, 0, 20);
 
 		// then
 		assertThat(result.getContent()).isEmpty();
@@ -134,14 +136,14 @@ class LedgerHistoryServiceTest {
 	void inactive_customer_history_is_returned() {
 		// given
 		Customer inactive = customer();
-		inactive.deactivate(PrepaidAccount.open(inactive.getId(), NOW), NOW);
+		inactive.deactivate(PrepaidAccount.open(STORE_ID, inactive.getId(), NOW), NOW);
 		LedgerHistoryEntry use = entry(LedgerEntryType.USE, Instant.parse("2026-10-01T03:00:00Z"), false, null);
-		given(customerRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(inactive));
-		given(ledgerEntryRepository.findHistoryByCustomerId(CUSTOMER_ID, PageRequest.of(0, 20)))
+		given(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(inactive));
+		given(ledgerEntryRepository.findHistoryByCustomerId(STORE_ID, CUSTOMER_ID, PageRequest.of(0, 20)))
 				.willReturn(new PageImpl<>(List.of(use), PageRequest.of(0, 20), 1));
 
 		// when
-		Page<LedgerHistoryItem> result = service.getHistory(CUSTOMER_ID, 0, 20);
+		Page<LedgerHistoryItem> result = service.getHistory(STORE_ID, CUSTOMER_ID, 0, 20);
 
 		// then
 		assertThat(result.getContent()).extracting(LedgerHistoryItem::entry).containsExactly(use);
@@ -151,16 +153,16 @@ class LedgerHistoryServiceTest {
 	@DisplayName("없는 고객이면 CustomerNotFoundException 으로 거절하고 거래를 조회하지 않는다")
 	void unknown_customer_is_rejected() {
 		// given
-		given(customerRepository.findById(CUSTOMER_ID)).willReturn(Optional.empty());
+		given(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.getHistory(CUSTOMER_ID, 0, 20))
+		assertThatThrownBy(() -> service.getHistory(STORE_ID, CUSTOMER_ID, 0, 20))
 				.isInstanceOf(CustomerNotFoundException.class);
-		verify(ledgerEntryRepository, never()).findHistoryByCustomerId(any(), any());
+		verify(ledgerEntryRepository, never()).findHistoryByCustomerId(any(), any(), any());
 	}
 
 	private static Customer customer() {
-		return Customer.register("김단골", "01000005678", NOW);
+		return Customer.register(STORE_ID, "김단골", "01000005678", NOW);
 	}
 
 }

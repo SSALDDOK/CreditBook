@@ -53,6 +53,8 @@ import com.creditbook.support.WithMockEmployee;
 @Tag("REQ-8")
 class UsageControllerTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID ACCOUNT_ID = UUID.fromString("7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 	private static final UUID ENTRY_ID = UUID.fromString("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f");
@@ -74,6 +76,7 @@ class UsageControllerTest {
 	@BeforeEach
 	void setUp() {
 		given(currentEmployee.id()).willReturn(EMPLOYEE_ID);
+		given(currentEmployee.storeId()).willReturn(STORE_ID);
 	}
 
 	private static UsageResult used(long amount, long balanceAfter, String memo) {
@@ -83,13 +86,13 @@ class UsageControllerTest {
 
 	/** 서비스 대신 실제 도메인 규칙이 금액·잔액을 판단하게 한다. 잔액 {@code balance} 원인 계좌에서 사용한다. */
 	private void useOnRealAccountWithBalance(long balance) {
-		PrepaidAccount account = PrepaidAccount.open(CUSTOMER_ID, NOW);
+		PrepaidAccount account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW);
 		if (balance > 0) {
 			account.charge(BigDecimal.valueOf(balance), ChargePolicy.ofMaxAmount(300_000), EMPLOYEE_ID, NOW, null,
 					IdempotencyKey.of("setup-charge"));
 		}
-		given(usageService.use(eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
-			account.use(invocation.getArgument(1), EMPLOYEE_ID, NOW, invocation.getArgument(2), KEY);
+		given(usageService.use(eq(STORE_ID), eq(CUSTOMER_ID), any(), any(), eq(EMPLOYEE_ID), eq(KEY))).willAnswer(invocation -> {
+			account.use(invocation.getArgument(2), EMPLOYEE_ID, NOW, invocation.getArgument(3), KEY);
 			throw new AssertionError("도메인이 사용을 거절해야 한다");
 		});
 	}
@@ -98,7 +101,7 @@ class UsageControllerTest {
 	@DisplayName("잔액 50,000원 고객이 4,500원을 사용하면 잔액이 45,500원이 되고 USE 유형 거래가 생성된다")
 	void use_returns_201_with_location_and_use_entry() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY))
+		given(usageService.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(used(4_500, 45_500, "음료"));
 
 		// when / then
@@ -124,7 +127,7 @@ class UsageControllerTest {
 	@DisplayName("메모 없이 사용할 수 있다")
 	void use_without_memo_is_accepted() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
+		given(usageService.use(STORE_ID, CUSTOMER_ID, new BigDecimal("1000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(used(1_000, 9_000, null));
 
 		// when / then
@@ -140,7 +143,7 @@ class UsageControllerTest {
 	@DisplayName("잔액과 같은 금액을 사용하면 성공하고 잔액이 0원이 된다")
 	void use_whole_balance_is_accepted() throws Exception {
 		// given
-		given(usageService.use(CUSTOMER_ID, new BigDecimal("3000"), null, EMPLOYEE_ID, KEY))
+		given(usageService.use(STORE_ID, CUSTOMER_ID, new BigDecimal("3000"), null, EMPLOYEE_ID, KEY))
 				.willReturn(used(3_000, 0, null));
 
 		// when / then
@@ -166,7 +169,7 @@ class UsageControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedBy"));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -181,7 +184,7 @@ class UsageControllerTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("performedAt"));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] 잔액 {0}원, 사용 {1}원 → 부족액 {2}원")
@@ -242,7 +245,7 @@ class UsageControllerTest {
 				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("amount"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("금액을 입력해 주세요."));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -259,14 +262,14 @@ class UsageControllerTest {
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"))
 				.andExpect(jsonPath("$.fieldErrors[0].field").value("memo"))
 				.andExpect(jsonPath("$.fieldErrors[0].message").value("메모는 200자 이하여야 합니다."));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
 	@DisplayName("고객이 없으면 404로 응답한다")
 	void unknown_customer_is_rejected_with_404() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any(), any()))
 				.willThrow(new PrepaidAccountNotFoundException(CUSTOMER_ID));
 
 		// when / then
@@ -283,7 +286,7 @@ class UsageControllerTest {
 	@DisplayName("비활성 고객에게 사용을 요청하면 409 CUSTOMER_INACTIVE 로 거절하고 충전하면 다시 활성화된다고 안내한다")
 	void inactive_customer_is_rejected_with_409() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any(), any()))
 				.willThrow(new CustomerInactiveException(CUSTOMER_ID));
 
 		// when / then
@@ -300,7 +303,7 @@ class UsageControllerTest {
 	@DisplayName("같은 계좌를 동시에 바꿔 충돌하면 409로 응답한다")
 	void concurrent_modification_is_rejected_with_409() throws Exception {
 		// given
-		given(usageService.use(any(), any(), any(), any(), any()))
+		given(usageService.use(any(), any(), any(), any(), any(), any()))
 				.willThrow(new ObjectOptimisticLockingFailureException(PrepaidAccount.class, ACCOUNT_ID));
 
 		// when / then
@@ -320,7 +323,7 @@ class UsageControllerTest {
 				.content("{\"amount\": 1000}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("INVALID_INPUT"));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")
@@ -333,7 +336,7 @@ class UsageControllerTest {
 				.content(body))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -349,7 +352,7 @@ class UsageControllerTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
 				.andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
-		verify(usageService, never()).use(any(), any(), any(), any(), any());
+		verify(usageService, never()).use(any(), any(), any(), any(), any(), any());
 	}
 
 }

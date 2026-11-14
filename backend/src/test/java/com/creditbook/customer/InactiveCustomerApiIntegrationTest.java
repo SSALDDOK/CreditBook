@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -73,6 +75,14 @@ class InactiveCustomerApiIntegrationTest {
 
 	@Autowired
 	Clock clock;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
 
 	@Test
 	@DisplayName("비활성화된 고객에 대해 새로운 충전을 등록하면 고객이 자동으로 활성화되고 충전 거래가 정상 처리된다")
@@ -127,7 +137,7 @@ class InactiveCustomerApiIntegrationTest {
 		// given 직원이 10,000 충전 -> 10,000 전부 사용(잔액 0) -> 사장님이 비활성화
 		Cookie session = loginAsNewStaff("tc41-staff"); // 충전·사용·취소·목록 조회는 직원
 		Cookie admin = loginAsAdmin("tc41-admin"); // 비활성화는 사장님만 가능
-		RegisteredCustomer customer = customerService.register("TC41", "01012347979");
+		RegisteredCustomer customer = customerService.register(storeId, "TC41", "01012347979");
 
 		mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
 				.header("Idempotency-Key", "tc41-charge")
@@ -175,7 +185,7 @@ class InactiveCustomerApiIntegrationTest {
 
 	// ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
 	private Employee saveAdmin(String loginId) {
-		Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
+		Employee admin = TestEmployees.owner(storeId, loginId, passwordEncoder.encode("test5678!"), "테스트사장",
 				clock.instant());
 		employeeRepository.add(admin);
 		return admin;
@@ -183,7 +193,7 @@ class InactiveCustomerApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());
@@ -220,8 +230,8 @@ class InactiveCustomerApiIntegrationTest {
 
 	// 고객 등록 → 바로 비활성화 (잔액 0원이라 가능). 비활성화는 사전 준비라 API 대신 서비스로
 	private RegisteredCustomer registerInactiveCustomer(String name, String phone, Employee admin) {
-		RegisteredCustomer customer = customerService.register(name, phone);
-		customerService.deactivate(customer.customerId(), admin.getId());
+		RegisteredCustomer customer = customerService.register(storeId, name, phone);
+		customerService.deactivate(storeId, customer.customerId(), admin.getId());
 		return customer;
 	}
 

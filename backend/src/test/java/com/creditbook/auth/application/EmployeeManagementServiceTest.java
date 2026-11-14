@@ -44,6 +44,8 @@ import com.creditbook.auth.domain.Role;
 @ExtendWith(OutputCaptureExtension.class)
 class EmployeeManagementServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-11-03T02:00:00Z");
 	private static final String HASH = "$2a$04$abcdefghijklmnopqrstuuJ8m0zW8V0u1Yy3s3b4c5d6e7f8g9h0";
 
@@ -52,11 +54,11 @@ class EmployeeManagementServiceTest {
 	private final EmployeeManagementService service = new EmployeeManagementService(employeeRepository,
 			passwordEncoder, new InitialPasswordGenerator(new Random(11L)), Clock.fixed(NOW, ZoneOffset.UTC));
 
-	private final Employee owner = Employee.createOwner("kim.owner", HASH, "김사장", NOW.minusSeconds(3600));
-	private final Employee staff = Employee.createStaff("lee.staff", HASH, "이직원", NOW.minusSeconds(1800));
+	private final Employee owner = Employee.createOwner(STORE_ID, "kim.owner", HASH, "김사장", NOW.minusSeconds(3600));
+	private final Employee staff = Employee.createStaff(STORE_ID, "lee.staff", HASH, "이직원", NOW.minusSeconds(1800));
 
 	private void given_target(Employee target) {
-		given(employeeRepository.findByIdForUpdate(target.getId())).willReturn(Optional.of(target));
+		given(employeeRepository.findByIdAndStoreIdForUpdate(target.getId(), STORE_ID)).willReturn(Optional.of(target));
 	}
 
 	// ── 목록 ──
@@ -66,10 +68,10 @@ class EmployeeManagementServiceTest {
 	void list_maps_employees_in_order() {
 		// given
 		staff.recordLogin(NOW);
-		given(employeeRepository.findAllForManagement()).willReturn(List.of(owner, staff));
+		given(employeeRepository.findAllForManagement(STORE_ID)).willReturn(List.of(owner, staff));
 
 		// when
-		List<EmployeeSummary> list = service.list();
+		List<EmployeeSummary> list = service.list(STORE_ID);
 
 		// then
 		assertThat(list).containsExactly(
@@ -88,7 +90,7 @@ class EmployeeManagementServiceTest {
 		ArgumentCaptor<Employee> saved = ArgumentCaptor.forClass(Employee.class);
 
 		// when
-		StaffAddedResult result = service.addStaff(" 박직원 ", "park.staff", ownerId);
+		StaffAddedResult result = service.addStaff(STORE_ID, " 박직원 ", "park.staff", ownerId);
 
 		// then
 		verify(employeeRepository).add(saved.capture());
@@ -120,7 +122,7 @@ class EmployeeManagementServiceTest {
 		given(employeeRepository.existsByLoginId("lee.staff")).willReturn(true);
 
 		// when / then
-		assertThatThrownBy(() -> service.addStaff("이직원2", "lee.staff", owner.getId()))
+		assertThatThrownBy(() -> service.addStaff(STORE_ID, "이직원2", "lee.staff", owner.getId()))
 				.isInstanceOf(DuplicateLoginIdException.class)
 				.hasMessage("이미 사용 중인 아이디입니다.");
 		verify(employeeRepository, never()).add(any());
@@ -136,14 +138,14 @@ class EmployeeManagementServiceTest {
 		willThrow(new DuplicateLoginIdException()).given(employeeRepository).add(any());
 
 		// when / then
-		assertThatThrownBy(() -> service.addStaff("동시", "same.id", owner.getId()))
+		assertThatThrownBy(() -> service.addStaff(STORE_ID, "동시", "same.id", owner.getId()))
 				.isInstanceOf(DuplicateLoginIdException.class);
 	}
 
 	@Test
 	@DisplayName("처리자를 모르면 직원을 추가하지 않는다")
 	void add_staff_requires_performer() {
-		assertThatThrownBy(() -> service.addStaff("박직원", "park.staff", null)).isInstanceOf(NullPointerException.class);
+		assertThatThrownBy(() -> service.addStaff(STORE_ID, "박직원", "park.staff", null)).isInstanceOf(NullPointerException.class);
 		verify(employeeRepository, never()).add(any());
 	}
 
@@ -160,7 +162,7 @@ class EmployeeManagementServiceTest {
 		given_target(staff);
 
 		// when
-		PasswordResetResult result = service.resetPassword(staff.getId(), owner.getId());
+		PasswordResetResult result = service.resetPassword(STORE_ID, staff.getId(), owner.getId());
 
 		// then
 		assertThat(result.employeeId()).isEqualTo(staff.getId());
@@ -181,8 +183,8 @@ class EmployeeManagementServiceTest {
 		given_target(staff);
 
 		// when
-		String first = service.resetPassword(staff.getId(), owner.getId()).initialPassword();
-		String second = service.resetPassword(staff.getId(), owner.getId()).initialPassword();
+		String first = service.resetPassword(STORE_ID, staff.getId(), owner.getId()).initialPassword();
+		String second = service.resetPassword(STORE_ID, staff.getId(), owner.getId()).initialPassword();
 
 		// then
 		assertThat(first).isNotEqualTo(second);
@@ -197,7 +199,7 @@ class EmployeeManagementServiceTest {
 		given_target(staff);
 
 		// when
-		PasswordResetResult result = service.resetPassword(staff.getId(), owner.getId());
+		PasswordResetResult result = service.resetPassword(STORE_ID, staff.getId(), owner.getId());
 
 		// then
 		assertThat(passwordEncoder.matches(result.initialPassword(), staff.getPasswordHash())).isTrue();
@@ -209,12 +211,12 @@ class EmployeeManagementServiceTest {
 	void unknown_employee_is_not_found(CapturedOutput output) {
 		// given
 		UUID unknown = UUID.randomUUID();
-		given(employeeRepository.findByIdForUpdate(unknown)).willReturn(Optional.empty());
+		given(employeeRepository.findByIdAndStoreIdForUpdate(unknown, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.resetPassword(unknown, owner.getId()))
+		assertThatThrownBy(() -> service.resetPassword(STORE_ID, unknown, owner.getId()))
 				.isInstanceOf(EmployeeNotFoundException.class);
-		assertThatThrownBy(() -> service.deactivate(unknown, owner.getId()))
+		assertThatThrownBy(() -> service.deactivate(STORE_ID, unknown, owner.getId()))
 				.isInstanceOf(EmployeeNotFoundException.class);
 		assertThat(output.getOut()).contains("reason=not found, employeeId=" + unknown);
 	}
@@ -226,9 +228,9 @@ class EmployeeManagementServiceTest {
 		given_target(owner);
 
 		// when / then
-		assertThatThrownBy(() -> service.resetPassword(owner.getId(), owner.getId()))
+		assertThatThrownBy(() -> service.resetPassword(STORE_ID, owner.getId(), owner.getId()))
 				.isInstanceOf(AdminAccountProtectedException.class);
-		assertThatThrownBy(() -> service.deactivate(owner.getId(), owner.getId()))
+		assertThatThrownBy(() -> service.deactivate(STORE_ID, owner.getId(), owner.getId()))
 				.isInstanceOf(AdminAccountProtectedException.class);
 		assertThat(owner.getPasswordHash()).isEqualTo(HASH);
 		assertThat(owner.isActive()).isTrue();
@@ -244,7 +246,7 @@ class EmployeeManagementServiceTest {
 		given_target(staff);
 
 		// when
-		service.deactivate(staff.getId(), owner.getId());
+		service.deactivate(STORE_ID, staff.getId(), owner.getId());
 
 		// then
 		assertThat(staff.isActive()).isFalse();
@@ -260,7 +262,7 @@ class EmployeeManagementServiceTest {
 		given_target(staff);
 
 		// when
-		service.deactivate(staff.getId(), owner.getId());
+		service.deactivate(STORE_ID, staff.getId(), owner.getId());
 
 		// then
 		assertThat(staff.isActive()).isFalse();

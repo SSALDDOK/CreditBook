@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestStores;
 
 /**
  * CB-5: V1__init.sql 이 실제 PostgreSQL(Testcontainers)에 적용된 상태에서
@@ -37,23 +38,26 @@ class V1SchemaConstraintsTest {
 	@Autowired
 	JdbcTemplate jdbcTemplate;
 
+	// 매장 (REQ-36) — 직원·고객·계좌·거래는 같은 매장이어야 저장된다
+	private UUID storeId;
 	private UUID employeeId;
 	private UUID accountId;
 
 	@BeforeEach
 	void setUp() {
+		storeId = TestStores.create(jdbcTemplate);
 		String loginId = "tester-" + UUID.randomUUID().toString().substring(0, 8);
 		employeeId = jdbcTemplate.queryForObject(
-				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, ?, ?, 'ADMIN') RETURNING id",
-				UUID.class, loginId, "hashed-password", "테스트 관리자");
+				"INSERT INTO employees (store_id, login_id, password_hash, name, role) VALUES (?, ?, ?, ?, 'ADMIN') RETURNING id",
+				UUID.class, storeId, loginId, "hashed-password", "테스트 관리자");
 
 		UUID customerId = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id",
-				UUID.class, "홍길동", "01012345678");
+				"INSERT INTO customers (store_id, name, phone) VALUES (?, ?, ?) RETURNING id",
+				UUID.class, storeId, "홍길동", "01012345678");
 
 		accountId = jdbcTemplate.queryForObject(
-				"INSERT INTO prepaid_accounts (customer_id, balance) VALUES (?, 10000) RETURNING id",
-				UUID.class, customerId);
+				"INSERT INTO prepaid_accounts (store_id, customer_id, balance) VALUES (?, ?, 10000) RETURNING id",
+				UUID.class, storeId, customerId);
 	}
 
 	@ParameterizedTest(name = "{0} 행은 reverses_id 없이 저장되지 않는다")
@@ -177,7 +181,7 @@ class V1SchemaConstraintsTest {
 
 		// when / then
 		assertThatThrownBy(() -> jdbcTemplate.update(
-				"INSERT INTO prepaid_accounts (customer_id) VALUES (?)", customerId))
+				"INSERT INTO prepaid_accounts (store_id, customer_id) VALUES (?, ?)", storeId, customerId))
 				.isInstanceOf(DataIntegrityViolationException.class)
 				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ux_prepaid_accounts_customer_id"));
 	}
@@ -191,23 +195,23 @@ class V1SchemaConstraintsTest {
 
 		// when / then: 같은 seq 를 직접 지정해 넣는다
 		assertThatThrownBy(() -> jdbcTemplate.update(
-				"INSERT INTO ledger_entries (seq, account_id, type, amount, balance_after, performed_by) "
-						+ "VALUES (?, ?, 'CHARGE', 1000, 12000, ?)", seq, accountId, employeeId))
+				"INSERT INTO ledger_entries (seq, store_id, account_id, type, amount, balance_after, performed_by) "
+						+ "VALUES (?, ?, ?, 'CHARGE', 1000, 12000, ?)", seq, storeId, accountId, employeeId))
 				.isInstanceOf(DataIntegrityViolationException.class)
 				.satisfies(ex -> assertThat(constraintNameOf(ex)).isEqualTo("ux_ledger_entries_seq"));
 	}
 
 	private void insertEmployee(String loginId) {
 		jdbcTemplate.update(
-				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, 'hashed-password', '직원', 'STAFF')",
-				loginId);
+				"INSERT INTO employees (store_id, login_id, password_hash, name, role) VALUES (?, ?, 'hashed-password', '직원', 'STAFF')",
+				storeId, loginId);
 	}
 
 	private UUID insertLedgerEntry(String type, long amount, long balanceAfter, UUID reversesId) {
 		return jdbcTemplate.queryForObject(
-				"INSERT INTO ledger_entries (account_id, type, amount, balance_after, reverses_id, performed_by) "
-						+ "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-				UUID.class, accountId, type, BigDecimal.valueOf(amount), BigDecimal.valueOf(balanceAfter),
+				"INSERT INTO ledger_entries (store_id, account_id, type, amount, balance_after, reverses_id, performed_by) "
+						+ "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+				UUID.class, storeId, accountId, type, BigDecimal.valueOf(amount), BigDecimal.valueOf(balanceAfter),
 				reversesId, employeeId);
 	}
 

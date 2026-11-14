@@ -42,6 +42,8 @@ import jakarta.servlet.http.Cookie;
 @Tag("REQ-22")
 class SecurityFilterChainWebTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final UUID EMPLOYEE_ID = UUID.fromString("7d0c2f4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f");
 
 	@Autowired
@@ -62,7 +64,7 @@ class SecurityFilterChainWebTest {
 	void issueValidToken() {
 		validToken = tokenService.issue(EMPLOYEE_ID).value();
 		given(employeeRepository.findAuthStatus(any(), any()))
-				.willReturn(Optional.of(new EmployeeAuthStatus(true, Role.ADMIN, false, false)));
+				.willReturn(Optional.of(new EmployeeAuthStatus(STORE_ID, true, Role.ADMIN, false, false)));
 		given(authService.session(EMPLOYEE_ID))
 				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false));
 	}

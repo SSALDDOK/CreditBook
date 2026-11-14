@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,6 +38,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -84,6 +86,17 @@ class LedgerEntryHistoryApiIntegrationTest {
 	@Autowired
 	EntityManager entityManager;
 
+	@Autowired
+	JdbcTemplate jdbcTemplate;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	// 시계는 static 이라 테스트끼리 공유된다 — 앞 테스트가 옮겨 둔 시각에 기대지 않게 매번 오늘로 되돌린다
 	@BeforeEach
 	void resetClock() {
@@ -95,7 +108,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 	void history_lists_all_entries_latest_first_with_recorded_balance() throws Exception {
 		// given 30,000 충전 → 20,000 충전 → 4,000 · 3,000 · 2,000 사용 (잔액 41,000)
 		Cookie session = loginAsNewStaff("cb47-staff");
-		RegisteredCustomer customer = customerService.register("CB47이력", "01012344747");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47이력", "01012344747");
 		charge(session, customer.customerId(), 30000, "cb47-charge-1");
 		charge(session, customer.customerId(), 20000, "cb47-charge-2");
 		use(session, customer.customerId(), 4000, "cb47-use-1");
@@ -130,7 +143,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 	void history_pages_continue_in_latest_first_order() throws Exception {
 		// given 거래 5건 (잔액 순서: 10,000 → 9,000 → 8,000 → 7,000 → 6,000)
 		Cookie session = loginAsNewStaff("cb47-page-staff");
-		RegisteredCustomer customer = customerService.register("CB47페이지", "01012344848");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47페이지", "01012344848");
 		charge(session, customer.customerId(), 10000, "cb47-page-charge");
 		for (int i = 1; i <= 4; i++) {
 			use(session, customer.customerId(), 1000, "cb47-page-use-" + i);
@@ -169,7 +182,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 		// given KST 어제 23:30(UTC 10-14 14:30)에 10,000 충전
 		CLOCK.set(Instant.parse("2026-10-14T14:30:00Z"));
 		Cookie session = loginAsNewStaff("cb47-cancel-staff");
-		RegisteredCustomer customer = customerService.register("CB47취소", "01012345050");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47취소", "01012345050");
 		String yesterdayChargeId = charge(session, customer.customerId(), 10000, "cb47-cancel-charge-1");
 		// 1시간 뒤 KST 오늘 00:30(UTC로는 아직 10-14) — UTC 날짜로 판단하면 둘 다 '같은 날'이 되는 경계
 		CLOCK.set(Instant.parse("2026-10-14T15:30:00Z"));
@@ -214,7 +227,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 	void history_of_customer_without_entries_is_empty() throws Exception {
 		// given 등록만 한 고객 (충전 전이라 계좌에 거래 없음)
 		Cookie session = loginAsNewStaff("cb47-empty-staff");
-		RegisteredCustomer customer = customerService.register("CB47빈이력", "01012345151");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47빈이력", "01012345151");
 		entityManager.flush();
 
 		// when 이력 조회
@@ -233,11 +246,11 @@ class LedgerEntryHistoryApiIntegrationTest {
 		// given 10,000 충전 → 10,000 사용(잔액 0) → 사장님이 비활성화
 		Cookie session = loginAsNewStaff("cb47-inactive-staff");
 		Employee admin = saveAdmin("cb47-inactive-admin"); // 비활성화는 ADMIN만 하므로 처리자도 ADMIN으로
-		RegisteredCustomer customer = customerService.register("CB47비활성", "01012345252");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47비활성", "01012345252");
 		charge(session, customer.customerId(), 10000, "cb47-inactive-charge");
 		use(session, customer.customerId(), 10000, "cb47-inactive-use");
 		entityManager.flush();
-		customerService.deactivate(customer.customerId(), admin.getId());
+		customerService.deactivate(storeId, customer.customerId(), admin.getId());
 		entityManager.flush();
 
 		// when 직원이 이력 조회
@@ -269,7 +282,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 	void history_rejects_size_out_of_range(String size) throws Exception {
 		// given 로그인한 직원, 있는 고객
 		Cookie session = loginAsNewStaff("cb47-size-staff");
-		RegisteredCustomer customer = customerService.register("CB47크기", "01012345353");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47크기", "01012345353");
 
 		// when size 0 또는 101로 조회
 		// then 400 INVALID_INPUT (고객 목록 API와 같은 규칙)
@@ -283,7 +296,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 	@DisplayName("로그인하지 않으면 거래 이력을 조회할 수 없다")
 	void history_requires_login() throws Exception {
 		// given 세션 쿠키 없음, 있는 고객
-		RegisteredCustomer customer = customerService.register("CB47비로그인", "01012345454");
+		RegisteredCustomer customer = customerService.register(storeId, "CB47비로그인", "01012345454");
 
 		// when 이력 조회
 		// then 401 UNAUTHENTICATED
@@ -324,7 +337,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 
 	// ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
 	private Employee saveAdmin(String loginId) {
-		Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
+		Employee admin = TestEmployees.owner(storeId, loginId, passwordEncoder.encode("test5678!"), "테스트사장",
 				clock.instant());
 		employeeRepository.add(admin);
 		return admin;
@@ -332,7 +345,7 @@ class LedgerEntryHistoryApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

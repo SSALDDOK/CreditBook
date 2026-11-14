@@ -17,6 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.servlet.http.Cookie;
 import tools.jackson.databind.JsonNode;
@@ -70,6 +72,14 @@ public class ConcurrencyApiIntegrationTest {
     @Autowired
     Clock clock;
 
+    // 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+    UUID storeId;
+
+    @BeforeEach
+    void createStore() {
+        storeId = TestStores.create(jdbcTemplate);
+    }
+
     @Test
     @DisplayName("같은 계좌에 사용 요청 2건이 동시에 오면 1건만 반영되고 잔액은 음수가 되지 않는다")
     @Tag("REQ-10")
@@ -78,7 +88,7 @@ public class ConcurrencyApiIntegrationTest {
         // given — 직원 로그인, 고유한 고객 등록, 5,000원 충전 (모두 커밋됨)
         Cookie session = loginAsNewStaff();
         String suffix = UUID.randomUUID().toString().substring(0, 4); // 매번 다른 4글자
-        RegisteredCustomer customer = customerService.register("TC40" + suffix,
+        RegisteredCustomer customer = customerService.register(storeId, "TC40" + suffix,
                 "010" + String.format("%04d", new Random().nextInt(10000)) + "4040");
         // 충전 API 호출 — 키는 UUID
         mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
@@ -145,7 +155,7 @@ public class ConcurrencyApiIntegrationTest {
         // given — 직원 로그인, 고유한 고객 등록, 5,000원 충전 (모두 커밋됨)
         Cookie session = loginAsNewStaff();
         String suffix = UUID.randomUUID().toString().substring(0, 4); // 매번 다른 4글자
-        RegisteredCustomer customer = customerService.register("REQ34" + suffix,
+        RegisteredCustomer customer = customerService.register(storeId, "REQ34" + suffix,
                 "010" + String.format("%04d", new Random().nextInt(10000)) + "5050");
         // 충전 API 호출 — 키는 UUID
         mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
@@ -215,7 +225,7 @@ public class ConcurrencyApiIntegrationTest {
     // 직원은 트랜잭션 안에서 만들어야 커밋된다
     private Cookie loginAsNewStaff() {
         Employee employee = transactionTemplate.execute(status -> {
-            Employee e = TestEmployees.readyStaff("tc40-" + UUID.randomUUID(), passwordEncoder.encode("test1234!"),
+            Employee e = TestEmployees.readyStaff(storeId, "tc40-" + UUID.randomUUID(), passwordEncoder.encode("test1234!"),
                     "테스트직원", clock.instant());
             employeeRepository.add(e);
             return e;

@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import jakarta.persistence.EntityManager;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestStores;
 import com.creditbook.support.WithMockEmployee;
 
 /**
@@ -49,6 +51,14 @@ class CustomerDeactivateApiIntegrationTest {
 	@Autowired
 	EntityManager entityManager;
 
+	// 매장 (REQ-36) — @WithMockEmployee 직원의 기본 매장. 고객도 이 매장에 만든다
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.ensure(jdbcTemplate, TestStores.DEFAULT_STORE_ID);
+	}
+
 	@Test
 	@WithMockEmployee(role = "STAFF")
 	@DisplayName("STAFF 계정의 고객 비활성화 호출 — 403, 고객 상태 변화 없음")
@@ -57,7 +67,7 @@ class CustomerDeactivateApiIntegrationTest {
 	@Tag("REQ-4")
 	void staff_cannot_deactivate_customer() throws Exception {
 		// given — 잔액 0원인 활성 고객 (ADMIN이면 비활성화되는 조건)
-		RegisteredCustomer customer = customerService.register("권한TC8", "01080800008");
+		RegisteredCustomer customer = customerService.register(storeId, "권한TC8", "01080800008");
 
 		// when & then — 화면 버튼 없이 API를 직접 호출해도 403 (버튼 숨기기는 보안이 아님)
 		mockMvc.perform(patch("/api/customers/{id}/deactivate", customer.customerId()))
@@ -74,7 +84,7 @@ class CustomerDeactivateApiIntegrationTest {
 	@Tag("REQ-4")
 	void admin_can_deactivate_customer_with_zero_balance() throws Exception {
 		// given — 위와 같은 조건(잔액 0원 활성 고객), 역할만 ADMIN
-		RegisteredCustomer customer = customerService.register("권한TC8대조", "01080800009");
+		RegisteredCustomer customer = customerService.register(storeId, "권한TC8대조", "01080800009");
 
 		// when & then — 204(성공, 본문 없음)
 		mockMvc.perform(patch("/api/customers/{id}/deactivate", customer.customerId()))

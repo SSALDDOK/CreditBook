@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestStores;
 
 /**
  * V2__customers_phone_not_null.sql 이 적용된 상태에서 연락처 없는 고객을 DB 가 거절하는지 증명한다.
@@ -34,13 +36,22 @@ class V2CustomersPhoneNotNullTest {
 	@Autowired
 	JdbcTemplate jdbcTemplate;
 
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@Test
 	@DisplayName("연락처가 없으면 고객이 등록되지 않는다 (DB 제약)")
 	void customer_without_phone_is_rejected() {
 		// given: 연락처를 넣지 않는 직접 INSERT
 
 		// when / then
-		assertThatThrownBy(() -> jdbcTemplate.update("INSERT INTO customers (name) VALUES (?)", "연락처없음"))
+		assertThatThrownBy(() -> jdbcTemplate.update("INSERT INTO customers (store_id, name) VALUES (?, ?)", storeId,
+				"연락처없음"))
 				.isInstanceOf(DataIntegrityViolationException.class)
 				.satisfies(ex -> {
 					PSQLException psql = psqlExceptionOf(ex);
@@ -57,7 +68,8 @@ class V2CustomersPhoneNotNullTest {
 
 		// when
 		UUID id = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id", UUID.class, "연락처있음", phone);
+				"INSERT INTO customers (store_id, name, phone) VALUES (?, ?, ?) RETURNING id", UUID.class, storeId,
+				"연락처있음", phone);
 
 		// then
 		String saved = jdbcTemplate.queryForObject("SELECT phone FROM customers WHERE id = ?", String.class, id);

@@ -9,7 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -78,12 +81,20 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@Test
 	@DisplayName("같은 연락처의 활성 고객이 있으면 확인 표시 없이 등록할 때 409 DUPLICATE_PHONE과 기존 고객 이름을 주고 아무것도 만들지 않는다")
 	void duplicate_phone_without_confirm_returns_409_with_existing_customer() throws Exception {
 		// given 고객 A(활성) 010-0000-1111
 		Cookie session = loginAsNewStaff("tc45-staff");
-		RegisteredCustomer customerA = customerService.register("TC45고객A", PHONE_A);
+		RegisteredCustomer customerA = customerService.register(storeId, "TC45고객A", PHONE_A);
 		entityManager.flush();
 		// when 같은 번호로 다른 이름 등록 (확인 표시 없음)
 		String body = register(session, "TC45가족", "010-0000-1111", null, false)
@@ -108,7 +119,7 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 	void duplicate_phone_with_confirm_registers_and_both_are_searchable() throws Exception {
 		// given 고객 A(활성) 010-0000-1111
 		Cookie session = loginAsNewStaff("tc45-staff");
-		customerService.register("TC45고객A", PHONE_A);
+		customerService.register(storeId, "TC45고객A", PHONE_A);
 		entityManager.flush();
 		// when 같은 요청을 확인 표시(confirmDuplicatePhone=true)를 붙여 보냄
 		register(session, "TC45가족", "010-0000-1111", null, true)
@@ -151,8 +162,8 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 		// given 고객 B 등록(0원) → 사장님이 비활성화
 		Cookie session = loginAsNewStaff("tc45-staff");
 		Employee admin = saveAdmin("tc45-admin"); // 비활성화는 ADMIN만
-		RegisteredCustomer customerB = customerService.register("TC45고객B", PHONE_B);
-		customerService.deactivate(customerB.customerId(), admin.getId());
+		RegisteredCustomer customerB = customerService.register(storeId, "TC45고객B", PHONE_B);
+		customerService.deactivate(storeId, customerB.customerId(), admin.getId());
 		entityManager.flush();
 		// when B 번호로 등록 (확인 표시 없음)
 		register(session, "TC45새손님", "010-0000-2222", null, false)
@@ -175,10 +186,10 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 		// given 같은 번호로 3명 — 비활성 1명(가장 먼저 등록), 활성 2명 (확인 표시로 등록, 등록 순서: 옛주인 → 엄마 → 딸)
 		Cookie session = loginAsNewStaff("tc45-staff");
 		Employee admin = saveAdmin("tc45-admin");
-		RegisteredCustomer oldOwner = customerService.register("TC45옛주인", PHONE_A);
-		customerService.deactivate(oldOwner.customerId(), admin.getId());
-		customerService.register("TC45엄마", PHONE_A);
-		customerService.register("TC45딸", PHONE_A);
+		RegisteredCustomer oldOwner = customerService.register(storeId, "TC45옛주인", PHONE_A);
+		customerService.deactivate(storeId, oldOwner.customerId(), admin.getId());
+		customerService.register(storeId, "TC45엄마", PHONE_A);
+		customerService.register(storeId, "TC45딸", PHONE_A);
 		entityManager.flush();
 		// when 같은 번호로 또 등록 (확인 표시 없음)
 		register(session, "TC45아들", "010-0000-1111", null, false)
@@ -260,7 +271,7 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 
 	// ADMIN 직원만 저장 (서비스로 비활성화할 때 처리자 ID용)
 	private Employee saveAdmin(String loginId) {
-		Employee admin = TestEmployees.owner(loginId, passwordEncoder.encode("test5678!"), "테스트사장",
+		Employee admin = TestEmployees.owner(storeId, loginId, passwordEncoder.encode("test5678!"), "테스트사장",
 				clock.instant());
 		employeeRepository.add(admin);
 		return admin;
@@ -268,7 +279,7 @@ class CustomerRegisterDuplicatePhoneApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

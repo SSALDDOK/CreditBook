@@ -12,6 +12,7 @@ import java.util.UUID;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -78,13 +80,21 @@ class IdempotencyKeyApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@Test
 	@DisplayName("동일 멱등키로 두 번 차감 요청 — 1건만 반영되고 두 번째 응답은 같은 거래 ID")
 	@Tag("TC-12")
 	void same_key_use_request_twice_is_applied_once() throws Exception {
 		// given — 잔액 10,000원
 		Cookie session = loginAsNewStaff("tc12-staff");
-		RegisteredCustomer customer = customerService.register("멱등TC12", "01012120012");
+		RegisteredCustomer customer = customerService.register(storeId, "멱등TC12", "01012120012");
 		mockMvc.perform(withSession(post("/api/customers/{id}/charges", customer.customerId()), session)
 				.header("Idempotency-Key", "tc12-charge")
 				.content("{\"amount\": 10000}"))
@@ -114,7 +124,7 @@ class IdempotencyKeyApiIntegrationTest {
 
 	// 직원 저장 → 진짜 토큰 발급 → 로그인 쿠키(CB_SESSION)에 담기 (거래에 처리 직원이 실제로 있어야 해서)
 	private Cookie loginAsNewStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return new Cookie(SessionCookies.NAME, jwtTokenService.issue(employee.getId()).value());

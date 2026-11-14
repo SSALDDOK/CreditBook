@@ -26,7 +26,7 @@ import jakarta.validation.Valid;
 /**
  * 취소 API — 충전 취소 (REQ-7)·사용 취소 (REQ-34). 요청 형식 검증과 DTO 변환만 하고, 취소 대상 판단·잔액 계산은 서비스·도메인이 한다.
  * <p>
- * 처리 직원은 {@link CurrentEmployee} 에서만 꺼낸다 (요청 본문·헤더로 받지 않는다). 구현 빈이 없거나 직원을 알 수 없으면
+ * 처리 직원과 매장은 {@link CurrentEmployee} 에서만 꺼낸다 (요청 본문·헤더로 받지 않는다). 다른 매장 고객·거래면 404 (REQ-36). 구현 빈이 없거나 직원을 알 수 없으면
  * 거래를 만들지 않고 401 로 거절한다.
  * <p>
  * 요청 키(Idempotency-Key, REQ-10)는 충전·사용과 같은 규칙으로 필수다. 같은 키로 같은 요청이 다시 오면
@@ -50,8 +50,9 @@ public class CancelController {
 			@Valid @RequestBody ChargeCancelRequest request,
 			@RequestHeader(name = IdempotencyHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey) {
 		UUID performedBy = requireCurrentEmployeeId();
+		UUID storeId = requireCurrentStoreId();
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
-		ChargeCancelResult result = cancelService.cancelCharge(customerId, chargeEntryId, request.reason(),
+		ChargeCancelResult result = cancelService.cancelCharge(storeId, customerId, chargeEntryId, request.reason(),
 				performedBy, key);
 		return IdempotencyHeaders.created(result.entryId(), result.replayed(), ChargeCancelResponse.from(result));
 	}
@@ -63,8 +64,10 @@ public class CancelController {
 			@Valid @RequestBody UseCancelRequest request,
 			@RequestHeader(name = IdempotencyHeaders.IDEMPOTENCY_KEY, required = false) String idempotencyKey) {
 		UUID performedBy = requireCurrentEmployeeId();
+		UUID storeId = requireCurrentStoreId();
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
-		UseCancelResult result = cancelService.cancelUse(customerId, useEntryId, request.reason(), performedBy, key);
+		UseCancelResult result = cancelService.cancelUse(storeId, customerId, useEntryId, request.reason(), performedBy,
+				key);
 		return IdempotencyHeaders.created(result.entryId(), result.replayed(), UseCancelResponse.from(result));
 	}
 
@@ -75,6 +78,16 @@ public class CancelController {
 			throw new UnauthenticatedException();
 		}
 		return id;
+	}
+
+	/** 현재 직원의 매장. 알 수 없으면 401 — 매장 조건 없이 처리하지 않는다 (REQ-36). */
+	private UUID requireCurrentStoreId() {
+		CurrentEmployee employee = currentEmployee.getIfAvailable();
+		UUID storeId = employee == null ? null : employee.storeId();
+		if (storeId == null) {
+			throw new UnauthenticatedException();
+		}
+		return storeId;
 	}
 
 }

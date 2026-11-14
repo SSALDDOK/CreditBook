@@ -19,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.creditbook.TestcontainersConfiguration;
 import com.creditbook.support.RequiresDocker;
+import com.creditbook.support.TestStores;
 
 /**
  * CB-7 / 정합성 증명 테스트 3종 중 "append-only 차단":
@@ -37,21 +38,24 @@ class LedgerEntriesAppendOnlyTest {
 	@Autowired
 	JdbcTemplate jdbcTemplate;
 
+	// 매장 (REQ-36) — 직원·고객·계좌·거래는 같은 매장이어야 저장된다
+	private UUID storeId;
 	private UUID employeeId;
 	private UUID accountId;
 	private UUID chargeId;
 
 	@BeforeEach
 	void setUp() {
+		storeId = TestStores.create(jdbcTemplate);
 		String loginId = "tester-" + UUID.randomUUID().toString().substring(0, 8);
 		employeeId = jdbcTemplate.queryForObject(
-				"INSERT INTO employees (login_id, password_hash, name, role) VALUES (?, ?, ?, 'ADMIN') RETURNING id",
-				UUID.class, loginId, "hashed-password", "테스트 관리자");
+				"INSERT INTO employees (store_id, login_id, password_hash, name, role) VALUES (?, ?, ?, ?, 'ADMIN') RETURNING id",
+				UUID.class, storeId, loginId, "hashed-password", "테스트 관리자");
 		UUID customerId = jdbcTemplate.queryForObject(
-				"INSERT INTO customers (name, phone) VALUES (?, ?) RETURNING id", UUID.class, "홍길동", "01012345678");
+				"INSERT INTO customers (store_id, name, phone) VALUES (?, ?, ?) RETURNING id", UUID.class, storeId, "홍길동", "01012345678");
 		accountId = jdbcTemplate.queryForObject(
-				"INSERT INTO prepaid_accounts (customer_id, balance) VALUES (?, 5000) RETURNING id",
-				UUID.class, customerId);
+				"INSERT INTO prepaid_accounts (store_id, customer_id, balance) VALUES (?, ?, 5000) RETURNING id",
+				UUID.class, storeId, customerId);
 		chargeId = insertLedgerEntry("CHARGE", 5_000, 5_000, null);
 	}
 
@@ -108,9 +112,9 @@ class LedgerEntriesAppendOnlyTest {
 
 	private UUID insertLedgerEntry(String type, long amount, long balanceAfter, UUID reversesId) {
 		return jdbcTemplate.queryForObject(
-				"INSERT INTO ledger_entries (account_id, type, amount, balance_after, reverses_id, performed_by) "
-						+ "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
-				UUID.class, accountId, type, BigDecimal.valueOf(amount), BigDecimal.valueOf(balanceAfter),
+				"INSERT INTO ledger_entries (store_id, account_id, type, amount, balance_after, reverses_id, performed_by) "
+						+ "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+				UUID.class, storeId, accountId, type, BigDecimal.valueOf(amount), BigDecimal.valueOf(balanceAfter),
 				reversesId, employeeId);
 	}
 

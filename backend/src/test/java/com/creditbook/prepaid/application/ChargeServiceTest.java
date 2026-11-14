@@ -48,6 +48,8 @@ import com.creditbook.prepaid.domain.PrepaidAccountRepository;
 @ExtendWith(MockitoExtension.class)
 class ChargeServiceTest {
 
+	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
+
 	private static final Instant NOW = Instant.parse("2026-10-01T01:00:00Z");
 	private static final UUID CUSTOMER_ID = UUID.fromString("0f9a3c1e-5b7d-4e2a-9c8b-1d2e3f4a5b6c");
 	private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-00000000e001");
@@ -76,9 +78,9 @@ class ChargeServiceTest {
 	@BeforeEach
 	void setUp() {
 		// 계좌가 없는 경우처럼 고객 조회까지 가지 않는 테스트도 있어 lenient 로 둔다
-		lenient().when(customerRepository.findById(CUSTOMER_ID))
-				.thenReturn(Optional.of(Customer.register("김단골", "01012345678", NOW.minusSeconds(7_200))));
-		account = PrepaidAccount.open(CUSTOMER_ID, NOW.minusSeconds(3600));
+		lenient().when(customerRepository.findByIdAndStoreId(CUSTOMER_ID, STORE_ID))
+				.thenReturn(Optional.of(Customer.register(STORE_ID, "김단골", "01012345678", NOW.minusSeconds(7_200))));
+		account = PrepaidAccount.open(STORE_ID, CUSTOMER_ID, NOW.minusSeconds(3600));
 		service = newService(POLICY);
 	}
 
@@ -93,10 +95,10 @@ class ChargeServiceTest {
 	@DisplayName("잔액 0원 고객에게 50,000원 충전을 등록하면 잔액이 50,000원이 되고 CHARGE 유형 거래가 1건 생성된다")
 	void charge_increases_balance_and_adds_one_charge_entry() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when
-		ChargeResult result = service.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
+		ChargeResult result = service.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -122,10 +124,10 @@ class ChargeServiceTest {
 	@DisplayName("충전 거래에는 처리 직원과 서버 시각이 기록된다")
 	void charge_records_performer_and_server_time() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when
-		ChargeResult result = service.charge(CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
+		ChargeResult result = service.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY);
 
 		// then
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
@@ -143,10 +145,10 @@ class ChargeServiceTest {
 	@DisplayName("금액이 0 이하이거나 소수점이거나 1회 한도를 넘으면 거절하고 거래를 저장하지 않으며 잔액도 바뀌지 않는다")
 	void charge_rejects_invalid_amount_and_saves_nothing(String amount) {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when / then
-		assertThatThrownBy(() -> service.charge(CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.charge(STORE_ID, CUSTOMER_ID, new BigDecimal(amount), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(InvalidAmountException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 		assertThat(account.getBalance()).isEqualByComparingTo("0");
@@ -163,16 +165,16 @@ class ChargeServiceTest {
 	void charge_limit_follows_configured_policy(long maxAmount, long amount, boolean allowed) {
 		// given
 		ChargeService configured = newService(ChargePolicy.ofMaxAmount(maxAmount));
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
 
 		// when / then
 		if (allowed) {
-			ChargeResult result = configured.charge(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY);
+			ChargeResult result = configured.charge(STORE_ID, CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY);
 			assertThat(result.balanceAfter()).isEqualByComparingTo(BigDecimal.valueOf(amount));
 			verify(ledgerEntryRepository).add(any());
 		}
 		else {
-			assertThatThrownBy(() -> configured.charge(CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
+			assertThatThrownBy(() -> configured.charge(STORE_ID, CUSTOMER_ID, BigDecimal.valueOf(amount), null, EMPLOYEE_ID, KEY))
 					.isInstanceOf(ChargeLimitExceededException.class);
 			verify(ledgerEntryRepository, never()).add(any());
 		}
@@ -184,10 +186,10 @@ class ChargeServiceTest {
 	void charge_fails_when_account_not_found() {
 		// given
 		UUID unknownCustomer = UUID.randomUUID();
-		given(prepaidAccountRepository.findByCustomerId(unknownCustomer)).willReturn(Optional.empty());
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(unknownCustomer, STORE_ID)).willReturn(Optional.empty());
 
 		// when / then
-		assertThatThrownBy(() -> service.charge(unknownCustomer, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY))
+		assertThatThrownBy(() -> service.charge(STORE_ID, unknownCustomer, new BigDecimal("10000"), null, EMPLOYEE_ID, KEY))
 				.isInstanceOf(PrepaidAccountNotFoundException.class);
 		verify(ledgerEntryRepository, never()).add(any());
 	}
@@ -197,14 +199,14 @@ class ChargeServiceTest {
 	@DisplayName("같은 요청 키로 같은 충전을 다시 요청하면 새로 충전하지 않고 처음 거래를 재응답으로 돌려준다")
 	void charge_with_same_key_replays_first_entry() {
 		// given
-		given(prepaidAccountRepository.findByCustomerId(CUSTOMER_ID)).willReturn(Optional.of(account));
-		ChargeResult first = service.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
+		given(prepaidAccountRepository.findByCustomerIdAndStoreId(CUSTOMER_ID, STORE_ID)).willReturn(Optional.of(account));
+		ChargeResult first = service.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
 		ArgumentCaptor<LedgerEntry> entryCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
 		verify(ledgerEntryRepository).add(entryCaptor.capture());
 		given(ledgerEntryRepository.findByIdempotencyKey(KEY)).willReturn(Optional.of(entryCaptor.getValue()));
 
 		// when
-		ChargeResult again = service.charge(CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
+		ChargeResult again = service.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY);
 
 		// then
 		assertThat(first.replayed()).isFalse();

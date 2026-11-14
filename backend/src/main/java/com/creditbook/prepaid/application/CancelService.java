@@ -39,6 +39,9 @@ import com.creditbook.prepaid.domain.PrepaidAccountNotFoundException;
  * 사용 취소는 잔액을 늘리므로, 비활성 고객이면 같은 트랜잭션에서 다시 활성화한다 (충전과 같은 규칙).
  * 충전 취소는 잔액을 줄이므로 고객 상태를 건드리지 않는다.
  * 원 거래는 바꾸지 않고 반제 거래를 추가만 한다 (append-only).
+ * <p>
+ * 매장 (REQ-36): 계좌는 요청한 직원의 매장에서 찾고(다른 매장 고객이면 404), 대상 거래도 그 계좌의 매장에서만 찾는다(다른 매장 거래면
+ * 404 — 존재를 드러내지 않는다). 같은 매장의 다른 계좌 거래는 도메인이 대상 오류(400)로 거절한다.
  */
 @Service
 public class CancelService {
@@ -69,13 +72,14 @@ public class CancelService {
 	 * 시각은 서버 시각이다 (REQ-20). 같은 요청 키로 같은 요청(고객·대상 거래·사유)이 다시 오면 다시 취소하지 않고
 	 * 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10).
 	 *
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param customerId 취소할 충전 건의 고객
 	 * @param chargeEntryId 취소할 충전 거래 ID
 	 * @param reason 취소 사유 (필수)
 	 * @param performedBy 처리 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param idempotencyKey 요청 키
-	 * @throws PrepaidAccountNotFoundException 고객의 계좌가 없을 때
-	 * @throws LedgerEntryNotFoundException 거래 ID 에 해당하는 거래가 없을 때
+	 * @throws PrepaidAccountNotFoundException 그 매장에 고객의 계좌가 없을 때 (없는 고객·다른 매장 고객)
+	 * @throws LedgerEntryNotFoundException 거래 ID 에 해당하는 거래가 그 매장에 없을 때 (없는 거래·다른 매장 거래)
 	 * @throws InvalidCancelTargetException 다른 고객의 거래이거나 CHARGE 가 아니거나 반제 거래일 때
 	 * @throws AlreadyCancelledException 이미 취소된 충전 건일 때
 	 * @throws ChargeCancelNotSameDayException 당일 충전 건이 아닐 때
@@ -83,15 +87,15 @@ public class CancelService {
 	 * @throws com.creditbook.prepaid.domain.CancelReasonRequiredException 사유가 없거나 공백일 때
 	 * @throws com.creditbook.prepaid.domain.IdempotencyKeyReusedException 요청 키가 다른 요청에 이미 쓰였을 때
 	 */
-	public ChargeCancelResult cancelCharge(UUID customerId, UUID chargeEntryId, String reason, UUID performedBy,
-			IdempotencyKey idempotencyKey) {
+	public ChargeCancelResult cancelCharge(UUID storeId, UUID customerId, UUID chargeEntryId, String reason,
+			UUID performedBy, IdempotencyKey idempotencyKey) {
 		Objects.requireNonNull(customerId, "customerId");
 		Objects.requireNonNull(chargeEntryId, "chargeEntryId");
 		Objects.requireNonNull(performedBy, "performedBy");
 		Objects.requireNonNull(idempotencyKey, "idempotencyKey");
 		IdempotentRequest request = IdempotentRequest.reversal(LedgerEntryType.CHARGE_CANCEL, chargeEntryId, reason);
 
-		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
+		LedgerWriteOutcome outcome = ledgerWriter.write(storeId, customerId, idempotencyKey, request,
 				account -> cancelChargeOrWarn(account, chargeEntryId, reason, performedBy, idempotencyKey));
 
 		if (!outcome.replayed()) {
@@ -107,7 +111,7 @@ public class CancelService {
 	/** 쓰기 트랜잭션 안에서 불린다. 정상적인 거절은 WARN 으로 남기고 그대로 다시 던진다. */
 	private LedgerEntry cancelChargeOrWarn(PrepaidAccount account, UUID chargeEntryId, String reason,
 			UUID performedBy, IdempotencyKey idempotencyKey) {
-		LedgerEntry target = ledgerEntryRepository.findById(chargeEntryId)
+		LedgerEntry target = ledgerEntryRepository.findByIdAndStoreId(chargeEntryId, account.getStoreId())
 				.orElseThrow(() -> new LedgerEntryNotFoundException(chargeEntryId));
 		Optional<LedgerEntry> existingCancel = ledgerEntryRepository.findByReversesId(chargeEntryId);
 		try {
@@ -143,19 +147,20 @@ public class CancelService {
 	 * 같은 요청 키로 같은 요청(고객·대상 거래·사유)이 다시 오면 다시 취소하지 않고 처음 거래를 {@code replayed = true} 로 돌려준다 (REQ-10) —
 	 * 이때는 재활성화도 다시 하지 않는다.
 	 *
+	 * @param storeId 요청한 직원의 매장 — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param customerId 취소할 사용 건의 고객
 	 * @param useEntryId 취소할 사용 거래 ID
 	 * @param reason 취소 사유 (필수)
 	 * @param performedBy 처리 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다
 	 * @param idempotencyKey 요청 키
-	 * @throws PrepaidAccountNotFoundException 고객의 계좌가 없을 때
-	 * @throws LedgerEntryNotFoundException 거래 ID 에 해당하는 거래가 없을 때
+	 * @throws PrepaidAccountNotFoundException 그 매장에 고객의 계좌가 없을 때 (없는 고객·다른 매장 고객)
+	 * @throws LedgerEntryNotFoundException 거래 ID 에 해당하는 거래가 그 매장에 없을 때 (없는 거래·다른 매장 거래)
 	 * @throws InvalidCancelTargetException 다른 고객의 거래이거나 USE 가 아니거나 반제 거래일 때
 	 * @throws AlreadyCancelledException 이미 취소된 사용 건일 때
 	 * @throws com.creditbook.prepaid.domain.CancelReasonRequiredException 사유가 없거나 공백일 때
 	 * @throws com.creditbook.prepaid.domain.IdempotencyKeyReusedException 요청 키가 다른 요청에 이미 쓰였을 때
 	 */
-	public UseCancelResult cancelUse(UUID customerId, UUID useEntryId, String reason, UUID performedBy,
+	public UseCancelResult cancelUse(UUID storeId, UUID customerId, UUID useEntryId, String reason, UUID performedBy,
 			IdempotencyKey idempotencyKey) {
 		Objects.requireNonNull(customerId, "customerId");
 		Objects.requireNonNull(useEntryId, "useEntryId");
@@ -165,7 +170,7 @@ public class CancelService {
 		// 재활성화 여부는 커밋된 뒤에만 로그로 남긴다 — 커밋 전에 남기면 롤백된 재활성화가 로그에 남는다
 		AtomicBoolean reactivated = new AtomicBoolean(false);
 
-		LedgerWriteOutcome outcome = ledgerWriter.write(customerId, idempotencyKey, request,
+		LedgerWriteOutcome outcome = ledgerWriter.write(storeId, customerId, idempotencyKey, request,
 				account -> cancelUseAndReactivate(account, useEntryId, reason, performedBy, idempotencyKey,
 						reactivated));
 
@@ -191,7 +196,7 @@ public class CancelService {
 		reactivated.set(false); // 반제 충돌로 다시 판정할 때 앞 시도(롤백됨)의 값이 남지 않게
 		Instant now = clock.instant();
 		LedgerEntry entry = cancelUseOrWarn(account, useEntryId, reason, performedBy, now, idempotencyKey);
-		Customer customer = customerRepository.findById(account.getCustomerId())
+		Customer customer = customerRepository.findByIdAndStoreId(account.getCustomerId(), account.getStoreId())
 				.orElseThrow(() -> new CustomerNotFoundException(account.getCustomerId()));
 		reactivated.set(customer.reactivate(now));
 		return entry;
@@ -199,7 +204,7 @@ public class CancelService {
 
 	private LedgerEntry cancelUseOrWarn(PrepaidAccount account, UUID useEntryId, String reason, UUID performedBy,
 			Instant now, IdempotencyKey idempotencyKey) {
-		LedgerEntry target = ledgerEntryRepository.findById(useEntryId)
+		LedgerEntry target = ledgerEntryRepository.findByIdAndStoreId(useEntryId, account.getStoreId())
 				.orElseThrow(() -> new LedgerEntryNotFoundException(useEntryId));
 		Optional<LedgerEntry> existingCancel = ledgerEntryRepository.findByReversesId(useEntryId);
 		try {

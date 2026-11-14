@@ -6,3 +6,6 @@ creditbook:
       # MockMvc 요청은 모두 같은 IP(127.0.0.1)라 운영 기준(1분 10회)이면 로그인을 여러 번 하는 테스트가 429 에 걸린다.
       # 레이트 리밋 자체를 검증하는 테스트는 그 클래스에서 낮춰 쓴다
       max-requests: 10000
+    signup-rate-limit:
+      # 가입(POST /api/setup)도 같은 이유로 올린다 (운영 기준 10분 5회)
+      max-requests: 10000

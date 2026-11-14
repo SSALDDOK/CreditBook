@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -39,6 +41,7 @@ import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.SessionCookies;
 import com.creditbook.support.RequiresDocker;
 import com.creditbook.support.TestEmployees;
+import com.creditbook.support.TestStores;
 
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -80,6 +83,17 @@ class SecurityExposureApiIntegrationTest {
 	@Autowired
 	Clock clock;
 
+	@Autowired
+	JdbcTemplate jdbcTemplate;
+
+	// 매장 (REQ-36) — 직원·고객은 매장이 있어야 저장된다. 테스트마다 새 매장
+	UUID storeId;
+
+	@BeforeEach
+	void createStore() {
+		storeId = TestStores.create(jdbcTemplate);
+	}
+
 	@Test
 	@Tag("TC-23")
 	@DisplayName("주요 조회 API 5개 응답에 비밀번호 해시·토큰·연락처 원문이 없다")
@@ -87,7 +101,7 @@ class SecurityExposureApiIntegrationTest {
 		// given 직원 로그인, 고객 1명 등록하고 10,000원 충전 (연락처 01012342323)
 		Employee staff = saveStaff("tc23-staff");
 		Cookie session = loginAs(staff);
-		RegisteredCustomer customer = customerService.register("TC23노출", "01012342323");
+		RegisteredCustomer customer = customerService.register(storeId, "TC23노출", "01012342323");
 		charge(session, customer.customerId());
 		entityManager.flush();
 
@@ -122,7 +136,7 @@ class SecurityExposureApiIntegrationTest {
 	void client_errors_return_standard_message_without_internals() throws Exception {
 		// given 직원 로그인, 고객 1명
 		Cookie session = loginAsNewStaff("tc24-staff");
-		RegisteredCustomer customer = customerService.register("TC24오류", "01012342424");
+		RegisteredCustomer customer = customerService.register(storeId, "TC24오류", "01012342424");
 		entityManager.flush();
 
 		// when·then 깨진 JSON → 400 MALFORMED_REQUEST
@@ -182,7 +196,7 @@ class SecurityExposureApiIntegrationTest {
 	void unknown_field_in_request_is_rejected_and_logged(CapturedOutput output) throws Exception {
 		// given 직원 로그인, 고객 1명 10,000원 충전
 		Cookie session = loginAsNewStaff("unknown-field");
-		RegisteredCustomer customer = customerService.register("끼워넣기", "01012342525");
+		RegisteredCustomer customer = customerService.register(storeId, "끼워넣기", "01012342525");
 		charge(session, customer.customerId());
 		entityManager.flush();
 
@@ -241,7 +255,7 @@ class SecurityExposureApiIntegrationTest {
 
 	// 직원 저장 (해시값을 응답과 비교하려고 직원 객체를 돌려준다)
 	private Employee saveStaff(String loginId) {
-		Employee employee = TestEmployees.readyStaff(loginId, passwordEncoder.encode("test1234!"), "테스트직원",
+		Employee employee = TestEmployees.readyStaff(storeId, loginId, passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);
 		return employee;
