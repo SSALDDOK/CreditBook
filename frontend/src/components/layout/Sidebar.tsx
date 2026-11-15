@@ -1,4 +1,4 @@
-import { ArrowLeftRight, LayoutDashboard, UserCog, Users } from 'lucide-react'
+import { UserCog, Users } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import type { Role } from '@/api/auth'
@@ -14,11 +14,10 @@ const ROLE_LABELS: Record<Role, string> = { ADMIN: '사장님', STAFF: '직원' 
 
 type NavItem = { label: string; href: string; icon: ReactNode; testId: string }
 
-// 대시보드·거래 이력 화면은 아직 없다 — 메뉴 링크 자리만 둔다.
+// 화면이 있는 메뉴만 둔다. 대시보드·매장 전체 거래 이력은 화면이 없어(범위 밖) 메뉴도 두지 않는다 —
+// 누르면 아무 화면도 열리지 않는 빈 링크로 남아 있던 결함이 있었다. 고객별 거래 이력은 고객 상세의 '전체 이력 보기'로 간다
 const NAV_ITEMS: NavItem[] = [
-  { label: '대시보드', href: '#dashboard', icon: <LayoutDashboard aria-hidden="true" />, testId: 'nav-dashboard' },
   { label: '고객', href: '/customers', icon: <Users aria-hidden="true" />, testId: 'nav-customers' },
-  { label: '거래 이력', href: '#ledger', icon: <ArrowLeftRight aria-hidden="true" />, testId: 'nav-ledger' },
 ]
 
 // 사장(ADMIN)에게만 보이는 메뉴. 숨기는 것은 편의다 — 직원이 주소로 오면 화면이 403 카드를 보이고, 서버도 403 으로 막는다
@@ -75,18 +74,11 @@ export function Sidebar() {
         <ul className="flex flex-col gap-2">
           {navItems.map((item) => (
             <li key={item.label}>
-              {item.href.startsWith('/') ? (
-                // NavLink 가 현재 화면(하위 경로 포함 — 예: /customers/:id)이면 aria-current="page" 를 붙인다
-                <NavLink to={item.href} data-testid={item.testId} className={({ isActive }) => navClass(isActive)}>
-                  {item.icon}
-                  {item.label}
-                </NavLink>
-              ) : (
-                <a href={item.href} data-testid={item.testId} className={navClass(false)}>
-                  {item.icon}
-                  {item.label}
-                </a>
-              )}
+              {/* NavLink 가 현재 화면(하위 경로 포함 — 예: /customers/:id)이면 aria-current="page" 를 붙인다 */}
+              <NavLink to={item.href} data-testid={item.testId} className={({ isActive }) => navClass(isActive)}>
+                {item.icon}
+                {item.label}
+              </NavLink>
             </li>
           ))}
         </ul>
