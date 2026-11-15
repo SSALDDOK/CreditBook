@@ -8,7 +8,7 @@
   - 스프린트 보드: `collection://cb292543-5bea-46aa-8970-9191533e66df`
 - 워크스페이스 인덱스(결정 로그 등): 리포와 별개로 Claude 계정의 Project 문서에 있다 — 필요하면 사용자에게 요청
 
-마지막 동기화: 2026-11-08 새벽 (S6 마감 — 배포 CB-59·TC-57, CB-61, CB-22 기동 시 정합성 점검·배포 후 스모크, 범위 결정: CB-17·48·49·39 범위 밖, CB-52·PITR(CB-23)·README·API 명세 차이·전체 회고는 S7, S7 신설 11-09~15. 이전: 11-03 CB-15·45·60 구현). 리포가 Notion보다 앞선 것: 없음 (V3·V4 Neon 적용은 스키마 정의서에 반영됨)
+마지막 동기화: 2026-11-15 (S7 마감 — 여러 매장 전환 V5·CB-63·64, PITR 리허설 CB-23, V6 고객 정보 수정 CB-52, CB-62·67·68, 깨워 두기 교체 CB-65, README·API 명세 차이 목록 CB-66. 이전: 11-08 S6 마감). 리포가 Notion보다 앞선 것: `docs/api-spec-diff.md` 2절 1~7번(개발 컨벤션 §2·§2.2·§2.3, REQ-10 문구 - 인수인계 요청으로 반영 중)
 
 ## 세션 시작 점검 (Notion 읽기 전용)
 1. **인수인계 요청 DB** (순서 2026-10-26 사용자 지시): ① 코워크가 보낸 미완료 요청(`요청자 = 코워크`, `담당 = Claude Code`, `상태 ≠ 완료`)을 먼저 읽고 → ② 마지막 "다음 세션 시작 작업 — … 세션 마무리" 행을 읽고 → ③ 둘을 비교해 겹치는 것·바뀐 것·새로 끼어든 것을 보여 주고 합친 순서를 제안한다. 마무리 행은 지난 세션 시점 기준이라 그 뒤 코워크가 바꾼 것이 우선할 수 있다. 처리는 사용자가 승인한 뒤에 한다 (알림만, 자동 처리 없음)
@@ -29,7 +29,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 - **하루는 새벽 6시에 끝난다** (2026-10-26): 10-27 01시는 아직 10-26이다. 몇 일차인지, 처리 결과·Pass 보고·댓글 날짜는 이 기준으로 적되, Notion·Jira 본문에는 기준 자체를 쓰지 않는다
 - **제안마다 근거 줄** (2026-10-26): 제안·코워크 질문 답·범위 조정·위임 프롬프트 끝에 `확인한 근거: <REQ 경계 조건 · Jira 설명(결정 날짜) · 스프린트 카드 절 · TC/테스트 계획서 § · 코드 file:line> / 못 본 것: <…>`를 붙인다. "못 본 것"이 있으면 제안 전에 먼저 읽고, 읽을 수 없으면 그대로 적는다. 착수·위임·자르는 선을 정할 때는 REQ 경계 조건·Jira 결정 이력·스프린트 카드 조건을 먼저 읽고 Must를 앞에 둔다
 - **S6 타임박싱은 코워크 채팅에서 확정** (2026-11-02): 개발 쪽은 항목별 추정치·순서 의견만 `처리 결과`에 주고 표를 따로 만들지 않는다. 확정본은 S6 카드
-- **마이그레이션 메모** (2026-10-30 확인): `employees.must_change_password`는 V1에 이미 있어 CB-45는 마이그레이션이 필요 없다. V4는 CB-15 잠금 칸(연속 실패 횟수·잠금 끝 시각)만(11-03 구현). V3·V4는 2026-11-07 배포 직전 Neon에 함께 적용했다(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동). 다음 V5(S7)는 운영 DB에 적용하기 전에 PITR 리허설을 먼저 한다
+- **마이그레이션 메모**: V3·V4는 2026-11-07 배포 직전 Neon에 함께 적용했다(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동). V5(여러 매장, 11-14)·V6(고객 정보 수정, 11-15)는 PITR 리허설(CB-23, 11-14 성공) 뒤 **복구 지점 브랜치 → 사용자 확인 → 병합(배포 백엔드가 기동하며 적용) → 적용 전후 계좌 수·잔액 합계·정합성 점검 6개 비교** 순서로 적용했다. 다음 마이그레이션(V7)도 같은 순서
 
 ### 기술 설계는 리포가 먼저 (2026-09-28 사용자 결정 — "Notion이 먼저" 원칙의 예외)
 스키마·기술 설계(인덱스, 트리거, 권한, 제약조건, JPA 매핑 등)는 Claude Code가 설계하고, 코워크는 문서로 정리한다.
@@ -40,8 +40,8 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 - **API 명세도 같은 흐름** (2026-10-03 사용자 결정): 경로·요청/응답 필드·상태 코드·에러 코드는 Claude Code가 backend-dev와 상의해 설계하고, 추천안 하나를 실제 JSON 예시와 함께 제시해 사용자 최종 승인 후 확정한다. 서브에이전트 혼자 확정하지 않는다. 오류 응답 규칙(`code` 대문자 스네이크·도메인 예외 이름과 짝, 부가 숫자는 `details`)은 `ErrorResponse`·`ErrorCode`가 확정본이다
 - 업무 규칙 자체(요구사항, 취소 조건, 권한 정책 등)를 바꾸는 판단은 이 예외에 해당하지 않는다. 계속 Notion(요구사항 DB·결정 로그)이 먼저다
 
-## 스프린트 로드맵 (현재: S7, 11-09~11-15)
-1인 포트폴리오, 1주 스프린트 7개 + 쉬는 주 1주(09-21~11-15, 8주). 프로젝트 완료 예정 2026-11-15 — S7(여러 매장 전환)은 2026-11-07 사용자 결정으로 추가, 기간은 11-09 결정.
+## 스프린트 로드맵 (S7까지 완료 — 프로젝트 종료 2026-11-15)
+1인 포트폴리오, 1주 스프린트 7개 + 쉬는 주 1주(09-21~11-15, 8주). S7(여러 매장 전환)은 2026-11-07 사용자 결정으로 추가, 기간은 11-09 결정. 이후 작업은 '프로젝트 종료 후 고도화 후보'로 따로 정한다.
 
 **지난 스프린트 결과** (자세한 기록은 스프린트 보드 각 카드):
 - S2(10-04)·S3(10-11) 종료. S3은 가용일 2일 손실로 **위험 기반 우선순위 조정** — 짧게 확실히 닫을 수 있는 것을 먼저 끝내고, 의존 사슬 끝과 정합성 증명 테스트를 S4 첫 이틀로 이월했다
@@ -52,16 +52,23 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 
 **S6 결과** (11-02~08, 자세한 기록은 S6 카드):
 - **배포 전 반드시 모두 완료**: CB-15(로그인 잠금 + IP 레이트 리밋, PR #64·#66·#68) · CB-45(직원 관리·비밀번호 변경 API #67, TC-26·27·56 #71) · CB-60(SCR-12·13 #69, TC-58 #73) · CB-58(SCR-11 #72, 배포 직후 실제 매장 개설로 수동 검증)
-- **배포 CB-59** (11-07, #76·#77): 백엔드 Render(Docker, `backend/` 변경 커밋만 main CI 통과 뒤 자동 배포)·화면 Vercel(`/api/*`를 백엔드로 넘김)·DB Neon(V3·V4 적용). 화면 배포처가 넘기는 요청에 비밀 헤더 `X-Origin-Secret`을 붙이고 백엔드는 없거나 다르면 403(헬스 체크만 예외) → 프록시가 넘긴 접속자 IP를 믿을 수 있어 로그인 레이트 리밋이 실제 IP로 센다(배포 로그로 확인). 깨워 두기 `keep-alive.yml`은 GitHub 예약 실행이 몇 시간씩 건너뛰어 S7에 교체. TC-57 Pass·배포 뒤 보안 확인 2줄(#79). **배포 주소는 문서·PR에 적지 않는다**(리포에는 `vercel.json`·`keep-alive.yml`의 백엔드 주소만). 구성·환경변수 키·적용 순서는 운영 점검 가이드 11절
+- **배포 CB-59** (11-07, #76·#77): 백엔드 Render(Docker, `backend/` 변경 커밋만 main CI 통과 뒤 자동 배포)·화면 Vercel(`/api/*`를 백엔드로 넘김)·DB Neon(V3·V4 적용). 화면 배포처가 넘기는 요청에 비밀 헤더 `X-Origin-Secret`을 붙이고 백엔드는 없거나 다르면 403(헬스 체크만 예외) → 프록시가 넘긴 접속자 IP를 믿을 수 있어 로그인 레이트 리밋이 실제 IP로 센다(배포 로그로 확인). 깨워 두기 `keep-alive.yml`은 GitHub 예약 실행이 몇 시간씩 건너뛰어 S7(CB-65)에 리포 밖 예약 실행으로 교체. TC-57 Pass·배포 뒤 보안 확인 2줄(#79). **배포 주소는 문서·PR에 적지 않는다**(리포에는 `vercel.json`의 백엔드 주소만). 구성·환경변수 키·적용 순서는 운영 점검 가이드 11절
 - **CB-22** (11-08, #80): 백엔드가 기동할 때마다 정합성 점검 6개를 읽기 전용으로 돌려 로그로 남긴다(알림은 기동 로그 ERROR, 메일 알림은 S7). 배포 후 스모크 체크리스트 1회 수행(11-08)
 - **버그**: CB-57·55·56(#74·#75, TC-59), CB-54(#68), CB-61 사이드바 고정 매장명(#78, BUG-10 — 배포 후 발견)
 - **범위 결정** (11-06~08 사용자 결정): 범위 밖 — CB-17(PIT)·CB-48(거래 이력 필터)·CB-49(연락처 원문 조회 — REQ-26의 마스킹은 CB-25·TC-23으로 완료, 원문 조회만 범위 밖)·CB-39. S7로 — CB-52(여러 매장 전환이 고객 테이블과 연락처 중복 규칙을 바꾸므로 함께 설계, 운영 DB 스키마 변경은 복구 리허설 뒤)·PITR 리허설 CB-23(운영 DB 스키마 변경 전 반드시)·README·API 명세와 구현 차이 목록·전체 회고(S7까지 끝난 뒤 한 번에)·깨워 두기 교체와 정합성 점검 메일 알림·데모 계정
 - **이슈 짝** (11-02 사용자 결정): REQ-25 → CB-59, REQ-28 대표 → CB-22, REQ-30 대표 → CB-60(CB-45는 관련 Jira)
 
-**S7에서 지켜야 할 것** (11-07·08 사용자 결정, 확정본은 S7 카드):
-- 여러 매장 전환 — 가입 = 새 매장 + 그 매장 사장, 입구는 초대 코드, 매장 이름 중복 허용, 매장 사이 데이터가 섞이지 않음을 테스트로 증명. 업무 규칙(가입 항목·초대 코드·중복 기준)은 Notion이 먼저, 스키마 설계는 리포가 먼저
-- **운영 DB 스키마 변경(V5) 전에 PITR 리허설**(운영 점검 가이드 8절). 병합하면 백엔드가 기동하며 Neon에 바로 적용하므로 병합 전 사용자 확인 + 복구 지점
-- S7 전에는 공개 링크를 나누지 않는다(배포 장부는 지울 수 없는 실제 장부 — 시험 거래를 넣지 않는다)
+**S7 결과** (11-09~15, 자세한 기록과 회고는 S7 카드):
+- **여러 매장 전환**: 가입 = 새 매장 + 그 매장 사장, 입구는 초대 코드(운영자 발급, 해시만 저장, 사용 횟수 상한), 매장 이름 중복 허용, 아이디는 모든 매장에서 유일. V5(CB-63, #84)로 모든 표에 매장 구분 칸과 (매장, id) 복합 외래 키 · 화면(CB-64, #85: 초대 코드 칸·로그인 화면 [매장 개설]·사이드바 매장명). TC-60(매장 간 격리, 모든 id 경로 자동 포함)·TC-61(초대 코드)·TC-25 Pass
+- **PITR 리허설**(CB-23, 11-14 성공, 운영 점검 가이드 8절) 뒤 V5(11-14)·V6(11-15) 운영 적용, 전후 수치 같음
+- **이웃 매장**(CB-67, #87): 모든 통합 테스트가 데이터가 찬 이웃 매장과 함께 돌고, 이웃 매장에 쓰면 테스트 DB 트리거가 그 문장을 실패시킨다(롤백돼도 남는 카운터로 그 메서드도 실패) → 정합성 증명 3종·TC-27·52가 매장 2개 조건에서 다시 Pass
+- **고객 정보 수정**(CB-52, #89·#90·#91): V6 `customers.version` + `customer_change_logs`(값 없이 바뀐 칸만, append-only), SCR-9 화면, TC-54·TC-16 Pass
+- CB-62(BUG-5 `//`·`..` 주소 오류 형식, #86, TC-24) · CB-68(BUG-11 사이드바 빈 메뉴, #88 — 첫 사용 시나리오에서 발견)
+- **REQ-36 첫 사용 시나리오** 배포 환경 1회(11-15): 기능 모두 통과, 발견 2건(첫 접속 지연 → CB-65, 빈 메뉴 → CB-68)
+- **깨워 두기**(CB-65): GitHub 예약 실행 → 리포 밖 시간 기반 예약 실행(10분 간격 헬스 체크), 20분 간격 응답 시간으로 잠들지 않음 확인. 정합성 점검 메일 알림은 범위 밖(11-15)
+- **문서**(CB-66, #92): 루트 README(데모 방식 포함 — 공개 주소·공용 계정 없음, 요청마다 가입 1회용 초대 코드, 끝나면 사용 중지), `docs/api-spec-diff.md`(API 20개, 문서와 다른 곳 8건 — 구현이 틀린 곳 없음)
+- 일정: 수·목 작업 없음, 남은 일은 자르지 않고 토·일로 넘겨 일 11-15에 모두 끝냈다(연장 없음, 11-15 사용자 결정). 실제 약 30h(가용 29h·추정 35h)
+- 배포 장부는 지울 수 없는 실제 장부 — 시험 거래를 넣지 않는다. Notion 공개 링크는 스프린트 뒤 문서를 정리하고 README에 추가한다(11-15 사용자 결정)
 
 | 스프린트 | 기간 | 목표 |
 |---|---|---|
@@ -72,7 +79,7 @@ Notion·Jira는 코워크가, 리포(CLAUDE.md·코드·`.claude/`)는 Claude Co
 | (쉬는 주) | 10.19–10.25 | 사용자 단기 근무 — 작업 없음 |
 | S5 (완료) | 10.26–11.01 | S4 이월 테스트, 보안 점검(CB-53), 매장 개설 API(CB-44), 탐색적 테스트 → 결함 4건. CB-50은 범위 밖 |
 | S6 (완료) | 11.02–11.08 | 배포 전 반드시(CB-15·45·60·58), 버그(CB-57·55·56·54·61), 배포 CB-59·TC-57, CB-22 기동 시 정합성 점검, 운영 점검 가이드. CB-52·문서 일부는 S7 |
-| **S7** | 11.09–11.15 | 여러 매장 전환(초대 코드, 매장 간 격리 테스트), CB-52, PITR 리허설(스키마 변경 전), README·API 명세 차이 목록·전체 회고 |
+| S7 (완료) | 11.09–11.15 | 여러 매장 전환(V5, 초대 코드, 매장 간 격리 TC-60·이웃 매장), PITR 리허설, CB-52(V6·SCR-9), 깨워 두기 교체, README·API 명세 차이 목록, S7·전체 회고 |
 
 ## 서브에이전트 구성 계획
 `.claude/agents/`에 아래 5개가 있다. code-reviewer·database-reviewer는 S7 여러 매장 전환(V5) 설계·구현의 품질을 위해 2026-11-10 사용자 승인으로 추가했다(ECC 원본을 이 프로젝트 결정에 맞게 다시 씀).
@@ -120,7 +127,8 @@ com.creditbook
 │   ├─ domain/              PrepaidAccount, LedgerEntry, LedgerEntryType,
 │   │                       InsufficientBalanceException, InvalidAmountException
 │   ├─ application/         ChargeService, UsageService, CancelService (충전 취소·사용 취소 모두)
-│   ├─ controller/          ChargeController, UsageController, LedgerEntryController
+│   ├─ controller/          ChargeController, UsageController, CancelController,
+│   │                       LedgerEntryController, LedgerInputSettingsController
 │   └─ infrastructure/      PrepaidAccountJpaRepository, LedgerEntryJpaRepository
 │
 ├─ auth/                    인증
@@ -129,11 +137,12 @@ com.creditbook
 │   ├─ controller/          AuthController
 │   └─ infrastructure/      EmployeeJpaRepository
 │
-└─ store/                   매장 개설 (CB-44)
-    ├─ domain/              StoreProfile, StoreProfileRepository, SetupAlreadyCompletedException
-    ├─ application/         StoreSetupService  ← 매장 정보 + 첫 ADMIN을 한 트랜잭션으로
-    ├─ controller/          SetupController, dto/{SetupRequest,SetupResponse,SetupStatusResponse}
-    └─ infrastructure/      StoreProfileRepositoryImpl
+└─ store/                   매장·초대 코드 가입 (CB-44 → CB-63 여러 매장)
+    ├─ domain/              Store, StoreInviteCode, StoreRepository, StoreInviteCodeRepository,
+    │                       InvalidInviteCodeException, InvalidStoreNameException
+    ├─ application/         StoreSetupService  ← 초대 코드 사용 + 매장 + 첫 ADMIN을 한 트랜잭션으로
+    ├─ controller/          SetupController, dto/{SetupRequest,SetupResponse}
+    └─ infrastructure/      StoreRepositoryImpl, StoreInviteCodeRepositoryImpl
 ```
 
 직원 계정을 만드는 곳(매장 개설, 직원 추가)은 입력 규칙을 `EmployeeCredentialRules`에서 가져다 쓴다 — 두 곳의 규칙이 어긋나지 않게 한다.
@@ -166,7 +175,8 @@ com.creditbook
 ## 비즈니스 규칙 (요구사항 명세 DB 기준)
 | REQ | 규칙 |
 |---|---|
-| REQ-1 고객 등록 | 이름·연락처 필수, 메모 선택. 같은 연락처 고객(비활성 포함)이 있으면 `confirmDuplicatePhone`이 true가 아닐 때 저장하지 않고 409 `DUPLICATE_PHONE`(`details`에 기존 고객 id·이름·활성 여부) → 화면이 확인 창을 띄우고 다시 보낸다 (CB-51, S4 완료) |
+| REQ-1 고객 등록 | 이름·연락처 필수, 메모 선택. **같은 매장 안에서** 같은 연락처 고객(비활성 포함)이 있으면 `confirmDuplicatePhone`이 true가 아닐 때 저장하지 않고 409 `DUPLICATE_PHONE`(`details`에 기존 고객 id·이름·활성 여부) → 화면이 확인 창을 띄우고 다시 보낸다 (CB-51, S4 완료 · 매장 기준 S7) |
+| REQ-3 고객 정보 수정 | `PATCH /api/customers/{id}` — STAFF·ADMIN. 요청 `{version(필수), name?, phone?, memo?, confirmDuplicatePhone?}`, 보내지 않은 칸과 null은 그대로, 메모는 빈 값이면 지움. 검사 순서: 받지 않는 항목·형식 400 → 없는·다른 매장 고객 404 → version이 지금과 다르면 409 `CONCURRENT_MODIFICATION`(값이 같아도) → 연락처가 실제로 바뀔 때만 같은 매장 중복 확인 409 `DUPLICATE_PHONE`(자신 제외). 바뀐 칸이 없으면 200이지만 기록·version 그대로. 비활성 고객도 수정 가능(재활성화 안 함). 변경 기록 `customer_change_logs`에는 누가·언제·어느 칸만(값 없음). 상세 GET에 `memo`·`version`. 화면 SCR-9 `/customers/:id/edit`, 위험 구역(비활성화)은 ADMIN에게만 (CB-52, S7 완료, TC-54·TC-16) |
 | REQ-7 충전 취소 | **당일**(Asia/Seoul, `LedgerEntry.isSameBusinessDay` 하나로 판단) 충전 건만, 사유 필수. 전액 취소만. `POST /api/customers/{customerId}/charges/{chargeEntryId}/cancel`. 검사 순서 대상 → 사유 → 당일 → 잔액. 당일이 아니면 409 `CHARGE_CANCEL_NOT_SAME_DAY`, 취소 후 잔액이 음수가 되면 409 `CHARGE_ALREADY_USED`("먼저 사용 건을 취소해 주세요" 안내), 이미 취소됐으면 409 `ALREADY_CANCELLED`(문구는 유형별) (CB-9, S4 완료) |
 | REQ-15 로그인 잠금·레이트 리밋 | 있는 계정만 연속 5회 실패 → 5분 잠금(늘리지 않음, 성공·만료 후 초기화, 없는 아이디는 저장 안 함). 5번째 실패 응답부터·잠긴 동안은 올바른 비밀번호도 423 `ACCOUNT_LOCKED`(`details.retryAfterSeconds` 올림 + `Retry-After`, 쿠키 없음). 실패 횟수는 실패 예외에서도 커밋(`noRollbackFor`), 로그인 조회는 행 잠금. 잠금보다 먼저 `POST /api/auth/login`을 IP별 고정 창(1분 10회)으로 세어 넘으면 429 `LOGIN_RATE_LIMITED` + `Retry-After`(details 없음, 화면은 남은 시간 표시 안 함). IP는 `forward-headers-strategy: native`로 바로잡은 `getRemoteAddr()`만 — 배포 때 프록시 뒤 실제 IP 확인 필요. 기준값은 `creditbook.auth.login-lock.*`·`login-rate-limit.*`, 테스트 설정·CI E2E는 레이트 리밋 한도를 올린다 (CB-15, 11-02 승인, TC-53) |
 | REQ-34 사용 취소 (Must) | **전액** 취소만, **기한 없음**, 사유 필수. `USE_CANCEL` 반제 행 추가로 잔액 복구 |
@@ -174,12 +184,12 @@ com.creditbook
 | REQ-4 고객 비활성화 | 잔액 0원인 고객만. 기본 목록에서 사라지되 거래 이력은 조회됨 (CB-38, S3 완료 — `PATCH /api/customers/{id}/deactivate`, ADMIN 전용, 잔액이 남으면 409 `CUSTOMER_BALANCE_NOT_ZERO`, 이미 비활성이면 204). 비활성 고객은 목록의 '비활성 포함' 토글(`includeInactive`)로 찾는다 |
 | REQ-16 권한 | 고객 비활성화는 ADMIN만 (STAFF는 403) |
 | REQ-33 재활성화 | 비활성 고객에게 충전하면 자동 재활성화. 비활성 고객에게 사용(USE)은 409 `CUSTOMER_INACTIVE`로 거부, 사용 취소는 자동 재활성화 (CB-35·CB-14, S4 완료). 고객 목록·검색 API에 `includeInactive`(기본 false, true면 목록·검색·건수에 포함되고 항목에 `active` 표시, STAFF·ADMIN 모두, 마스킹 동일 — TC-35)도 CB-35에서 추가 |
-| REQ-10 중복 차감 방지 | 충전·사용 API는 `Idempotency-Key` 헤더 **필수**(`^[A-Za-z0-9-]{1,64}$`, 없거나 형식 오류면 400 `INVALID_IDEMPOTENCY_KEY`). 같은 키 + 같은 요청(고객·유형·금액·메모)이면 새로 처리하지 않고 저장된 응답을 201 + `Idempotent-Replayed: true`로 다시 준다. 같은 키 + 다른 요청이면 422 `IDEMPOTENCY_KEY_REUSED`. 같은 키 동시 요청은 하나만 저장되고 나머지는 재전송 응답(찾지 못하면 409) (CB-34, S3 완료). 사용 취소 API(CB-14)에도 같은 규칙을 적용한다 |
+| REQ-10 중복 차감 방지 | 충전·사용 API는 `Idempotency-Key` 헤더 **필수**(`^[A-Za-z0-9-]{1,64}$`, 없거나 형식 오류면 400 `INVALID_IDEMPOTENCY_KEY`). 같은 키 + 같은 요청(고객·유형·금액·메모)이면 새로 처리하지 않고 저장된 응답을 201 + `Idempotent-Replayed: true`로 다시 준다. 같은 키 + 다른 요청이면 422 `IDEMPOTENCY_KEY_REUSED`. 같은 키 동시 요청은 하나만 저장되고 나머지는 재전송 응답(찾지 못하면 409) (CB-34, S3 완료). 충전 취소·사용 취소 API(CB-9·CB-14)에도 같은 규칙을 적용한다(헤더 필수) |
 | REQ-14 거래 불변성 | 거래 수정·삭제 API를 **만들지 않는다**(PUT·PATCH·DELETE 경로 없음). 호출하면 405(같은 경로에 GET이 있을 때) 또는 404(경로 자체가 없을 때)로 거부. DB 계층 차단은 CB-7(완료), API 계층 검증은 CB-33·TC-10(S3 완료) |
 | 충전 상한 | 1회 충전 한도 300,000원. **잔액 상한이 아니다** (여러 번 충전해 30만원 초과 가능) |
 | REQ-27 받지 않는 항목 | 요청 본문에 DTO에 없는 항목(`balance`·`active`·`role` 등)이 있으면 무시하지 않고 400 `INVALID_INPUT`, `fieldErrors`에 그 항목 이름("알 수 없는 항목입니다."). 값을 끼워 넣는 시도로 보고 WARN 로그(항목 이름만, 값은 남기지 않음). `spring.jackson.deserialization.fail-on-unknown-properties: true` + `GlobalExceptionHandler.handleNotReadable` (CB-53, S5) — 새 DTO도 자동 적용되므로 따로 막지 않는다 |
-| REQ-29 매장 개설 | 직원 계정이 하나도 없을 때만(비활성도 계정으로 센다) 매장 정보와 첫 ADMIN을 한 트랜잭션으로 만든다. `GET /api/setup/status` → `{available}`, `POST /api/setup` → 201 `{storeName, loginId, name, role}`, 계정이 있으면 403 `SETUP_ALREADY_COMPLETED`. 로그인 불필요, API는 자동 로그인 없음 — 화면(SCR-11, CB-58)이 가입 직후 로그인 API를 이어서 불러 고객 목록으로 간다(실패하면 `/login`, 아이디는 화면 이동 상태로만). `/login`은 `available=true`면 `/signup`으로 보낸다 (CB-44 S5 완료, 화면 11-02 결정) |
-| REQ-30 직원 권한 (D안) | **직원 추가는 STAFF로만, ADMIN은 매장 개설 계정 1명**. 앱에 권한 변경 기능이 없다. 사장 양도·직원에게 인계·사장 비밀번호 분실은 운영자(배포·DB 관리자, 앱 역할 아님) 절차로 — 운영 점검 가이드, 본인 확인·처리 기록 필수. 사장 계정 이름·아이디를 바꿔 넘기지 않는다(과거 거래 처리자가 바뀌어 보임). 매장 개설 계정은 `must_change_password = false`(`Employee.createOwner`), 직원은 `createStaff`(STAFF 고정, true). 앱에 재활성화가 없다 — 다시 일하면 새 아이디로 추가(프로젝트 종료 후 고도화 후보, 11-03). 아이디는 대소문자 구분(한계로 둠, 11-03). **API (CB-45, 11-03 승인)**: ADMIN 전용 `/api/employees/**` — `GET`(목록 `{items}`, 사장 → 활성 → 비활성, 생성순) · `POST`(201, Location 없음, `{name, loginId}` → `initialPassword` 1회, 무작위 12자 4-4-4 하이픈 14자) · `POST /{id}/reset-password`(200 `initialPassword`, 변경 필요 켜고 잠금 해제) · `PATCH /{id}/deactivate`(204, 이미 비활성도 204). 공통 `PUT /api/auth/password`(`{currentPassword, newPassword, newPasswordConfirm}` → 200 세션 응답 모양). 오류: 409 `DUPLICATE_LOGIN_ID`(비활성 포함) · 404 `EMPLOYEE_NOT_FOUND` · 409 `ADMIN_ACCOUNT_PROTECTED`(대상이 본인이거나 ADMIN — 마지막 ADMIN = 본인) · 400 `INVALID_CURRENT_PASSWORD`(401 아님 — 화면이 401을 세션 만료로 처리) · 400 `PASSWORD_UNCHANGED` · 403 `PASSWORD_CHANGE_REQUIRED`(변경 필요 계정은 `GET /api/auth/session`·`PUT /api/auth/password` 외 거절 — 컨버터가 역할 대신 이 권한만 준다). 현재 비밀번호 틀림은 로그인과 같은 실패 횟수로 세어 5회면 423(REQ-15). 쓰기 흐름은 직원 행 잠금(`findByIdForUpdate`). 통합 테스트의 직원은 `support/TestEmployees`(`owner`·`readyStaff`·`ready`) (2026-11-02·03 사용자 결정) |
+| REQ-29·36 매장 개설·여러 매장 | 가입마다 새 매장과 그 매장 사장(ADMIN)을 만든다 — 입구는 운영자가 발급한 초대 코드(원문 저장 없이 해시만, 사용 횟수 상한, 사용 중지 가능 — 발급 절차는 운영 점검 가이드 10.4). `POST /api/setup`(로그인 불필요) `{storeName, ownerName, loginId, password, passwordConfirm, inviteCode}` → 201 `{storeName, loginId, name, role}`, 자동 로그인 없음 — 화면(SCR-11)이 이어서 로그인 API를 부른다. 오류: 400 `INVALID_INVITE_CODE`(없는·꺼진·다 쓴 코드를 구분하지 않음) · 409 `DUPLICATE_LOGIN_ID`(아이디는 모든 매장에서 유일) · 429 `SIGNUP_RATE_LIMITED`(IP당 10분 5회, Retry-After). 처리 순서 레이트 리밋 → 입력 → 초대 코드 사용(조건부 UPDATE, DB CHECK가 마지막 방어선) → 아이디 중복 → 매장·사장 생성, 한 트랜잭션. 매장 이름 중복 허용. 다른 매장의 고객·거래·직원은 404(TC-60). `GET /api/setup/status`·`SETUP_ALREADY_COMPLETED`는 없어졌다 (CB-44 S5 → CB-63·64 S7) |
+| REQ-30 직원 권한 (D안) | **직원 추가는 STAFF로만, ADMIN은 매장마다 매장 개설 계정 1명**(`ux_employees_store_active_admin`). 직원의 매장은 추가한 사장의 매장으로 고정(요청으로 받지 않음). 앱에 권한 변경 기능이 없다. 사장 양도·직원에게 인계·사장 비밀번호 분실은 운영자(배포·DB 관리자, 앱 역할 아님) 절차로 — 운영 점검 가이드, 본인 확인·처리 기록 필수. 사장 계정 이름·아이디를 바꿔 넘기지 않는다(과거 거래 처리자가 바뀌어 보임). 매장 개설 계정은 `must_change_password = false`(`Employee.createOwner`), 직원은 `createStaff`(STAFF 고정, true). 앱에 재활성화가 없다 — 다시 일하면 새 아이디로 추가(프로젝트 종료 후 고도화 후보, 11-03). 아이디는 대소문자 구분(한계로 둠, 11-03). **API (CB-45, 11-03 승인)**: ADMIN 전용 `/api/employees/**` — `GET`(목록 `{items}`, 사장 → 활성 → 비활성, 생성순) · `POST`(201, Location 없음, `{name, loginId}` → `initialPassword` 1회, 무작위 12자 4-4-4 하이픈 14자) · `POST /{id}/reset-password`(200 `initialPassword`, 변경 필요 켜고 잠금 해제) · `PATCH /{id}/deactivate`(204, 이미 비활성도 204). 공통 `PUT /api/auth/password`(`{currentPassword, newPassword, newPasswordConfirm}` → 200 세션 응답 모양). 오류: 409 `DUPLICATE_LOGIN_ID`(비활성 포함) · 404 `EMPLOYEE_NOT_FOUND` · 409 `ADMIN_ACCOUNT_PROTECTED`(대상이 본인이거나 ADMIN — 마지막 ADMIN = 본인) · 400 `INVALID_CURRENT_PASSWORD`(401 아님 — 화면이 401을 세션 만료로 처리) · 400 `PASSWORD_UNCHANGED` · 403 `PASSWORD_CHANGE_REQUIRED`(변경 필요 계정은 `GET /api/auth/session`·`PUT /api/auth/password` 외 거절 — 컨버터가 역할 대신 이 권한만 준다). 현재 비밀번호 틀림은 로그인과 같은 실패 횟수로 세어 5회면 423(REQ-15). 쓰기 흐름은 직원 행 잠금(`findByIdForUpdate`). 통합 테스트의 직원은 `support/TestEmployees`(`owner`·`readyStaff`·`ready`) (2026-11-02·03 사용자 결정) |
 
 ## DB 스키마 — Flyway `V1__init.sql`
 테이블명은 `transactions`가 아니라 **`ledger_entries`**다 (PostgreSQL 예약어 `transaction`과의 혼동을 피하려고 2026-09-23에 확정 리네임).
@@ -188,15 +198,18 @@ com.creditbook
 
 | 테이블 | 핵심 제약·인덱스·트리거 (이름으로 대화할 때 참고) |
 |---|---|
-| `store_profile` | 단일 행 `ux_store_profile_singleton`, `ck_store_profile_name` — 단일 매장 전제(여러 매장은 범위 밖, 2026-10-30) |
-| `employees` | `ux_employees_login_id`, `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role`. V4(CB-15): `failed_login_count`·`locked_until`(NULL = 잠기지 않음), `ck_employees_failed_login_count`(>= 0, 상한은 설정값이라 두지 않음). 2026-11-07 Neon 적용 |
-| `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_phone`·`ix_customers_active_created` |
+| **매장 구분 (V5)** | `employees`·`customers`·`prepaid_accounts`·`ledger_entries`(와 매장을 가로지르는 연결)에 `store_id`. `UNIQUE (store_id, id)`(`ux_employees_store_id_id` 등)에 기대는 **복합 외래 키**로 다른 매장 행을 잇지 못하게 한다 — `fk_prepaid_accounts_store_customer`·`fk_ledger_entries_store_account`·`fk_ledger_entries_store_performer`. 읽기 격리(내 매장 조건)는 앱 몫. 2026-11-14 Neon 적용 |
+| `stores` (V5, 옛 `store_profile`) | `ck_stores_name`, 단일 행 제약 삭제(매장 이름 중복 허용), `fk_stores_invite_code_id` |
+| `store_invite_codes` (V5) | `ux_store_invite_codes_code_hash`·`ck_store_invite_codes_code_hash`(SHA-256 16진 64자 — 원문 저장 없음), `ck_store_invite_codes_max_uses`(>= 1), `ck_store_invite_codes_used_count`(0 ≤ used_count ≤ max_uses), `ck_store_invite_codes_disabled`, `ck_store_invite_codes_label` |
+| `employees` | `ux_employees_login_id`(모든 매장에서 유일), `ck_employees_role`(ADMIN/STAFF), `ix_employees_active_role`, `ux_employees_store_active_admin`(매장마다 활성 ADMIN 1명, V5). V4(CB-15): `failed_login_count`·`locked_until`(NULL = 잠기지 않음), `ck_employees_failed_login_count`(>= 0, 상한은 설정값이라 두지 않음). 2026-11-07 Neon 적용 |
+| `customers` | `ck_customers_name_not_blank`, `ck_customers_phone_digits`(숫자 9–11자리), `ix_customers_name`·`ix_customers_store_phone`·`ix_customers_store_created`(V5). V6: `version`(낙관적 락) + `ck_customers_version`(>= 0) |
+| `customer_change_logs` (V6, CB-52) | 고객 수정 1건(실제로 바뀐 칸이 하나 이상)마다 1행 — 누가·언제·어느 칸(`name_changed`·`phone_changed`·`memo_changed`)만, **값은 저장하지 않는다**. `ck_customer_change_logs_any_field`, 복합 FK `fk_customer_change_logs_store_customer`·`fk_customer_change_logs_store_changer`, 트리거 `trg_customer_change_logs_no_update_delete`·`trg_customer_change_logs_no_truncate`(장부와 같은 append-only), 인덱스 없음. 2026-11-15 Neon 적용 |
 | `prepaid_accounts` | `ux_prepaid_accounts_customer_id`(고객 1명당 1개), `ck_prepaid_accounts_balance_non_negative`, `version` — Optimistic Lock(낙관적 락) |
 | `ledger_entries` | `ux_ledger_entries_seq`, `ck_ledger_entries_type`(CHARGE/USE/CHARGE_CANCEL/USE_CANCEL), `ck_ledger_entries_amount`(>0), `ck_ledger_entries_balance`(>=0), `ck_ledger_entries_reverses`(반제 유형만 `reverses_id` 필수), 부분 UNIQUE `ux_ledger_entries_idem`·`ux_ledger_entries_reverses`, `ix_ledger_entries_account_seq`·`ix_ledger_entries_account_performed`, 생성 컬럼 `signed_amount`, 트리거 `trg_ledger_entries_no_update_delete`·`trg_ledger_entries_no_truncate` → `fn_ledger_entries_append_only()` |
 | `phone_access_logs` | `ix_phone_access_logs_customer` |
 | `revoked_tokens` (V3, CB-42) | 로그아웃한 토큰의 `jti` PK, `employee_id` FK, `ix_revoked_tokens_expires_at`(만료 지난 행 정리용). 인증 요청마다 직원 활성·역할과 함께 1쿼리로 조회. 2026-11-07 Neon 적용 |
 
-- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03, V3(`revoked_tokens`, CB-42)·V4(`employees` 로그인 잠금 칸, CB-15) 2026-11-07(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동, 배포 직전). **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 다음 스키마 변경은 `V5__...sql`부터 새 파일로 만들고, 운영 DB에 적용하기 전에 PITR 리허설을 한다(S7).
+- Neon 적용: V1 2026-09-29, V2(`customers.phone` NOT NULL) 2026-10-03, V3(`revoked_tokens`, CB-42)·V4(`employees` 로그인 잠금 칸, CB-15) 2026-11-07(복구 지점 브랜치 → 사용자 확인 → `local` 프로필 1회 기동, 배포 직전), V5(여러 매장, CB-63) 2026-11-14·V6(고객 정보 수정, CB-52) 2026-11-15(PITR 리허설 뒤, 복구 지점 → 병합 → 배포 기동 시 적용 → 전후 비교). **적용된 마이그레이션은 절대 고치지 않는다** — Flyway 체크섬이 어긋나 기동이 실패한다. 다음 스키마 변경은 `V7__...sql`부터 새 파일로 만든다.
 - `signed_amount` CASE식은 `USE_CANCEL`을 `ELSE amount`(+)로 처리한다 — 사용 취소는 잔액을 되돌리므로 의도된 동작이다.
 - **append-only는 DB에서도 막는다 — 트리거로 확정** (2026-09-28 사용자 승인, CB-7): `trg_ledger_entries_no_update_delete`(행 단위 UPDATE·DELETE)와 `trg_ledger_entries_no_truncate`(문장 단위 TRUNCATE)가 `fn_ledger_entries_append_only()`를 호출해 SQLSTATE `23001`(restrict_violation)로 거절한다. REVOKE를 택하지 않은 이유: 앱이 테이블 소유자(`neondb_owner`)로 접속하므로 소유자는 회수된 권한을 스스로 되돌릴 수 있다. 한계: 소유자는 트리거를 끄거나 지울 수 있으므로 이 트리거는 애플리케이션 버그를 막는 장치다. 소유자가 아닌 앱 전용 계정 분리는 프로젝트 종료 후 보안 강화 후보(S5·S6에서는 하지 않음). SQL은 `V1__init.sql` 끝부분이 확정본이다.
 - **외래 키 인덱스 결정** (2026-09-28): `ledger_entries.performed_by`, `phone_access_logs.accessed_by`에는 인덱스를 두지 않는다. 직원은 삭제하지 않고(`active` 플래그) 직원별 조회 요구사항도 없어서, FK 인덱스가 쓰이는 경로가 없다. 직원별 거래 조회 요구사항이 생기면 그때 추가한다.
@@ -254,6 +267,8 @@ com.creditbook
   1. 대사 — 시나리오 실행 후 스키마 정의서 §6 쿼리가 모두 0행 (CB-11 `ReconciliationApiIntegrationTest`, TC-52)
   2. 동시성 — 같은 계좌 동시 차감 시 초과분은 409, 최종 잔액 = 성공 거래 합계 (CB-12 `ConcurrencyApiIntegrationTest`, TC-40·47)
   3. append-only 차단 — 애플리케이션 계정으로 `ledger_entries` UPDATE/DELETE 시도가 실패 (CB-7)
+  - 세 가지 모두 매장 2개 조건에서 다시 Pass (CB-67, S7)
+- **이웃 매장** (CB-67, S7): 모든 통합 테스트는 공통 Testcontainers 설정에 늘 있는 '이웃 매장'(직원·고객·거래 4종이 찬 매장)과 함께 돈다. 이웃 매장 행에 쓰려는 문장은 테스트 DB에만 건 트리거가 그 자리에서 실패시키고, 롤백돼도 되돌아가지 않는 시퀀스로 시도를 세어 예외를 삼킨 메서드도 실패시킨다(Spring 테스트 리스너, 순서 4500 — 롤백 4000보다 먼저). 새 통합 테스트도 따로 할 일이 없다. 읽기 노출은 TC-60(모든 id 경로를 다른 매장 id로 호출)이 맡는다
 - **통합·E2E 테스트는 사용자가 작성한다** (2026-10-01·10-06 사용자 결정). Claude Code와 에이전트는 먼저 대신 쓰지 않고, test-writer가 실행·검증·개선안을 맡는다. 도메인 단위 테스트는 기능 구현과 함께 backend-dev가 쓴다
   - **분담 조정** (2026-10-11 사용자 결정): 정합성 증명 테스트(대사 CB-11·동시성 CB-12)와 고객 목록 통합 테스트(CB-41)는 사용자가 직접 쓴다. 반복 패턴의 통합 테스트(인증·권한·API 부재·멱등키류)는 Claude Code가 사용자 스타일로 초안을 만들고, 사용자가 한 줄씩 검토·승인한 뒤 커밋한다(작성 사실은 숨기지 않는다 — 커밋 Co-Authored-By 유지). 초안에는 사용자가 쓰는 것처럼 짧은 한글 설명 주석을 단다
   - **E2E 분담** (2026-10-19 사용자 결정): 기본 흐름(TC-19 로그인, CB-19 스모크 + TC-30)은 사용자가 직접 쓴다. 같은 패턴을 반복하는 시나리오(TC-13 주경로·TC-14 사용 모달·TC-28 메모 칩·TC-46 재로그인 복구·TC-51 충전 취소 거절·잔액 부족 예외)는 공통 뼈대(TC-50, `frontend/e2e/support/`·`e2e/pages/`)를 바탕으로 초안을 만들고, 사용자가 한 줄씩 검토·실행한 뒤 커밋한다(공동 작성자 표기 유지). 새 도구는 대표 예시 1건과 공통 뼈대를 먼저 만들고 나머지가 그 패턴을 따른다(S4 회고 Try)
@@ -270,7 +285,7 @@ com.creditbook
 ## Neon 연결
 1. 앱(`spring.datasource.url`)은 **Pooled 연결**(`-pooler` 호스트), Flyway(`spring.flyway.url`)는 **direct 연결**(`-pooler` 없는 호스트) — PgBouncer 트랜잭션 모드에서는 Flyway의 세션 advisory lock이 보장되지 않는다. 같은 이유로 앱 코드에서 세션 단위 기능(세션 설정·advisory lock)을 쓰지 않는다
 2. 접속 정보는 `backend/application-local.yml`(gitignore, 양식은 `application-local.yml.example`)에 두고, **비밀번호는 Windows 사용자 환경변수 `CREDITBOOK_DB_PASSWORD`로만** 읽는다(`${CREDITBOOK_DB_PASSWORD}`). 파일에 비밀번호를 쓰면 Claude Code의 파일 변경 알림에 노출되므로 금지
-3. `bootRun`의 기본 프로필은 **로컬 Docker DB(`local-docker`, 리포 루트 `docker-compose.yml`, `localhost:5433`)**다 (2026-10-07). Neon에는 `$env:SPRING_PROFILES_ACTIVE='local'`을 명시할 때만 붙는다 — 손으로 시험한 거래가 append-only 장부에 영구히 남지 않게 하려는 기본값이다. Flyway는 붙은 DB에 대기 중인 마이그레이션을 자동 적용한다 (Neon은 V1~V4 적용 완료). 배포 백엔드도 기동할 때 Neon에 대기 마이그레이션을 적용하므로, 새 마이그레이션은 main에 병합하는 것 자체가 운영 적용이다. 따라서 **새 마이그레이션 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
+3. `bootRun`의 기본 프로필은 **로컬 Docker DB(`local-docker`, 리포 루트 `docker-compose.yml`, `localhost:5433`)**다 (2026-10-07). Neon에는 `$env:SPRING_PROFILES_ACTIVE='local'`을 명시할 때만 붙는다 — 손으로 시험한 거래가 append-only 장부에 영구히 남지 않게 하려는 기본값이다. Flyway는 붙은 DB에 대기 중인 마이그레이션을 자동 적용한다 (Neon은 V1~V6 적용 완료). 배포 백엔드도 기동할 때 Neon에 대기 마이그레이션을 적용하므로, 새 마이그레이션은 main에 병합하는 것 자체가 운영 적용이다. 따라서 **새 마이그레이션 파일을 만든 뒤 `local` 프로필의 첫 `bootRun`은 되돌릴 수 없는 적용**이다 — Testcontainers 테스트 통과와 사용자 확인 후에 실행한다
 4. JDBC URL은 `jdbc:postgresql://…?sslmode=require` 형식. Neon이 주는 `channel_binding=require`는 JDBC 파라미터명이 달라 조용히 무시되므로 넣지 않는다(S5 보안 점검 후보)
 
 ## 설정값 (application.yml, 하드코딩 금지)
@@ -294,7 +309,8 @@ com.creditbook
 - **SCR-12 직원 계정 관리·SCR-13 비밀번호 변경** (CB-60, 11-02): STAFF에게는 왼쪽 메뉴 '직원 관리'를 숨기고, 주소(`/settings/employees`)로 직접 오면 API를 부르지 않고 화면 안 403 카드(문구 + [이전 화면으로]). 사장 행은 [⋯] 없이 '본인' 표시만(툴팁 없음 — 태블릿 기준). 직원 추가는 이름·아이디만(권한 고정 STAFF), 초기 비밀번호는 1회만 표시. SCR-13은 로그인 화면과 같은 카드 양식 — 로그인 응답의 비밀번호 변경 필요 표시가 참이면 다른 화면 대신 이곳으로(바꾸면 고객 목록), 왼쪽 아래 [비밀번호 변경](사장·직원 모두)으로도 열린다(안내 문구만 일반용, 바꾼 뒤 원래 화면). 입력 규칙은 매장 개설과 같다(8–72자, 확인 일치). 연결 API·오류 코드는 REQ-30 행(CB-45). 화면은 403 `PASSWORD_CHANGE_REQUIRED`를 `FORBIDDEN`과 구분해 SCR-13으로 보내고, SCR-13에서 423이면 SCR-1과 같은 잠금 상자를 띄운다. 아이디 중복 즉시 안내는 목록(비활성 포함)과 대소문자 구분 비교. **구현 (CB-60, PR #69, 11-03 사용자 결정)**: SCR-13 라우트 `/password`(AppLayout 없음, 강제 변경·스스로 바꾸기 공용 — 일반 모드 안내 '현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.' / [변경하기] / [취소]). 비밀번호 변경 필요 세션은 `RequireAuth`가 `/password`로 replace, 다른 API의 403 `PASSWORD_CHANGE_REQUIRED`는 `client.ts` 등록 함수 → 세션 재확인(서버를 부르는 동작이 있어야 이동). 비밀번호 초기화·비활성화는 확인 창 뒤, 초기 비밀번호 안내 끝에 '하이픈(-)까지 그대로 입력합니다.'(하이픈 포함 14자가 비밀번호), 마지막 로그인 없으면 '-', 비활성 행은 메뉴 없음. 직원 관리 화면은 lazy 로드. 잠금 상자는 `features/auth/LockedNotice.tsx` 공용. 화면설계 이미지와 다른 것: [변경하고 시작하기] 비활성 색·추가 모달 권한 안내 상자 배경 색(구현 유지, 이미지를 고침), 사이드바 폭·머리말·글꼴(모든 화면 공통 값이라 유지). 목 데이터의 사장 아이디는 `owner`(로컬 개발 DB와 같음)
 - **SCR-1 로그인 잠금 안내** (CB-15): 423이면 잠금 안내(문장마다 줄바꿈)와 남은 시간(`retryAfterSeconds`), 429면 노란 안내 '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'만(남은 시간 표시 없음). 잠금은 계정 단위라 **아이디 칸을 고치면 잠금 안내를 지우고 [로그인]을 다시 켠다**(같은 단말의 다른 직원, 11-03 사용자 결정). 안내 상자는 13px·단어 단위 줄바꿈, 카드 26rem(CB-54). 세션 만료 안내는 로그인에 실패하면 주소의 `reason`을 지워 사라진다(새로고침해도 다시 안 나옴, `next`는 유지)
 - **SCR-4 고객 등록** (CB-51): 커서는 채우지 않은 필수 칸(검색어로 연락처가 채워지면 이름 칸, 이름이 채워지면 연락처 칸). 같은 번호 비활성 고객 확인 창의 버튼은 [닫기] [새로 등록] [해당 고객으로 이동](기본, 오른쪽). 비활성 고객이 여럿이면 [해당 고객으로 이동] 없이 [닫기] [새로 등록]
-- **사이드바** (CB-61, 11-07): 매장명을 표시하지 않는다 — 받아 올 API가 없어 개발용 고정 문구가 남아 다른 매장명이 보였던 결함(BUG-10). 표시는 S7 여러 매장 전환 때 매장 정보 API와 함께
+- **사이드바**: 매장명은 세션 응답의 `storeName`으로 표시한다(CB-64, S7 — 그전에는 개발용 고정 문구가 남아 다른 매장명이 보였던 결함 BUG-10, CB-61). 주소가 없는 빈 메뉴('대시보드'·'거래 이력')는 두지 않는다(CB-68, BUG-11). 로그인 화면에 [매장 개설] 링크, 가입 화면에 초대 코드 칸(`XXXXX-XXXXX`, 대소문자·하이픈 무관)
+- **SCR-9 고객 정보 수정·비활성화** (CB-52, S7): 진입은 고객 상세 이름·연락처 줄 오른쪽 [정보 수정](STAFF·ADMIN). 이름·메모는 현재 값, 연락처는 비워서 연다(가린 번호와 '바꿀 때만 입력'을 라벨 옆에, 비우면 보내지 않음). 409 `DUPLICATE_PHONE`은 등록과 같은 확인 창([그래도 저장]), 409 `CONCURRENT_MODIFICATION`은 최신 값을 다시 불러와 노란 상자. 불러오기 실패는 SCR-10 카드, 저장 실패는 폼 안 빨간 줄(고객 등록과 같음). 위험 구역은 ADMIN에게만 DOM에 그린다(STAFF는 없음 — TC-16), 확인 창은 거래 이력 취소 창과 같은 모양, 잔액이 남으면 창 안 빨간 상자에 `details.balance`와 환불 안내
 
 ## 로그 정책 (운영 점검 가이드 §6 요약)
 - 잔액 변동: INFO — 계좌 ID·유형·금액·변동 후 잔액·실행자. 고객 이름·연락처는 남기지 않는다
