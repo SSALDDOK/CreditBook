@@ -1,2 +1,4 @@
 org.springframework.boot.EnvironmentPostProcessor=\
 com.creditbook.support.RandomJwtSecretEnvironmentPostProcessor
+org.springframework.test.context.TestExecutionListener=\
+com.creditbook.support.NeighborStoreTestExecutionListener

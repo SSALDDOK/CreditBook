@@ -190,9 +190,10 @@ class EmployeeApiIntegrationTest {
 	@Tag("TC-27")
 	@Tag("REQ-30")
 	void only_admin_cannot_deactivate_own_account() throws Exception {
-		// given ADMIN 1명(매장 개설 계정)
+		// given ADMIN 1명(매장 개설 계정) , 매장 2개
 		Employee ownerAccount = saveOwner("tc27.owner2");
 		Cookie owner = sessionOf(ownerAccount);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM employees WHERE role = 'ADMIN' AND active AND store_id <> ?", Long.class, storeId)).isPositive(); // 다른 매장에도 활성 ADMIN 있음
 
 		// when — ADMIN 본인 계정을 비활성화
 		mockMvc.perform(withSession(patch("/api/employees/{id}/deactivate", ownerAccount.getId()), owner))

@@ -150,7 +150,7 @@ class ReconciliationApiIntegrationTest {
     @Tag("TC-52")
     @DisplayName("충전 → 사용 → 사용 취소 → 충전 취소 후 정합성 점검 쿼리(§2.1·§2.2)를 돌리면 모두 0행이다")
     void reconciliation_queries_return_no_rows_after_charge_use_and_both_cancels() throws Exception {
-        // given — STAFF 로그인, 고객 1명
+        // given — STAFF 로그인, 고객 1명, 매장 2개
         String loginId = "rec28-staff";
         Cookie session = loginAsNewStaff(loginId);
         RegisteredCustomer customer = customerService.register(storeId, "REQ28", "01043435005");
@@ -213,6 +213,7 @@ class ReconciliationApiIntegrationTest {
                 .andExpect(jsonPath("$.reason").value("충전 취소"));
 
         // then 1 — 이 시나리오가 의도대로 됐는지
+        assertThat(jdbcTemplate.queryForObject("SELECT count(DISTINCT store_id) FROM ledger_entries", Long.class)).isGreaterThanOrEqualTo(2); // 장부에 매장 2개 이상
         // 잔액 10,000원 (isEqualByComparingTo)
         assertThat(balanceOf(customer.accountId())).isEqualByComparingTo("10000");
         // 거래 5건 (CHARGE 2, USE 1, USE_CANCEL 1, CHARGE_CANCEL 1)
