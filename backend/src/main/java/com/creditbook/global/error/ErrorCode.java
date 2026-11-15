@@ -11,6 +11,8 @@ public enum ErrorCode {
 	// 400 — 요청 형식
 	INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값을 확인해 주세요."),
 	MALFORMED_REQUEST(HttpStatus.BAD_REQUEST, "요청 본문을 읽을 수 없습니다."),
+	/** 주소에 // 나 정리되지 않은 .. 같은 의심스러운 조각이 있어 보안 필터의 경로 검사가 거절함 (REQ-27, BUG-5). */
+	INVALID_REQUEST_PATH(HttpStatus.BAD_REQUEST, "요청 주소를 확인해 주세요."),
 	/** 요청 키(Idempotency-Key) 헤더가 없거나 형식(영문·숫자·하이픈 1–64자)이 틀림 (REQ-10). 거절된 값은 되돌리지 않는다. */
 	INVALID_IDEMPOTENCY_KEY(HttpStatus.BAD_REQUEST, "요청 키(Idempotency-Key)를 확인해 주세요."),
 
