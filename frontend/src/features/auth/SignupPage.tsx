@@ -1,8 +1,8 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useId, useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router'
+import { useId, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
-import { getSetupStatus, setUp, type SetupRequest } from '@/api/setup'
+import { setUp, type SetupRequest } from '@/api/setup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -29,16 +29,31 @@ import {
   FIELD_LABEL_CLASS,
   REQUIRED_MARK_CLASS,
 } from './fieldStyles'
+import { RateLimitedNotice } from './RateLimitedNotice'
 
-// SCR-11 매장 개설·사장님 가입 (REQ-29). 직원 계정이 하나도 없을 때만 열린다 — 개설 가능 여부를 확인하기 전에는 폼을 그리지 않는다.
+// SCR-11 매장 개설·사장님 가입 (REQ-29). 받은 초대 코드로 새 매장과 그 매장의 사장 계정을 만든다 — 로그인 화면의 [매장 개설] 링크로 온다.
+// 초대 코드가 맞는지(없는·꺼진·다 쓴 코드)는 서버만 판단한다. 화면은 비어 있지 않은지만 본다(대소문자·하이픈은 서버가 가리지 않는다).
 // 가입 성공 뒤 서버는 로그인시키지 않으므로 방금 입력한 아이디·비밀번호로 로그인을 이어서 부른다.
 // 비밀번호는 이 화면의 상태(메모리)에만 있다. 로그인 화면으로 넘기는 값에도 넣지 않는다.
 
 type Field = keyof SetupRequest
 type FieldErrors = Partial<Record<Field, string>>
 
-const FIELDS: readonly Field[] = ['storeName', 'ownerName', 'loginId', 'password', 'passwordConfirm']
-const EMPTY_VALUES: SetupRequest = { storeName: '', ownerName: '', loginId: '', password: '', passwordConfirm: '' }
+const FIELDS: readonly Field[] = ['inviteCode', 'storeName', 'ownerName', 'loginId', 'password', 'passwordConfirm']
+const EMPTY_VALUES: SetupRequest = {
+  inviteCode: '',
+  storeName: '',
+  ownerName: '',
+  loginId: '',
+  password: '',
+  passwordConfirm: '',
+}
+
+// 화면 표준 문구 (SCR-11 오류 메시지)
+export const INVITE_CODE_INVALID_MESSAGE = '초대 코드를 확인해 주세요.'
+export const LOGIN_ID_DUPLICATE_MESSAGE = '이미 사용 중인 아이디입니다.'
+const INVITE_CODE_HELP = '받은 초대 코드 10자'
+const INVITE_CODE_PLACEHOLDER = 'XXXXX-XXXXX'
 
 const LOGIN_ID_HELP = '영문·숫자·마침표 4–20자'
 const OWNER_ACCOUNT_NOTICE = '이 계정은 직원 추가·고객 비활성화까지 모든 기능을 쓰는 사장님 계정입니다'
@@ -55,41 +70,10 @@ const PASSWORD_INPUT_CLASS = 'tracking-[1.75px]'
 const BELOW_FIELD_CLASS = 'mt-[4px]'
 
 export function SignupPage() {
-  const [setup, setSetup] = useState<'checking' | 'open' | 'closed'>('checking')
-
-  useEffect(() => {
-    const controller = new AbortController()
-    getSetupStatus(controller.signal)
-      .then(({ available }) => setSetup(available ? 'open' : 'closed'))
-      .catch(() => {
-        // 열 수 있는지 모르면 폼을 그리지 않고 로그인 화면으로 보낸다
-        if (!controller.signal.aborted) setSetup('closed')
-      })
-    return () => controller.abort()
-  }, [])
-
-  if (setup === 'closed') {
-    return <Navigate to={LOGIN_PATH} replace state={{ skipSetupCheck: true } satisfies LoginLocationState} />
-  }
-  if (setup === 'checking') {
-    return (
-      <div
-        role="status"
-        data-testid="signup-checking"
-        className={cn('flex min-h-screen items-center justify-center gap-3 text-white', PAGE_CLASS)}
-      >
-        <Loader2 aria-hidden="true" className="size-6 animate-spin" />
-        매장 개설 여부를 확인하는 중…
-      </div>
-    )
-  }
-  return <SignupForm />
-}
-
-function SignupForm() {
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  const inviteCodeId = useId()
   const storeNameId = useId()
   const ownerNameId = useId()
   const loginIdId = useId()
@@ -102,9 +86,11 @@ function SignupForm() {
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
   const [serverErrors, setServerErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
+  // 429 SIGNUP_RATE_LIMITED — 카드 위 노란 상자. 다시 제출하면 지운다
+  const [rateLimited, setRateLimited] = useState(false)
   const [pending, setPending] = useState(false)
 
-  const { storeName, ownerName, loginId, password, passwordConfirm } = values
+  const { inviteCode, storeName, ownerName, loginId, password, passwordConfirm } = values
 
   // 화면 검사는 편의다. 최종 검증은 서버가 한다
   const passwordLengthOk = hasValidPasswordLength(password)
@@ -128,13 +114,14 @@ function SignupForm() {
   }
   const errorOf = (field: Field) => clientErrors[field] ?? serverErrors[field]
 
+  // 서버 오류가 칸에 남아 있어도 [매장 개설]은 켜 둔다(화면설계 '초대코드오류' 이미지) — 다시 보낼지는 사용자가 정하고 판단은 서버가 한다
   const canSubmit =
+    inviteCode.trim() !== '' &&
     isValidStoreName(storeName) &&
     isValidName(ownerName) &&
     isValidLoginId(loginId) &&
     passwordValid &&
     passwordConfirm === password &&
-    !FIELDS.some((field) => serverErrors[field]) &&
     !pending
 
   function change(field: Field, value: string) {
@@ -158,17 +145,11 @@ function SignupForm() {
     setPending(true)
     setServerErrors({})
     setFormError(null)
+    setRateLimited(false)
 
     try {
       await setUp(values)
     } catch (err: unknown) {
-      if (err instanceof ApiError && err.code === 'SETUP_ALREADY_COMPLETED') {
-        navigate(LOGIN_PATH, {
-          replace: true,
-          state: { skipSetupCheck: true, notice: err.message } satisfies LoginLocationState,
-        })
-        return
-      }
       showError(err)
       setPending(false)
       return
@@ -179,17 +160,30 @@ function SignupForm() {
       await login({ loginId, password })
       navigate(DEFAULT_AFTER_LOGIN, { replace: true })
     } catch {
-      navigate(LOGIN_PATH, { replace: true, state: { skipSetupCheck: true, loginId } satisfies LoginLocationState })
+      navigate(LOGIN_PATH, { replace: true, state: { loginId } satisfies LoginLocationState })
     }
   }
 
   // 분기는 code 로만 한다
   function showError(err: unknown) {
+    if (err instanceof ApiError && err.code === 'INVALID_INVITE_CODE') {
+      setServerErrors({ inviteCode: INVITE_CODE_INVALID_MESSAGE })
+      return
+    }
+    if (err instanceof ApiError && err.code === 'DUPLICATE_LOGIN_ID') {
+      setServerErrors({ loginId: LOGIN_ID_DUPLICATE_MESSAGE })
+      return
+    }
+    if (err instanceof ApiError && err.code === 'SIGNUP_RATE_LIMITED') {
+      setRateLimited(true)
+      return
+    }
     if (err instanceof ApiError && err.code === 'INVALID_INPUT') {
       const next: FieldErrors = {}
       for (const fieldError of err.fieldErrors) {
         const field = FIELDS.find((f) => f === fieldError.field)
-        if (field && !next[field]) next[field] = fieldError.message
+        // 초대 코드 형식 오류도 INVALID_INVITE_CODE 와 같은 문구 — 어떤 코드가 틀렸는지 구분해 보여 주지 않는다
+        if (field && !next[field]) next[field] = field === 'inviteCode' ? INVITE_CODE_INVALID_MESSAGE : fieldError.message
       }
       setServerErrors(next)
       // 칸에 붙일 수 없는 오류만 있으면 폼 안에 보여 준다
@@ -208,15 +202,17 @@ function SignupForm() {
   })
 
   return (
-    // 화면설계 SCR-11 (1024×768): 카드 500×704·모서리 20px·좌우 여백 34px, 위 16px·아래 48px.
-    // 더 낮은 화면에서는 min-h-screen 이라 문서가 길어져 세로로 스크롤된다
+    // 화면설계 SCR-11: 카드 너비 500·모서리 20px·좌우 여백 34px, 위 16px·아래 48px.
+    // 칸이 6개라 1024×768 에서는 카드가 화면보다 길다 — min-h-screen 이라 문서가 길어져 세로로 스크롤된다
     <div className={cn('flex min-h-screen items-center justify-center px-6 pt-4 pb-12', PAGE_CLASS)}>
       <main className="w-full max-w-[500px] rounded-[20px] bg-white px-[34px] pt-[25.5px] pb-[24px]" data-testid="signup-page">
         <p className="text-[24px] leading-[30px] font-bold text-[#141B34]">CreditBook</p>
         <h1 className="mt-[9.5px] text-[14px] leading-5 font-bold text-[#141B34]">매장 개설 · 사장님 가입</h1>
         <p className="mt-[0.5px] text-[12px] leading-[19px] text-[#6B7280] break-keep">
-          매장을 처음 열 때 한 번만 하는 가입입니다
+          받은 초대 코드로 새 매장을 엽니다
         </p>
+
+        {rateLimited && <RateLimitedNotice testId="signup-rate-limited-notice" className="mt-[14px]" />}
 
         <form
           onSubmit={handleSubmit}
@@ -227,11 +223,20 @@ function SignupForm() {
           className="mt-[14px] flex flex-col"
         >
           <SetupField
+            {...fieldProps('inviteCode')}
+            id={inviteCodeId}
+            label="초대 코드"
+            help={INVITE_CODE_HELP}
+            placeholder={INVITE_CODE_PLACEHOLDER}
+            autoFocus
+            autoComplete="off"
+            testId="signup-invite-code"
+          />
+          <SetupField
             {...fieldProps('storeName')}
             id={storeNameId}
             label="매장명"
             help="1–30자"
-            autoFocus
             autoComplete="organization"
             testId="signup-store-name"
           />

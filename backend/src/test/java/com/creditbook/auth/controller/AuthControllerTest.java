@@ -70,7 +70,8 @@ class AuthControllerTest {
 	private static final UUID EMPLOYEE_ID = UUID.fromString("7d0c2f4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f");
 	private static final Instant EXPIRES_AT = Instant.parse("2026-10-08T06:30:00Z");
 	private static final String TOKEN_VALUE = "header.payload.signature";
-	private static final AuthenticatedEmployee OWNER = new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false);
+	private static final AuthenticatedEmployee OWNER = new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false,
+			"달빛카페");
 
 	@Autowired
 	MockMvc mockMvc;
@@ -115,6 +116,7 @@ class AuthControllerTest {
 				.andExpect(jsonPath("$.role").value("ADMIN"))
 				.andExpect(jsonPath("$.mustChangePassword").value(false))
 				.andExpect(jsonPath("$.expiresAt").value("2026-10-08T06:30:00Z"))
+				.andExpect(jsonPath("$.storeName").value("달빛카페"))
 				.andExpect(content().string(not(containsString(TOKEN_VALUE))));
 	}
 
@@ -246,7 +248,8 @@ class AuthControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.employeeId").value(EMPLOYEE_ID.toString()))
 				.andExpect(jsonPath("$.role").value("ADMIN"))
-				.andExpect(jsonPath("$.expiresAt").value(token.expiresAt().toString()));
+				.andExpect(jsonPath("$.expiresAt").value(token.expiresAt().toString()))
+				.andExpect(jsonPath("$.storeName").value("달빛카페"));
 	}
 
 	@Test

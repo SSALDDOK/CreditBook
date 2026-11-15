@@ -2,6 +2,7 @@ package com.creditbook.auth.domain;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -26,6 +27,15 @@ public class Employee {
 
 	/** employees.login_id VARCHAR(50) */
 	public static final int LOGIN_ID_MAX_LENGTH = 50;
+
+	/**
+	 * 직원 관리 목록 순서 (REQ-30): 활성 ADMIN → 활성 STAFF → 비활성(역할 무관 — 운영자 절차로 바뀐 이전 사장 포함).
+	 * 각 묶음 안에서는 만든 순서, 만든 시각이 같으면 id 문자열 순서(PostgreSQL 의 uuid 정렬과 같다)로 고정한다.
+	 */
+	public static final Comparator<Employee> MANAGEMENT_ORDER = Comparator
+			.comparingInt(Employee::managementGroup)
+			.thenComparing(Employee::getCreatedAt)
+			.thenComparing(employee -> employee.getId().toString());
 
 	@Id
 	@Column(name = "id", nullable = false, updatable = false)
@@ -131,6 +141,14 @@ public class Employee {
 			throw new IllegalArgumentException("name must be at most " + EmployeeCredentialRules.NAME_MAX_LENGTH + " characters");
 		}
 		return stripped;
+	}
+
+	/** 직원 관리 목록의 묶음 번호. 0 = 활성 ADMIN, 1 = 활성 STAFF, 2 = 비활성. */
+	private static int managementGroup(Employee employee) {
+		if (!employee.isActive()) {
+			return 2;
+		}
+		return employee.getRole() == Role.ADMIN ? 0 : 1;
 	}
 
 	/** 로그인할 수 있는 직원인가. 비활성 직원은 비밀번호가 맞아도 로그인할 수 없다. */

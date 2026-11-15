@@ -47,11 +47,12 @@ public class EmployeeManagementService {
 		this.clock = clock;
 	}
 
-	/** 그 매장의 직원 전체(비활성 포함). ADMIN 먼저 → 활성 먼저 → 만든 순서. */
+	/** 그 매장의 직원 전체(비활성 포함). 활성 ADMIN → 활성 STAFF → 비활성, 각 묶음 안에서는 만든 순서 ({@link Employee#MANAGEMENT_ORDER}). */
 	@Transactional(readOnly = true)
 	public List<EmployeeSummary> list(UUID storeId) {
 		Objects.requireNonNull(storeId, "storeId");
 		return employeeRepository.findAllForManagement(storeId).stream()
+				.sorted(Employee.MANAGEMENT_ORDER)
 				.map(EmployeeSummary::from)
 				.toList();
 	}

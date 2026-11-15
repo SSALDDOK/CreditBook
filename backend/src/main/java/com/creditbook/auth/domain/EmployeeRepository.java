@@ -39,7 +39,7 @@ public interface EmployeeRepository {
 	boolean existsByLoginId(String loginId);
 
 	/**
-	 * 직원 관리 목록 (REQ-30). 그 매장의 비활성 포함 전체. 정렬: ADMIN 먼저 → 활성 먼저 → 만든 순서.
+	 * 직원 관리 목록 (REQ-30). 그 매장의 비활성 포함 전체. 순서는 보장하지 않는다 — 화면 순서는 {@link Employee#MANAGEMENT_ORDER}.
 	 * 한 매장의 직원은 많지 않아 페이지를 나누지 않는다.
 	 */
 	List<Employee> findAllForManagement(UUID storeId);

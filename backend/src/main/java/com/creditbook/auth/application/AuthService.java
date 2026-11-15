@@ -24,6 +24,8 @@ import com.creditbook.auth.domain.RevokedTokenRepository;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.JwtTokenService.IssuedToken;
 import com.creditbook.global.security.UnauthenticatedException;
+import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreRepository;
 
 /**
  * 직원 로그인·로그아웃·세션 조회 (REQ-15·22, CB-42), 로그인 잠금 (REQ-15, CB-15), 비밀번호 변경 (REQ-30, CB-45).
@@ -32,6 +34,9 @@ import com.creditbook.global.security.UnauthenticatedException;
  * 연속 실패로 잠기면 423 으로 따로 알린다 — 잠금을 알려야 직원이 기다릴 수 있다. 응답 시간으로도 구분되지 않도록
  * 직원을 못 찾았거나 비밀번호가 너무 길 때도 기동 시 만든 더미 해시와 한 번 대조한다(같은 비용 계수).
  * 로그에는 직원을 찾았을 때만 직원 ID 를 남기고, 입력한 아이디·비밀번호·해시·토큰 원문은 남기지 않는다.
+ * <p>
+ * 세션 응답을 만드는 세 경로(로그인·세션 조회·비밀번호 변경)만 직원의 매장 이름을 읽는다 — 요청마다 도는 토큰 인증 조회에는 넣지 않는다.
+ * 매장 이름은 로그에 남기지 않는다.
  */
 @Service
 public class AuthService {
@@ -44,6 +49,7 @@ public class AuthService {
 	private static final String DUMMY_PASSWORD = "dummy-password-for-timing";
 
 	private final EmployeeRepository employeeRepository;
+	private final StoreRepository storeRepository;
 	private final RevokedTokenRepository revokedTokenRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenService tokenService;
@@ -51,10 +57,11 @@ public class AuthService {
 	private final LoginLockProperties loginLockProperties;
 	private final String dummyHash;
 
-	public AuthService(EmployeeRepository employeeRepository, RevokedTokenRepository revokedTokenRepository,
-			PasswordEncoder passwordEncoder, JwtTokenService tokenService, Clock clock,
-			LoginLockProperties loginLockProperties) {
+	public AuthService(EmployeeRepository employeeRepository, StoreRepository storeRepository,
+			RevokedTokenRepository revokedTokenRepository, PasswordEncoder passwordEncoder, JwtTokenService tokenService,
+			Clock clock, LoginLockProperties loginLockProperties) {
 		this.employeeRepository = employeeRepository;
+		this.storeRepository = storeRepository;
 		this.revokedTokenRepository = revokedTokenRepository;
 		this.passwordEncoder = passwordEncoder;
 		this.tokenService = tokenService;
@@ -109,7 +116,7 @@ public class AuthService {
 		employee.recordLogin(now);
 		IssuedToken token = tokenService.issue(employee.getId());
 		log.info("login succeeded: employeeId={} role={}", employee.getId(), employee.getRole());
-		return new LoginResult(AuthenticatedEmployee.from(employee), token);
+		return new LoginResult(toAuthenticated(employee), token);
 	}
 
 	/** 실패를 기록하고 던질 예외를 돌려준다. 이번 실패로 잠겼으면 423, 아니면 401. 비활성 직원도 계정이 있으므로 센다. */
@@ -179,7 +186,7 @@ public class AuthService {
 		}
 		employee.changePassword(passwordEncoder.encode(newPassword), now);
 		log.info("password changed: employeeId={}", employee.getId());
-		return AuthenticatedEmployee.from(employee);
+		return toAuthenticated(employee);
 	}
 
 	/**
@@ -191,8 +198,18 @@ public class AuthService {
 	public AuthenticatedEmployee session(UUID employeeId) {
 		return employeeRepository.findById(employeeId)
 				.filter(Employee::canLogin)
-				.map(AuthenticatedEmployee::from)
+				.map(this::toAuthenticated)
 				.orElseThrow(UnauthenticatedException::new);
+	}
+
+	/**
+	 * 직원 정보에 그 직원의 매장 이름을 붙인다. store_id 는 외래 키라 매장이 없으면 데이터가 깨진 것이다 — 500 으로 드러낸다.
+	 */
+	private AuthenticatedEmployee toAuthenticated(Employee employee) {
+		String storeName = storeRepository.findById(employee.getStoreId())
+				.map(Store::getName)
+				.orElseThrow(() -> new IllegalStateException("store not found for employeeId=" + employee.getId()));
+		return AuthenticatedEmployee.from(employee, storeName);
 	}
 
 }
