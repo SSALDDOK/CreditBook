@@ -89,7 +89,8 @@ class StoreIsolationApiIntegrationTest {
 			"/api/customers/{customerId}/charges", "{\"amount\": 1000}",
 			"/api/customers/{customerId}/uses", "{\"amount\": 1000}",
 			"/api/customers/{customerId}/charges/{chargeEntryId}/cancel", "{\"reason\": \"TC-60 격리 확인\"}",
-			"/api/customers/{customerId}/uses/{useEntryId}/cancel", "{\"reason\": \"TC-60 격리 확인\"}");
+			"/api/customers/{customerId}/uses/{useEntryId}/cancel", "{\"reason\": \"TC-60 격리 확인\"}",
+			"/api/customers/{id}", "{\"version\": 0, \"name\": \"TC-60 격리 확인\"}");
 
 	@Autowired
 	MockMvc mockMvc;

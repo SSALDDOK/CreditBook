@@ -11,6 +11,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 /**
  * 고객 (customers). 이름·연락처 규칙은 여기서 검증하고, DB 의 CHECK 제약은 최후 방어선으로 남긴다.
@@ -58,6 +59,14 @@ public class Customer {
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
+
+	/**
+	 * 동시 수정 방지 (REQ-3, V6). 화면이 받은 값을 수정 요청에 돌려보내고 {@link #edit} 가 비교한다.
+	 * 값은 JPA 가 고객 행을 UPDATE 할 때마다 올린다 — 수정뿐 아니라 비활성화·재활성화도 올린다.
+	 */
+	@Version
+	@Column(name = "version", nullable = false)
+	private long version;
 
 	protected Customer() {
 		// JPA 전용
@@ -161,6 +170,59 @@ public class Customer {
 		}
 	}
 
+	/**
+	 * 고객 정보(이름·연락처·메모)를 고친다 (REQ-3). 넘긴 칸만 고치고 null 인 칸은 그대로 둔다.
+	 * <ol>
+	 * <li>버전을 가장 먼저 비교한다 — 다르면 값이 같아도 거절한다</li>
+	 * <li>넘긴 값을 정규화·검증한다 (이름 앞뒤 공백 지움, 메모가 비었거나 공백뿐이면 지우기)</li>
+	 * <li>정규화한 값으로 지금 값과 비교해 실제로 바뀐 칸을 계산한다</li>
+	 * <li>연락처가 실제로 바뀔 때만 {@code phoneChangeCheck} 를 부른다 (같은 번호 고객 확인)</li>
+	 * <li>바뀐 칸이 있을 때만 상태와 변경 시각을 바꾼다 — 바뀐 칸이 없으면 아무것도 건드리지 않는다</li>
+	 * </ol>
+	 * 활성 여부는 바꾸지 않는다 — 비활성 고객도 고칠 수 있고, 고쳐도 비활성으로 남는다.
+	 *
+	 * @param expectedVersion 화면이 고객 정보를 읽을 때 받은 버전
+	 * @param name 새 이름 (null 이면 그대로)
+	 * @param phone 새 연락처, 숫자 정규형 (null 이면 그대로)
+	 * @param memo 새 메모 (null 이면 그대로, 비었거나 공백뿐이면 지우기)
+	 * @param editedAt 변경 시각 (서버 시각)
+	 * @param phoneChangeCheck 연락처가 바뀔 때 상태를 바꾸기 전에 부를 확인
+	 * @return 실제로 바뀐 칸. 없으면 {@link CustomerChanges#NONE}
+	 * @throws CustomerConcurrentModificationException 버전이 다를 때. 아무것도 바꾸지 않는다
+	 * @throws InvalidCustomerNameException 이름이 공백뿐이거나 20자를 넘을 때
+	 * @throws InvalidPhoneNumberException 연락처가 숫자 9–11자리가 아닐 때
+	 * @throws InvalidCustomerMemoException 메모가 200자를 넘을 때
+	 */
+	public CustomerChanges edit(long expectedVersion, String name, String phone, String memo, Instant editedAt,
+			PhoneChangeCheck phoneChangeCheck) {
+		Objects.requireNonNull(editedAt, "editedAt");
+		Objects.requireNonNull(phoneChangeCheck, "phoneChangeCheck");
+		if (expectedVersion != this.version) {
+			throw new CustomerConcurrentModificationException(this.id, expectedVersion, this.version);
+		}
+
+		String newName = name == null ? this.name : requireValidName(name);
+		String newPhone = phone == null ? this.phone : requireValidPhone(phone);
+		String newMemo = memo == null ? this.memo : normalizeMemo(memo);
+
+		CustomerChanges changes = new CustomerChanges(
+				!newName.equals(this.name),
+				!newPhone.equals(this.phone),
+				!Objects.equals(newMemo, this.memo));
+		if (!changes.hasAny()) {
+			return CustomerChanges.NONE;
+		}
+		if (changes.phoneChanged()) {
+			phoneChangeCheck.check(newPhone);
+		}
+
+		this.name = newName;
+		this.phone = newPhone;
+		this.memo = newMemo;
+		this.updatedAt = editedAt;
+		return changes;
+	}
+
 	private static String requireValidName(String name) {
 		if (name == null || name.isBlank()) {
 			throw new InvalidCustomerNameException("이름을 입력해 주세요.");
@@ -225,6 +287,10 @@ public class Customer {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	public long getVersion() {
+		return version;
 	}
 
 }

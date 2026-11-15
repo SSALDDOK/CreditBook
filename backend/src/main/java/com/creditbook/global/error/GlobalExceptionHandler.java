@@ -23,6 +23,7 @@ import com.creditbook.auth.domain.InvalidCredentialsException;
 import com.creditbook.auth.domain.InvalidCurrentPasswordException;
 import com.creditbook.auth.domain.PasswordUnchangedException;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerConcurrentModificationException;
 import com.creditbook.customer.domain.CustomerInactiveException;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.DuplicatePhoneException;
@@ -278,6 +279,15 @@ public class GlobalExceptionHandler {
 	 */
 	@ExceptionHandler({ IdempotencyKeyConflictException.class, ReversalConflictException.class })
 	ResponseEntity<ErrorResponse> handleLedgerWriteConflict(PrepaidDomainException ex) {
+		return respond(ErrorCode.CONCURRENT_MODIFICATION, ErrorResponse.of(ErrorCode.CONCURRENT_MODIFICATION));
+	}
+
+	/**
+	 * 고객 정보 수정 요청의 버전이 낡음 (REQ-3) — 다른 요청이 먼저 고객을 바꿨다. 커밋 때 버전 검사에 걸린 경우(아래 낙관적 락 처리)와
+	 * 같은 코드로 응답한다. WARN 로그는 서비스가 고객 ID 와 함께 남기므로 여기서는 다시 남기지 않는다.
+	 */
+	@ExceptionHandler(CustomerConcurrentModificationException.class)
+	ResponseEntity<ErrorResponse> handleCustomerConcurrentModification(CustomerConcurrentModificationException ex) {
 		return respond(ErrorCode.CONCURRENT_MODIFICATION, ErrorResponse.of(ErrorCode.CONCURRENT_MODIFICATION));
 	}
 

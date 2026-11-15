@@ -36,7 +36,7 @@ class CustomerDetailResponseTest {
 	void phone_is_masked() {
 		// given
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678", new BigDecimal("5500"), true,
-				CREATED_AT, List.of(useEntry(false)));
+				CREATED_AT, null, 0L, List.of(useEntry(false)));
 
 		// when
 		CustomerDetailResponse response = CustomerDetailResponse.from(detail);
@@ -52,7 +52,7 @@ class CustomerDetailResponseTest {
 	void inactive_customer_is_converted_with_active_false() {
 		// given
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "박휴면", "0200001234", BigDecimal.ZERO, false,
-				CREATED_AT, List.of());
+				CREATED_AT, null, 0L, List.of());
 
 		// when
 		CustomerDetailResponse response = CustomerDetailResponse.from(detail);
@@ -68,7 +68,7 @@ class CustomerDetailResponseTest {
 	void customer_without_entries_has_empty_recent_entries() {
 		// given: 저장소가 최근 거래 자리에 null 을 넘겨도 빈 목록으로 담는다
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678", BigDecimal.ZERO, true,
-				CREATED_AT, null);
+				CREATED_AT, null, 0L, null);
 
 		// when
 		CustomerDetailResponse response = CustomerDetailResponse.from(detail);
@@ -82,7 +82,7 @@ class CustomerDetailResponseTest {
 	void recent_entries_are_copied_as_stored() {
 		// given
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678", new BigDecimal("10000"), true,
-				CREATED_AT, List.of(useEntry(true)));
+				CREATED_AT, null, 0L, List.of(useEntry(true)));
 
 		// when
 		CustomerDetailResponse response = CustomerDetailResponse.from(detail);

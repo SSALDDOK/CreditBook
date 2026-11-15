@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.creditbook.customer.domain.CustomerChangeLogRepository;
 import com.creditbook.customer.domain.CustomerDetail;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
@@ -44,11 +45,15 @@ class CustomerDetailServiceTest {
 	@Mock
 	PrepaidAccountRepository prepaidAccountRepository;
 
+	@Mock
+	CustomerChangeLogRepository customerChangeLogRepository;
+
 	CustomerService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new CustomerService(customerRepository, prepaidAccountRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+		service = new CustomerService(customerRepository, prepaidAccountRepository, customerChangeLogRepository,
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -56,7 +61,7 @@ class CustomerDetailServiceTest {
 	void get_detail_requests_five_recent_entries() {
 		// given
 		CustomerDetail detail = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678", new BigDecimal("5500"), true,
-				NOW, List.of());
+				NOW, null, 0L, List.of());
 		given(customerRepository.findDetail(STORE_ID, CUSTOMER_ID, 5)).willReturn(Optional.of(detail));
 
 		// when

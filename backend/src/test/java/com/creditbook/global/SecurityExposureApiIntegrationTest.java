@@ -116,11 +116,17 @@ class SecurityExposureApiIntegrationTest {
 		// then 어느 응답에도 금지 항목이 없다
 		for (String body : bodies) {
 			assertThat(body)
-					.doesNotContainIgnoringCase("\"password\"", "passwordHash", "secret", "\"token\"", "\"version\"")
+					.doesNotContainIgnoringCase("\"password\"", "passwordHash", "secret", "\"token\"")
 					.doesNotContain("$2a$", staff.getPasswordHash()) // BCrypt 접두사, 이 직원의 실제 해시값
 					.doesNotContain(session.getValue(), "eyJ") // 로그인 토큰 값 자체, JWT 머리
 					.doesNotContain("01012342323", "010-1234-2323") // 연락처 원문 (하이픈 있든 없든)
 					.doesNotContainPattern("\"01[0-9]{8,9}\""); // 값 전체가 연락처 원문인 칸
+		}
+		// 버전(낙관적 락 칸)은 고객 상세에만, 딱 1번 — 고객 정보 수정(REQ-3)에 돌려보낼 고객 버전이다
+		// 계좌 버전 같은 다른 버전이 새면 상세에서 2번이 되거나 다른 응답에 나타난다
+		assertThat(bodies.get(2)).containsOnlyOnce("\"version\"");
+		for (String body : List.of(bodies.get(0), bodies.get(1), bodies.get(3), bodies.get(4))) {
+			assertThat(body).doesNotContainIgnoringCase("\"version\"");
 		}
 		// 목록·상세에는 가린 번호만 나간다
 		assertThat(bodies.get(1)).contains("010-****-2323");

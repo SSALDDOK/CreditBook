@@ -42,6 +42,7 @@ public interface CustomerRepository {
 	/**
 	 * 그 매장의 고객 상세를 잔액·최근 거래와 함께 한 SQL 문장으로 읽는다 (REQ-11, REQ-36). 활성 여부와 관계없이 찾는다 (REQ-4 — 비활성 고객도 조회됨).
 	 * 최근 거래는 seq 내림차순으로 최대 {@code recentEntryLimit} 건이며, 각 거래에 반제 여부를 담는다.
+	 * 이 트랜잭션에서 바꾼 내용(고객 수정과 그에 따라 오른 버전 포함)을 반영해 읽는다.
 	 *
 	 * @param recentEntryLimit 최근 거래 최대 건수 (1 이상)
 	 * @return 고객이 없거나 다른 매장 고객이면 빈 Optional

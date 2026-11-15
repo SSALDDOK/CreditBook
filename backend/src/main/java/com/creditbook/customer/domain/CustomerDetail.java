@@ -17,6 +17,8 @@ import com.creditbook.prepaid.domain.LedgerEntryType;
  * @param phone 저장된 원문(숫자 정규형). 응답으로 내보낼 때는 반드시 {@link PhoneNumberMasker} 를 거친다
  * @param balance prepaid_accounts.balance (원 단위 정수)
  * @param active 활성 고객이면 true. 비활성 고객도 상세 조회는 된다 (REQ-4)
+ * @param memo 고객 메모 (없으면 null). 거래 메모({@link RecentEntry#memo()})와 다른 값이다
+ * @param version 고객 버전 (customers.version) — 화면이 고객 정보 수정 요청에 그대로 돌려보낸다 (REQ-3)
  * @param recentEntries 최근 거래 (seq 내림차순, 최신이 0번). 거래가 없으면 빈 목록
  */
 public record CustomerDetail(
@@ -26,6 +28,8 @@ public record CustomerDetail(
 		BigDecimal balance,
 		boolean active,
 		Instant createdAt,
+		String memo,
+		long version,
 		List<RecentEntry> recentEntries) {
 
 	public CustomerDetail {
