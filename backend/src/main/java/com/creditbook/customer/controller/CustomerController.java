@@ -18,6 +18,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.customer.controller.dto.CustomerDetailResponse;
+import com.creditbook.customer.controller.dto.CustomerEditRequest;
 import com.creditbook.customer.controller.dto.CustomerListResponse;
 import com.creditbook.customer.controller.dto.CustomerRegisterRequest;
 import com.creditbook.customer.controller.dto.CustomerResponse;
@@ -99,6 +100,21 @@ public class CustomerController {
 	@GetMapping("/{id}")
 	public CustomerDetailResponse getDetail(@PathVariable("id") UUID id) {
 		return CustomerDetailResponse.from(customerService.getDetail(requireCurrentStoreId(), id));
+	}
+
+	/**
+	 * 고객 정보 수정 (REQ-3). 이름·연락처·메모 중 보낸 칸만 고치고, 고친 뒤의 상세를 200 으로 돌려준다 (상세 조회와 같은 모양).
+	 * 로그인한 직원(ADMIN·STAFF) 모두 부를 수 있다. 요청 키(Idempotency-Key)는 받지 않는다 — 같은 요청을 다시 보내면 버전이 달라 409 다.
+	 * <p>
+	 * 버전이 다르면 409 CONCURRENT_MODIFICATION, 바뀔 연락처의 고객이 같은 매장에 있고 {@code confirmDuplicatePhone} 이 true 가 아니면
+	 * 409 DUPLICATE_PHONE (등록과 같은 details).
+	 *
+	 * @param id 고객 ID. UUID 형식이 아니면 400 INVALID_INPUT, 없거나 다른 매장 고객이면 404 CUSTOMER_NOT_FOUND
+	 */
+	@PatchMapping("/{id}")
+	public CustomerDetailResponse edit(@PathVariable("id") UUID id, @Valid @RequestBody CustomerEditRequest request) {
+		return CustomerDetailResponse.from(customerService.edit(requireCurrentStoreId(), id, request.toCommand(),
+				requireCurrentEmployeeId()));
 	}
 
 	/**

@@ -31,8 +31,9 @@ import jakarta.persistence.Tuple;
 /**
  * {@link CustomerRepository} 의 JPA 구현.
  * <p>
- * Customer 는 id(UUID)를 도메인이 직접 할당하고 @Version 이 없어서, Spring Data 의 save() 는 새 엔티티로 보지 않고
- * merge 한다 (불필요한 SELECT 1회, 넘긴 객체가 아닌 사본이 관리 상태가 됨). 그래서 추가는 persist 로 한다.
+ * Customer 는 id(UUID)를 도메인이 직접 할당한다. save() 는 새 엔티티인지 판단한 뒤 merge 로 갈 수 있어 (불필요한 SELECT,
+ * 넘긴 객체가 아닌 사본이 관리 상태가 됨) 쓰지 않고, 추가는 persist 로 한다. 수정은 관리 상태 엔티티를 고치면
+ * flush 때 UPDATE 되고, @Version(V6) 이 그때 버전 조건을 건다.
  */
 @Repository
 class CustomerRepositoryImpl implements CustomerRepository {
@@ -59,6 +60,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
 			       a.balance       AS balance,
 			       c.active        AS active,
 			       c.created_at    AS created_at,
+			       c.memo          AS customer_memo,
+			       c.version       AS customer_version,
 			       e.id            AS entry_id,
 			       e.type          AS entry_type,
 			       e.amount        AS amount,
@@ -138,6 +141,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
 		if (recentEntryLimit < 1) {
 			throw new IllegalArgumentException("recentEntryLimit must be >= 1");
 		}
+		// 같은 트랜잭션에서 바꾼 고객(@Version 증가 포함)을 아래 네이티브 조회가 읽게 먼저 DB 로 보낸다.
+		// 다른 요청이 먼저 고객을 바꿨으면 여기서 낙관적 락 예외가 난다.
+		// 바뀐 엔티티가 없으면(일반 상세 조회·읽기 전용 트랜잭션) 아무것도 하지 않는다.
+		em.flush();
 		@SuppressWarnings("unchecked")
 		List<Tuple> rows = em.createNativeQuery(FIND_DETAIL_SQL, Tuple.class)
 				.setParameter("customerId", id)
@@ -174,6 +181,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
 				(BigDecimal) first.get("balance"),
 				Boolean.TRUE.equals(first.get("active")),
 				toInstant(first.get("created_at")),
+				(String) first.get("customer_memo"),
+				((Number) first.get("customer_version")).longValue(),
 				entries));
 	}
 

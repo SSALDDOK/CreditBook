@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerChangeLogRepository;
+import com.creditbook.customer.domain.CustomerChanges;
+import com.creditbook.customer.domain.CustomerConcurrentModificationException;
 import com.creditbook.customer.domain.CustomerDetail;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
@@ -42,12 +45,14 @@ public class CustomerService {
 
 	private final CustomerRepository customerRepository;
 	private final PrepaidAccountRepository prepaidAccountRepository;
+	private final CustomerChangeLogRepository customerChangeLogRepository;
 	private final Clock clock;
 
 	public CustomerService(CustomerRepository customerRepository, PrepaidAccountRepository prepaidAccountRepository,
-			Clock clock) {
+			CustomerChangeLogRepository customerChangeLogRepository, Clock clock) {
 		this.customerRepository = customerRepository;
 		this.prepaidAccountRepository = prepaidAccountRepository;
+		this.customerChangeLogRepository = customerChangeLogRepository;
 		this.clock = clock;
 	}
 
@@ -139,6 +144,81 @@ public class CustomerService {
 		// 고객 이름·연락처는 로그에 남기지 않는다 (운영 점검 가이드 §6)
 		log.debug("customer detail: customerId={}, recentEntries={}", customerId, detail.recentEntries().size());
 		return detail;
+	}
+
+	/**
+	 * 고객 정보(이름·연락처·메모)를 고치고 고친 뒤의 상세를 돌려준다 (REQ-3). 바뀐 칸 판단과 값 검증은 {@link Customer#edit} 가 한다.
+	 * <ol>
+	 * <li>그 매장의 고객을 찾는다 — 없거나 다른 매장 고객이면 404</li>
+	 * <li>버전 비교 → 값 정규화·검증 → 바뀐 칸 계산 (도메인)</li>
+	 * <li>연락처가 실제로 바뀔 때만 같은 매장의 같은 번호 고객(비활성 포함, 자기 자신 제외)을 확인한다 —
+	 * 확인 표시가 없으면 아무것도 저장하지 않고 409 DUPLICATE_PHONE</li>
+	 * <li>바뀐 칸이 있으면 변경 기록 1행을 넣는다. 바뀐 칸이 없으면 아무것도 쓰지 않는다</li>
+	 * <li>상세를 다시 읽어 돌려준다 — 읽기 전에 바뀐 고객이 DB 로 가므로(버전이 오른다) 응답의 버전이 새 값이다.
+	 * 바뀐 칸이 있었으면 이때 새 버전으로 INFO 로그를 남긴다</li>
+	 * </ol>
+	 * 잔액·계좌는 읽기만 한다. 활성 여부는 바꾸지 않는다 (비활성 고객도 고칠 수 있고, 고쳐도 비활성으로 남는다).
+	 *
+	 * @param storeId 요청한 직원의 매장
+	 * @param performedBy 요청한 직원 ID — 인증 정보에서 꺼낸 값만 넘긴다 (변경 기록·로그용)
+	 * @throws CustomerNotFoundException 고객이 없거나 다른 매장 고객일 때
+	 * @throws CustomerConcurrentModificationException 요청 버전이 지금 버전과 다를 때. 아무것도 바꾸지 않는다
+	 * @throws DuplicatePhoneException 바뀔 연락처의 고객이 같은 매장에 있고 확인 표시가 없을 때. 아무것도 바꾸지 않는다
+	 */
+	@Transactional
+	public CustomerDetail edit(UUID storeId, UUID customerId, CustomerEditCommand command, UUID performedBy) {
+		Objects.requireNonNull(storeId, "storeId");
+		Objects.requireNonNull(customerId, "customerId");
+		Objects.requireNonNull(command, "command");
+		Objects.requireNonNull(performedBy, "performedBy");
+		Customer customer = customerRepository.findByIdAndStoreId(customerId, storeId)
+				.orElseThrow(() -> new CustomerNotFoundException(customerId));
+
+		Instant now = clock.instant();
+		CustomerChanges changes;
+		try {
+			changes = customer.edit(command.expectedVersion(), command.name(), command.phone(), command.memo(), now,
+					newPhone -> ensureNoSamePhoneCustomer(storeId, customerId, newPhone,
+							command.confirmDuplicatePhone()));
+		}
+		catch (CustomerConcurrentModificationException ex) {
+			// 정상적인 거절이라 WARN. 고객 이름·연락처는 남기지 않는다 (운영 점검 가이드 §6)
+			log.warn("customer update rejected: stale version, customerId={}, expectedVersion={}, currentVersion={}, performedBy={}",
+					customerId, ex.getExpectedVersion(), ex.getCurrentVersion(), performedBy);
+			throw ex;
+		}
+
+		if (changes.hasAny()) {
+			customerChangeLogRepository.add(storeId, customerId, performedBy, now, changes);
+		}
+		else {
+			log.debug("customer update skipped: no changes, customerId={}, performedBy={}", customerId, performedBy);
+		}
+
+		CustomerDetail detail = customerRepository.findDetail(storeId, customerId, RECENT_ENTRY_LIMIT)
+				.orElseThrow(() -> new CustomerNotFoundException(customerId));
+		if (changes.hasAny()) {
+			// 값은 남기지 않고 바뀐 칸 이름만 남긴다 (운영 점검 가이드 §6). 버전은 다시 읽은 새 값
+			log.info("customer updated: customerId={}, changedFields={}, version={}, performedBy={}", customerId,
+					changes.changedFieldNames(), detail.version(), performedBy);
+		}
+		return detail;
+	}
+
+	// 연락처를 바꿀 때 같은 매장의 같은 번호 고객 확인 (등록과 같은 규칙, 자기 자신은 뺀다)
+	private void ensureNoSamePhoneCustomer(UUID storeId, UUID customerId, String newPhone, boolean confirmed) {
+		if (confirmed) {
+			return;
+		}
+		List<SamePhoneCustomer> samePhone = customerRepository.findAllByStoreIdAndPhone(storeId, newPhone).stream()
+				.filter(c -> !c.id().equals(customerId))
+				.toList();
+		if (!samePhone.isEmpty()) {
+			// 정상 흐름(직원 확인 요청)이라 INFO. 고객 이름·연락처는 남기지 않는다 (운영 점검 가이드 §6)
+			log.info("customer update held: duplicate phone, customerId={}, existingCount={}, existingCustomerIds={}",
+					customerId, samePhone.size(), samePhone.stream().map(SamePhoneCustomer::id).toList());
+			throw new DuplicatePhoneException(samePhone);
+		}
 	}
 
 	/**

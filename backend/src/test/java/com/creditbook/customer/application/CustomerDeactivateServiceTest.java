@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.creditbook.customer.domain.Customer;
 import com.creditbook.customer.domain.CustomerBalanceNotZeroException;
+import com.creditbook.customer.domain.CustomerChangeLogRepository;
 import com.creditbook.customer.domain.CustomerNotFoundException;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.prepaid.domain.ChargePolicy;
@@ -52,11 +53,15 @@ class CustomerDeactivateServiceTest {
 	@Mock
 	PrepaidAccountRepository prepaidAccountRepository;
 
+	@Mock
+	CustomerChangeLogRepository customerChangeLogRepository;
+
 	CustomerService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new CustomerService(customerRepository, prepaidAccountRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+		service = new CustomerService(customerRepository, prepaidAccountRepository, customerChangeLogRepository,
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	private static PrepaidAccount accountOf(Customer customer, long balance) {

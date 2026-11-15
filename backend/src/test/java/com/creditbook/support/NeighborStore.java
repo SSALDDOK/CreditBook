@@ -26,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.creditbook.auth.domain.Employee;
 import com.creditbook.auth.domain.EmployeeRepository;
+import com.creditbook.customer.application.CustomerEditCommand;
 import com.creditbook.customer.application.CustomerService;
 import com.creditbook.customer.application.RegisteredCustomer;
 import com.creditbook.prepaid.application.CancelService;
@@ -76,7 +77,8 @@ public class NeighborStore implements ApplicationListener<ApplicationReadyEvent>
 			"prepaid_accounts", List.of("store_id"),
 			"ledger_entries", List.of("store_id", "account_id", "performed_by", "reverses_id"),
 			"phone_access_logs", List.of("customer_id", "accessed_by"),
-			"revoked_tokens", List.of("employee_id"));
+			"revoked_tokens", List.of("employee_id"),
+			"customer_change_logs", List.of("store_id", "customer_id", "changed_by"));
 
 	private final DataSource dataSource;
 
@@ -203,6 +205,10 @@ public class NeighborStore implements ApplicationListener<ApplicationReadyEvent>
 		UUID useToCancel = usageService
 				.use(id, active.customerId(), won(3_000), "디저트", staff.getId(), newKey()).entryId();
 		cancelService.cancelUse(id, active.customerId(), useToCancel, "잘못 사용", staff.getId(), newKey());
+		// 고객 정보 수정 1회 (REQ-3) — 이웃 매장에도 변경 기록 행이 있게
+		long version = customerService.getDetail(id, active.customerId()).version();
+		customerService.edit(id, active.customerId(), new CustomerEditCommand(version, null, null, "이웃 단골", false),
+				staff.getId());
 
 		// 비활성 고객: 다 쓰고 0원이 된 뒤 사장이 비활성화
 		RegisteredCustomer inactive = customerService.register(id, "이웃옛고객", INACTIVE_CUSTOMER_PHONE);
@@ -288,7 +294,9 @@ public class NeighborStore implements ApplicationListener<ApplicationReadyEvent>
 						"SELECT coalesce(sum(balance), 0) FROM prepaid_accounts WHERE store_id = ?", BigDecimal.class,
 						storeId),
 				fingerprint(
-						"SELECT md5(string_agg(t::text, ',' ORDER BY t.seq)) FROM ledger_entries t WHERE t.store_id = ?"));
+						"SELECT md5(string_agg(t::text, ',' ORDER BY t.seq)) FROM ledger_entries t WHERE t.store_id = ?"),
+				jdbcTemplate.queryForObject("SELECT count(*) FROM customer_change_logs WHERE store_id = ?", Long.class,
+						storeId));
 	}
 
 	private String fingerprint(String sql) {
@@ -305,7 +313,7 @@ public class NeighborStore implements ApplicationListener<ApplicationReadyEvent>
 
 	/** 이웃 매장의 상태. 잔액 합계는 BigDecimal 이라 scale 이 같아야 equals 가 맞는다 — 같은 쿼리로만 만들므로 같다. */
 	record Snapshot(String store, String employees, String customers, String accounts, long entryCount,
-			BigDecimal balanceSum, String entries) {
+			BigDecimal balanceSum, String entries, long changeLogCount) {
 
 		// 실패 메시지용 — 어느 표가 바뀌었는지 이름만
 		List<String> changedParts(Snapshot other) {
@@ -324,6 +332,9 @@ public class NeighborStore implements ApplicationListener<ApplicationReadyEvent>
 			}
 			if (entryCount != other.entryCount || !Objects.equals(entries, other.entries)) {
 				parts.add("ledger_entries");
+			}
+			if (changeLogCount != other.changeLogCount) {
+				parts.add("customer_change_logs");
 			}
 			return parts;
 		}

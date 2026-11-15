@@ -51,7 +51,7 @@ class CustomerDetailControllerTest {
 	private static final String PATH = "/api/customers/{id}";
 
 	private static final CustomerDetail KIM = new CustomerDetail(CUSTOMER_ID, "김단골", "01000005678",
-			new BigDecimal("5500"), true, Instant.parse("2026-10-01T01:00:00Z"),
+			new BigDecimal("5500"), true, Instant.parse("2026-10-01T01:00:00Z"), "단골", 3L,
 			List.of(
 					new CustomerDetail.RecentEntry(USE_ID, LedgerEntryType.USE, new BigDecimal("4500"),
 							new BigDecimal("-4500"), new BigDecimal("5500"), "음료",
@@ -91,6 +91,8 @@ class CustomerDetailControllerTest {
 				.andExpect(jsonPath("$.balance").value(5500))
 				.andExpect(jsonPath("$.active").value(true))
 				.andExpect(jsonPath("$.createdAt").value("2026-10-01T01:00:00Z"))
+				.andExpect(jsonPath("$.memo").value("단골"))
+				.andExpect(jsonPath("$.version").value(3))
 				.andExpect(jsonPath("$.recentEntries.length()").value(2))
 				.andExpect(jsonPath("$.recentEntries[0].id").value(USE_ID.toString()))
 				.andExpect(jsonPath("$.recentEntries[0].type").value("USE"))
@@ -126,7 +128,7 @@ class CustomerDetailControllerTest {
 	void inactive_customer_without_entries_is_returned() throws Exception {
 		// given
 		CustomerDetail inactive = new CustomerDetail(CUSTOMER_ID, "박휴면", "0200001234", BigDecimal.ZERO, false,
-				Instant.parse("2026-10-01T01:00:00Z"), List.of());
+				Instant.parse("2026-10-01T01:00:00Z"), null, 0L, List.of());
 		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(inactive);
 
 		// when / then
@@ -141,8 +143,8 @@ class CustomerDetailControllerTest {
 	@Test
 	@Tag("REQ-26")
 	@WithMockEmployee
-	@DisplayName("상세 응답에는 연락처 원문이 어디에도 없고 수정·비활성화용 필드도 없다")
-	void response_has_no_raw_phone_nor_mutation_fields() throws Exception {
+	@DisplayName("상세 응답에는 연락처 원문이 어디에도 없고 계좌·반제·요청 키 같은 내부 필드도 없다")
+	void response_has_no_raw_phone_nor_internal_fields() throws Exception {
 		// given
 		given(customerService.getDetail(STORE_ID, CUSTOMER_ID)).willReturn(KIM);
 
@@ -150,7 +152,7 @@ class CustomerDetailControllerTest {
 		mockMvc.perform(get(PATH, CUSTOMER_ID))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.phone").doesNotExist())
-				.andExpect(jsonPath("$.version").doesNotExist())
+				// version 은 고객 정보 수정(REQ-3)에 돌려보낼 값이라 나간다 (상세 응답 첫 번째 테스트에서 확인)
 				.andExpect(jsonPath("$.accountId").doesNotExist())
 				.andExpect(jsonPath("$.recentEntries[0].reversesId").doesNotExist())
 				.andExpect(jsonPath("$.recentEntries[0].idempotencyKey").doesNotExist())

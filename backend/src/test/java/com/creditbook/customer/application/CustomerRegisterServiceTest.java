@@ -24,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.creditbook.customer.domain.Customer;
+import com.creditbook.customer.domain.CustomerChangeLogRepository;
 import com.creditbook.customer.domain.CustomerRepository;
 import com.creditbook.customer.domain.DuplicatePhoneException;
 import com.creditbook.customer.domain.InvalidCustomerMemoException;
@@ -49,11 +50,15 @@ class CustomerRegisterServiceTest {
 	@Mock
 	PrepaidAccountRepository prepaidAccountRepository;
 
+	@Mock
+	CustomerChangeLogRepository customerChangeLogRepository;
+
 	CustomerService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new CustomerService(customerRepository, prepaidAccountRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+		service = new CustomerService(customerRepository, prepaidAccountRepository, customerChangeLogRepository,
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
