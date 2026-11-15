@@ -38,6 +38,8 @@ import com.creditbook.auth.domain.Role;
 import com.creditbook.global.security.JwtTestSupport;
 import com.creditbook.global.security.JwtTestSupport.MutableClock;
 import com.creditbook.global.security.UnauthenticatedException;
+import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreRepository;
 
 /**
  * 로그인한 직원의 비밀번호 변경 (REQ-30). 현재 비밀번호 틀림은 로그인 실패와 같은 횟수로 센다 (REQ-15).
@@ -56,6 +58,8 @@ class AuthServicePasswordChangeTest {
 	private static final Duration LOCK = Duration.ofMinutes(5);
 
 	private final EmployeeRepository employeeRepository = mock(EmployeeRepository.class);
+	private final StoreRepository storeRepository = mock(StoreRepository.class);
+	private static final String STORE_NAME = "달빛카페";
 	private final PasswordEncoder passwordEncoder = spy(new BCryptPasswordEncoder(4));
 	private final MutableClock clock = new MutableClock(NOW);
 
@@ -64,7 +68,9 @@ class AuthServicePasswordChangeTest {
 
 	@BeforeEach
 	void setUp() {
-		authService = new AuthService(employeeRepository, mock(RevokedTokenRepository.class), passwordEncoder,
+		given(storeRepository.findById(STORE_ID))
+				.willReturn(Optional.of(Store.open(STORE_NAME, UUID.randomUUID(), Instant.parse("2026-10-01T00:00:00Z"))));
+		authService = new AuthService(employeeRepository, storeRepository, mock(RevokedTokenRepository.class), passwordEncoder,
 				JwtTestSupport.tokenService(JwtTestSupport.randomProperties(), clock), clock,
 				new LoginLockProperties(MAX_FAILURES, LOCK));
 		// 사장이 추가해 초기 비밀번호를 받은 직원 (비밀번호 변경 필요)
@@ -88,13 +94,13 @@ class AuthServicePasswordChangeTest {
 		AuthenticatedEmployee result = authService.changePassword(staff.getId(), INITIAL, NEW_PASSWORD);
 
 		// then
-		assertThat(result).isEqualTo(new AuthenticatedEmployee(staff.getId(), "이직원", Role.STAFF, false));
+		assertThat(result).isEqualTo(new AuthenticatedEmployee(staff.getId(), "이직원", Role.STAFF, false, STORE_NAME));
 		assertThat(staff.mustChangePassword()).isFalse();
 		assertThat(passwordEncoder.matches(NEW_PASSWORD, staff.getPasswordHash())).isTrue();
 		assertThat(passwordEncoder.matches(INITIAL, staff.getPasswordHash())).isFalse();
 		assertThat(staff.getUpdatedAt()).isEqualTo(NOW);
 		assertThat(output.getOut()).contains("password changed: employeeId=" + staff.getId())
-				.doesNotContain(INITIAL).doesNotContain(NEW_PASSWORD).doesNotContain("lee.staff");
+				.doesNotContain(INITIAL).doesNotContain(NEW_PASSWORD).doesNotContain("lee.staff").doesNotContain(STORE_NAME);
 	}
 
 	@Test

@@ -27,6 +27,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.creditbook.auth.domain.AdminAccountProtectedException;
 import com.creditbook.auth.domain.DuplicateLoginIdException;
@@ -64,8 +65,8 @@ class EmployeeManagementServiceTest {
 	// ── 목록 ──
 
 	@Test
-	@DisplayName("직원 목록은 저장소가 돌려준 순서 그대로 이름·아이디·권한·활성 여부·마지막 로그인을 싣는다")
-	void list_maps_employees_in_order() {
+	@DisplayName("직원 목록은 이름·아이디·권한·활성 여부·마지막 로그인을 싣는다")
+	void list_maps_employees() {
 		// given
 		staff.recordLogin(NOW);
 		given(employeeRepository.findAllForManagement(STORE_ID)).willReturn(List.of(owner, staff));
@@ -77,6 +78,26 @@ class EmployeeManagementServiceTest {
 		assertThat(list).containsExactly(
 				new EmployeeSummary(owner.getId(), "김사장", "kim.owner", Role.ADMIN, true, null),
 				new EmployeeSummary(staff.getId(), "이직원", "lee.staff", Role.STAFF, true, NOW));
+	}
+
+	@Test
+	@DisplayName("직원 목록은 저장소 순서와 관계없이 활성 사장 → 활성 직원(만든 순) → 비활성 계정(이전 사장 포함, 만든 순)으로 준다")
+	void list_orders_active_admin_active_staff_then_inactive() {
+		// given — 운영자 절차로 비활성이 된 이전 사장이 가장 먼저 만들어졌다
+		Employee formerOwner = Employee.createOwner(STORE_ID, "old.owner", HASH, "전사장", NOW.minusSeconds(7200));
+		ReflectionTestUtils.setField(formerOwner, "active", false);
+		Employee retired = Employee.createStaff(STORE_ID, "retired.staff", HASH, "퇴사직원", NOW.minusSeconds(5400));
+		retired.deactivate(NOW);
+		Employee secondStaff = Employee.createStaff(STORE_ID, "park.staff", HASH, "박직원", NOW.minusSeconds(900));
+		given(employeeRepository.findAllForManagement(STORE_ID))
+				.willReturn(List.of(retired, secondStaff, formerOwner, staff, owner));
+
+		// when
+		List<EmployeeSummary> list = service.list(STORE_ID);
+
+		// then
+		assertThat(list).extracting(EmployeeSummary::loginId)
+				.containsExactly("kim.owner", "lee.staff", "park.staff", "old.owner", "retired.staff");
 	}
 
 	// ── 직원 추가 ──
