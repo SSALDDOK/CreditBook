@@ -150,7 +150,7 @@ class ReconciliationApiIntegrationTest {
     @Tag("TC-52")
     @DisplayName("충전 → 사용 → 사용 취소 → 충전 취소 후 정합성 점검 쿼리(§2.1·§2.2)를 돌리면 모두 0행이다")
     void reconciliation_queries_return_no_rows_after_charge_use_and_both_cancels() throws Exception {
-        // given — STAFF 로그인, 고객 1명
+        // given — STAFF 로그인, 고객 1명, 매장 2개
         String loginId = "rec28-staff";
         Cookie session = loginAsNewStaff(loginId);
         RegisteredCustomer customer = customerService.register(storeId, "REQ28", "01043435005");
