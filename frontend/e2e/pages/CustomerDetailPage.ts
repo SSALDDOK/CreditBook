@@ -9,6 +9,7 @@ export class CustomerDetailPage {
   readonly chargeButton: Locator
   readonly useButton: Locator
   readonly historyLink: Locator // '전체 이력 보기' → 거래 이력(SCR-8)
+  readonly editLink: Locator // [정보 수정] → 고객 정보 수정(SCR-9)
 
   constructor(page: Page) {
     this.page = page
@@ -17,6 +18,7 @@ export class CustomerDetailPage {
     this.chargeButton = page.getByTestId('customer-charge-button')
     this.useButton = page.getByTestId('customer-use-button')
     this.historyLink = page.getByTestId('customer-history-link')
+    this.editLink = page.getByTestId('customer-edit-link')
   }
 
   /** 주소로 바로 들어가서 다 그려질 때까지 기다린다 (data-state 가 loading → ready) */
