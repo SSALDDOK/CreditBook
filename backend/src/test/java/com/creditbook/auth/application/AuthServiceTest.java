@@ -26,8 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,12 +46,15 @@ import com.creditbook.global.security.JwtTestSupport.MutableClock;
 import com.creditbook.global.security.JwtTokenService;
 import com.creditbook.global.security.JwtTokenService.VerifiedToken;
 import com.creditbook.global.security.UnauthenticatedException;
+import com.creditbook.store.domain.Store;
+import com.creditbook.store.domain.StoreRepository;
 
 /**
  * 로그인·로그아웃·세션 조회 유스케이스. 비밀번호 대조는 실제 BCrypt(테스트용 낮은 비용 계수), 토큰은 실제 발급기(무작위 키)를 쓴다.
  */
 @Tag("REQ-15")
 @Tag("REQ-22")
+@ExtendWith(OutputCaptureExtension.class)
 class AuthServiceTest {
 
 	private static final UUID STORE_ID = UUID.fromString("00000000-0000-0000-0000-000000005001");
@@ -58,6 +64,8 @@ class AuthServiceTest {
 
 	private final EmployeeRepository employeeRepository = mock(EmployeeRepository.class);
 	private final RevokedTokenRepository revokedTokenRepository = mock(RevokedTokenRepository.class);
+	private final StoreRepository storeRepository = mock(StoreRepository.class);
+	private static final String STORE_NAME = "달빛카페";
 	private final PasswordEncoder passwordEncoder = spy(new BCryptPasswordEncoder(4));
 	private final MutableClock clock = new MutableClock(NOW);
 	private final JwtTokenService tokenService = JwtTestSupport.tokenService(JwtTestSupport.randomProperties(), clock);
@@ -70,8 +78,10 @@ class AuthServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		authService = new AuthService(employeeRepository, revokedTokenRepository, passwordEncoder, tokenService, clock,
-				loginLockProperties);
+		authService = new AuthService(employeeRepository, storeRepository, revokedTokenRepository, passwordEncoder,
+				tokenService, clock, loginLockProperties);
+		given(storeRepository.findById(STORE_ID))
+				.willReturn(Optional.of(Store.open(STORE_NAME, UUID.randomUUID(), Instant.parse("2026-10-01T00:00:00Z"))));
 		owner = Employee.createOwner(STORE_ID, "owner", passwordEncoder.encode(PASSWORD), "김사장",
 				Instant.parse("2026-10-01T00:00:00Z"));
 		given(employeeRepository.findByLoginIdForUpdate("owner")).willReturn(Optional.of(owner));
@@ -85,7 +95,7 @@ class AuthServiceTest {
 		LoginResult result = authService.login("owner", PASSWORD);
 
 		// then
-		assertThat(result.employee()).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false));
+		assertThat(result.employee()).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false, STORE_NAME));
 		assertThat(result.token().expiresAt()).isEqualTo(NOW.plus(JwtTestSupport.TTL));
 		assertThat(tokenService.verify(result.token().value()))
 				.get().extracting(VerifiedToken::employeeId).isEqualTo(owner.getId());
@@ -358,7 +368,45 @@ class AuthServiceTest {
 		AuthenticatedEmployee employee = authService.session(owner.getId());
 
 		// then
-		assertThat(employee).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false));
+		assertThat(employee).isEqualTo(new AuthenticatedEmployee(owner.getId(), "김사장", Role.ADMIN, false, STORE_NAME));
+	}
+
+	@Test
+	@Tag("REQ-36")
+	@DisplayName("로그인·세션 조회는 직원이 속한 매장의 이름을 저장된 값 그대로 싣고, 매장 이름을 로그에 남기지 않는다")
+	void login_and_session_carry_store_name(CapturedOutput output) {
+		// given
+		given(employeeRepository.findById(owner.getId())).willReturn(Optional.of(owner));
+
+		// when
+		LoginResult login = authService.login("owner", PASSWORD);
+		AuthenticatedEmployee session = authService.session(owner.getId());
+
+		// then
+		assertThat(login.employee().storeName()).isEqualTo(STORE_NAME);
+		assertThat(session.storeName()).isEqualTo(STORE_NAME);
+		verify(storeRepository, times(2)).findById(STORE_ID);
+		assertThat(output.getOut()).doesNotContain(STORE_NAME);
+	}
+
+	@Test
+	@DisplayName("로그인에 실패하면 매장을 읽지 않는다")
+	void failed_login_does_not_read_store() {
+		// when / then
+		assertThatThrownBy(() -> authService.login("owner", "wrong-password"))
+				.isInstanceOf(InvalidCredentialsException.class);
+		verifyNoInteractions(storeRepository);
+	}
+
+	@Test
+	@DisplayName("직원의 매장 행이 없으면(데이터 손상) 빈 매장 이름 대신 서버 오류로 드러낸다")
+	void missing_store_is_server_error() {
+		// given
+		given(employeeRepository.findById(owner.getId())).willReturn(Optional.of(owner));
+		given(storeRepository.findById(STORE_ID)).willReturn(Optional.empty());
+
+		// when / then
+		assertThatThrownBy(() -> authService.session(owner.getId())).isInstanceOf(IllegalStateException.class);
 	}
 
 	@Test

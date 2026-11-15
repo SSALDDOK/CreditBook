@@ -99,7 +99,7 @@ class PasswordChangeControllerTest {
 		// given
 		givenStatus(role, mustChange);
 		given(authService.changePassword(EMPLOYEE_ID, "Rv7m-Kq2x-9Tn4", "my-new-pass-77"))
-				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "이직원", role, false));
+				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "이직원", role, false, "달빛카페"));
 
 		// when / then
 		changePassword(VALID_BODY)
@@ -107,7 +107,7 @@ class PasswordChangeControllerTest {
 				.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
 				.andExpect(content().json("""
 						{"employeeId":"7d0c2f4e-1a2b-4c3d-8e9f-0a1b2c3d4e5f","name":"이직원","role":"%s",
-						 "mustChangePassword":false,"expiresAt":"%s"}
+						 "mustChangePassword":false,"expiresAt":"%s","storeName":"달빛카페"}
 						""".formatted(role, token.expiresAt()), org.springframework.test.json.JsonCompareMode.STRICT));
 	}
 
@@ -116,7 +116,8 @@ class PasswordChangeControllerTest {
 	void must_change_account_can_read_session_and_logout() throws Exception {
 		// given
 		givenStatus(Role.STAFF, true);
-		given(authService.session(EMPLOYEE_ID)).willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "이직원", Role.STAFF, true));
+		given(authService.session(EMPLOYEE_ID)).willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "이직원", Role.STAFF, true,
+				"달빛카페"));
 
 		// when / then
 		mockMvc.perform(get("/api/auth/session").cookie(session))

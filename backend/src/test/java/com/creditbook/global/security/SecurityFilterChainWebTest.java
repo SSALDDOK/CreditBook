@@ -66,7 +66,7 @@ class SecurityFilterChainWebTest {
 		given(employeeRepository.findAuthStatus(any(), any()))
 				.willReturn(Optional.of(new EmployeeAuthStatus(STORE_ID, true, Role.ADMIN, false, false)));
 		given(authService.session(EMPLOYEE_ID))
-				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false));
+				.willReturn(new AuthenticatedEmployee(EMPLOYEE_ID, "김사장", Role.ADMIN, false, "테스트매장"));
 	}
 
 	@ParameterizedTest(name = "[{index}] {0}")

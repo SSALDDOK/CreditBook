@@ -18,6 +18,8 @@ export type SessionResponse = {
   mustChangePassword: boolean
   /** 세션 만료 시각 (ISO-8601 Instant) */
   expiresAt: string
+  /** 로그인한 직원의 매장 이름 — 사이드바에 그대로 표시한다 */
+  storeName: string
 }
 
 /** 비밀번호 변경 요청 (백엔드 ChangePasswordRequest). 새 비밀번호 규칙은 매장 개설과 같다(8–72자, 72바이트, 확인 일치) */

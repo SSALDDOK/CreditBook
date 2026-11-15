@@ -41,16 +41,12 @@ interface EmployeeJpaRepository extends Repository<Employee, UUID> {
 	boolean existsByLoginId(String loginId);
 
 	/**
-	 * 직원 관리 목록: 그 매장만. ADMIN 먼저 → 활성 먼저 → 만든 순서. 만든 시각이 같으면 id 로 순서를 고정한다.
+	 * 직원 관리 목록: 그 매장만. 순서는 여기서 정하지 않는다 — 규칙은 {@link Employee#MANAGEMENT_ORDER} 하나에 둔다.
 	 * store_id 가 앞인 ux_employees_store_id_id 가 매장 조건을 받친다.
 	 */
 	@Query("""
 			select e from Employee e
 			 where e.storeId = :storeId
-			 order by case when e.role = com.creditbook.auth.domain.Role.ADMIN then 0 else 1 end,
-			          e.active desc,
-			          e.createdAt asc,
-			          e.id asc
 			""")
 	List<Employee> findAllForManagement(@Param("storeId") UUID storeId);
 

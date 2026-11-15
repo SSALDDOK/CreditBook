@@ -8,7 +8,8 @@ import type { PasswordLocationState } from '@/features/auth/PasswordPage'
 import { cn } from '@/lib/utils'
 import { EMPLOYEES_PATH, PASSWORD_PATH } from '@/routes/redirect'
 
-// 직원 이름·역할은 로그인 세션 값이다. 매장명은 받아 올 API가 없어 표시하지 않는다 — 고정 문구를 두면 개설한 매장과 다른 이름이 보인다
+// 직원 이름·역할·매장명은 모두 로그인 세션 값이다. 매장명은 세션의 storeName 그대로 보여 주고 고정 문구·기본값을 두지 않는다 —
+// 고정 문구가 남아 다른 매장 이름이 보였던 결함(BUG-10)이 있었다. 값이 없으면 아무것도 표시하지 않는다
 const ROLE_LABELS: Record<Role, string> = { ADMIN: '사장님', STAFF: '직원' }
 
 type NavItem = { label: string; href: string; icon: ReactNode; testId: string }
@@ -63,6 +64,11 @@ export function Sidebar() {
     <aside className="flex w-64 shrink-0 flex-col bg-sidebar px-4 py-8 text-sidebar-foreground">
       <div className="px-2">
         <p className="text-2xl font-bold text-white">CreditBook</p>
+        {session?.storeName && (
+          <p className="mt-1 truncate text-[13px] leading-[18px]" data-testid="sidebar-store-name">
+            {session.storeName}
+          </p>
+        )}
       </div>
 
       <nav aria-label="주 메뉴" className="mt-10">

@@ -22,7 +22,9 @@ import { useEmployeeList } from './useEmployeeList'
 // SCR-12 직원 계정 관리 (REQ-30). 사장(ADMIN) 전용 — 사장이 아니면 API 를 부르지 않고 화면 안 403 카드만 보인다.
 // 서버가 403 FORBIDDEN 을 줘도 같은 카드. 관리할 수 있는지(사장·본인 계정 보호)의 최종 판단은 서버가 한다 —
 // 사장 행에 메뉴를 숨기는 것은 편의다(서버가 409 ADMIN_ACCOUNT_PROTECTED 로 막는다).
-// 목록 순서는 서버 응답 그대로(사장 → 활성 → 비활성). 추가·초기화·비활성화 뒤에는 서버에서 다시 받는다.
+// 목록 순서는 서버 응답 그대로(활성 사장 → 활성 직원 → 비활성) — 화면에서 다시 정렬하지 않는다. 추가·초기화·비활성화 뒤에는 서버에서 다시 받는다.
+// '본인'은 로그인한 직원(세션 employeeId)의 행에만 붙인다. 역할이 ADMIN 이라고 붙이지 않는다 — 운영자 절차로 바뀐 이전 사장(비활성 ADMIN)은
+// 비활성 직원처럼 회색·메뉴 없음으로 보인다.
 // 모양(크기·색·글자)은 화면설계 이미지(12_default·12_rowmenu·12_staff403) 수치 그대로다.
 
 export const EMPLOYEES_FORBIDDEN_MESSAGE = '이 기능은 사장님 계정에서만 사용할 수 있습니다'
@@ -98,6 +100,8 @@ function EmployeesForbidden() {
 }
 
 function EmployeesManager() {
+  const { state } = useAuth()
+  const sessionEmployeeId = state.status === 'authenticated' ? state.session.employeeId : null
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey((k) => k + 1)
   const list = useEmployeeList(true, reloadKey)
@@ -236,6 +240,7 @@ function EmployeesManager() {
                   <EmployeeRow
                     key={employee.employeeId}
                     employee={employee}
+                    isSelf={employee.employeeId === sessionEmployeeId}
                     onResetPassword={() => openAction({ kind: 'reset-password', employee })}
                     onDeactivate={() => openAction({ kind: 'deactivate', employee })}
                   />
@@ -290,16 +295,19 @@ function EmployeesManager() {
 
 function EmployeeRow({
   employee,
+  isSelf,
   onResetPassword,
   onDeactivate,
 }: {
   employee: EmployeeListItem
+  /** 로그인한 직원 본인의 행 — [⋯] 없이 '본인' */
+  isSelf: boolean
   onResetPassword: () => void
   onDeactivate: () => void
 }) {
-  const isAdmin = employee.role === 'ADMIN'
-  // 비활성 직원은 다시 활성화할 수 없고 초기화도 의미가 없어 메뉴를 두지 않는다
-  const manageable = !isAdmin && employee.active
+  // 본인·사장 계정은 서버가 409 ADMIN_ACCOUNT_PROTECTED 로 막으므로 메뉴를 두지 않는다(편의).
+  // 비활성 직원(이전 사장 포함)은 다시 활성화할 수 없고 초기화도 의미가 없어 메뉴를 두지 않는다
+  const manageable = !isSelf && employee.role !== 'ADMIN' && employee.active
   // 비활성 직원은 이름·아이디·마지막 로그인을 회색으로(배경은 그대로)
   const muted = !employee.active
   return (
@@ -339,7 +347,7 @@ function EmployeeRow({
         {employee.lastLoginAt ? formatEntryTime(employee.lastLoginAt) : '-'}
       </td>
       <td className={cn(BODY_CELL, 'text-center')}>
-        {isAdmin ? (
+        {isSelf ? (
           <span className="text-[12.5px] text-[#8A90A2]" data-testid="employee-self-badge">
             본인
           </span>

@@ -1,5 +1,8 @@
 package com.creditbook.store.infrastructure;
 
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.stereotype.Repository;
 
 import com.creditbook.store.domain.Store;
@@ -22,6 +25,11 @@ class StoreRepositoryImpl implements StoreRepository {
 	public void add(Store store) {
 		em.persist(store);
 		em.flush();
+	}
+
+	@Override
+	public Optional<Store> findById(UUID id) {
+		return Optional.ofNullable(em.find(Store.class, id));
 	}
 
 }
