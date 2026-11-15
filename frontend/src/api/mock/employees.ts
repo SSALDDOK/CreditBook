@@ -12,11 +12,12 @@ import { mockCurrentSession, mockExpireSession } from './auth'
 // 기본 목 세션(김직원, STAFF)으로 부르면 403 FORBIDDEN, 비밀번호를 바꿔야 하는 세션이면 403 PASSWORD_CHANGE_REQUIRED.
 // 목록은 이 모듈의 메모리에만 둔다(새로고침하면 처음 상태).
 //
-// - 박사장  owner     사장(ADMIN) — [⋯] 없이 '본인'
+// - 박사장  owner     사장(ADMIN) — 로그인한 본인 행이라 [⋯] 없이 '본인'
 // - 김직원  kim.staff 활성, 오늘 로그인
 // - 최알바  choi.pt   활성, 며칠 전 로그인
 // - 이신입  new.staff 활성, 로그인한 적 없음(마지막 로그인 '-')
 // - 정퇴사  jung.old  비활성 — 회색 행, 메뉴 없음
+// - 한전임  han.prev  비활성 사장(ADMIN) — 운영자 절차로 바뀐 이전 사장. '본인' 없이 회색 행, 메뉴 없음
 // 아이디 'kim.staff'·'jung.old' 로 추가하면 409 DUPLICATE_LOGIN_ID(화면 미리 검사를 피하려면 대소문자를 바꿔 본다 — 목도 대소문자를 구분한다)
 // 초기 비밀번호는 매번 무작위 4-4-4 형식의 가짜 값이다.
 
@@ -40,6 +41,7 @@ const employees: MockEmployee[] = [
   { seq: 3, employeeId: employeeId(4), name: '최알바', loginId: 'choi.pt', role: 'STAFF', active: true, lastLoginAt: hoursAgo(80) },
   { seq: 4, employeeId: employeeId(3), name: '이신입', loginId: 'new.staff', role: 'STAFF', active: true, lastLoginAt: null },
   { seq: 5, employeeId: employeeId(5), name: '정퇴사', loginId: 'jung.old', role: 'STAFF', active: false, lastLoginAt: hoursAgo(24 * 40) },
+  { seq: 0, employeeId: employeeId(6), name: '한전임', loginId: 'han.prev', role: 'ADMIN', active: false, lastLoginAt: hoursAgo(24 * 60) },
 ]
 
 // 헷갈리는 글자(0 O 1 l I)를 뺀 글자 — 서버 InitialPasswordGenerator 와 같은 모양의 가짜 값
@@ -55,14 +57,11 @@ function fakeInitialPassword(): string {
   return groups.join('-')
 }
 
-/** 서버 순서: 사장 먼저 → 활성 먼저 → 만든 순서 */
+/** 서버 순서: 활성 사장 → 활성 직원 → 비활성(이전 사장 포함), 같은 무리 안에서는 만든 순서 */
 function sorted(): EmployeeListItem[] {
+  const rank = (e: MockEmployee) => (!e.active ? 2 : e.role === 'ADMIN' ? 0 : 1)
   return [...employees]
-    .sort((a, b) => {
-      if (a.role !== b.role) return a.role === 'ADMIN' ? -1 : 1
-      if (a.active !== b.active) return a.active ? -1 : 1
-      return a.seq - b.seq
-    })
+    .sort((a, b) => rank(a) - rank(b) || a.seq - b.seq)
     .map(({ seq: _seq, ...item }) => item)
 }
 

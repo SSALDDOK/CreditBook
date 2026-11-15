@@ -1,8 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { ApiError, COMMON_ERROR_MESSAGE, NETWORK_ERROR_MESSAGE } from '@/api/client'
-import { getSetupStatus } from '@/api/setup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -10,6 +9,7 @@ import { AuthChecking } from '@/routes/RequireAuth'
 import { safeNextPath, SIGNUP_PATH, type LoginLocationState } from '@/routes/redirect'
 import { useAuth } from './AuthContext'
 import { LockedNotice, NOTICE_TEXT } from './LockedNotice'
+import { RATE_LIMITED_MESSAGE, RateLimitedNotice } from './RateLimitedNotice'
 import { toLockWindow, useLockCountdown, type LockWindow } from './lockCountdown'
 
 // 화면설계서 SCR-1 문구. 실패 문구는 아이디 존재 여부를 드러내지 않도록 하나만 쓴다(REQ-15) —
@@ -18,7 +18,7 @@ export const LOGIN_FAILED_MESSAGE = '아이디 또는 비밀번호가 올바르�
 export const SESSION_EXPIRED_MESSAGE = '로그인이 만료되었습니다. 다시 로그인해 주세요'
 
 // 429 LOGIN_RATE_LIMITED 안내(SCR-1 화면 문구). 남은 시간은 보여 주지 않는다
-export const LOGIN_RATE_LIMITED_MESSAGE = '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
+export const LOGIN_RATE_LIMITED_MESSAGE = RATE_LIMITED_MESSAGE
 
 /**
  * 로그인 실패를 화면에 어떻게 보여 줄지. 분기는 status·code 로만 한다.
@@ -52,9 +52,8 @@ export function LoginPage() {
   const expired = params.get('reason') === 'expired'
   const location = useLocation()
   const navigate = useNavigate()
-  // 매장 개설 화면에서 넘어온 값. 처음 그릴 때 한 번만 읽는다
+  // 매장 개설 화면에서 넘어온 값(가입 뒤 로그인이 실패했을 때의 아이디). 처음 그릴 때 한 번만 읽는다
   const [arrival] = useState(() => location.state as LoginLocationState)
-  const [setupAvailable, setSetupAvailable] = useState(false)
 
   const loginIdId = useId()
   const passwordId = useId()
@@ -66,32 +65,15 @@ export function LoginPage() {
   // 잠금 남은 시간(초). 잠금이 풀리면 0 — 안내를 지우고 [로그인]을 다시 켠다
   const remainingSeconds = useLockCountdown(failure?.kind === 'locked' ? failure.lock : null)
 
-  // 화면 이동 상태는 새로고침해도 남으므로 읽은 뒤 지운다 — 새로고침하면 안내가 사라지고 개설 가능 여부도 다시 묻는다
+  // 화면 이동 상태는 새로고침해도 남으므로 읽은 뒤 지운다
   useEffect(() => {
     if (location.state) navigate(location.pathname + location.search, { replace: true, state: null })
   }, [location, navigate])
-
-  // 계정이 하나도 없으면 매장 개설 화면으로 보낸다. 응답을 기다리며 폼을 숨기지 않는다 — 계정이 있는 평소에는 아무것도 바뀌지 않고,
-  // 서버가 늦거나 조회가 실패해도 로그인을 막지 않는다. 세션 확인과 동시에 물어 폼이 잠깐 보이는 시간을 줄인다.
-  // 매장 개설 화면에서 온 경우에는 다시 묻지 않는다 — 두 화면 사이를 오가지 않게
-  useEffect(() => {
-    if (arrival?.skipSetupCheck) return
-    const controller = new AbortController()
-    getSetupStatus(controller.signal)
-      .then(({ available }) => {
-        if (available) setSetupAvailable(true)
-      })
-      .catch(() => {
-        // 개설 안내는 편의다 — 실패하면 로그인 폼을 그대로 둔다
-      })
-    return () => controller.abort()
-  }, [arrival])
 
   // 이미 로그인돼 있으면(또는 방금 로그인했으면) 폼 대신 목적지로 보낸다.
   // replace 라서 뒤로가기로 로그인 화면에 돌아오지 않는다
   if (state.status === 'authenticated') return <Navigate to={next} replace />
   if (state.status === 'checking') return <AuthChecking />
-  if (setupAvailable) return <Navigate to={SIGNUP_PATH} replace />
 
   const locked = remainingSeconds !== null && remainingSeconds > 0
   const lockExpired = remainingSeconds === 0
@@ -138,17 +120,6 @@ export function LoginPage() {
           </p>
         )}
 
-        {arrival?.notice && !failure && (
-          <p
-            role="status"
-            data-testid="login-setup-notice"
-            // 화면설계 SCR-11 '계정있음' 이미지의 노란 상자
-            className="mt-6 rounded-[9px] border border-[#F2C46B] bg-[#FFF6E5] px-[14px] py-[13px] text-[13px] leading-[19px] font-bold text-[#8A5300] break-keep"
-          >
-            {arrival.notice}
-          </p>
-        )}
-
         {failure?.kind === 'locked' && !lockExpired && (
           <LockedNotice
             message={failure.message}
@@ -158,15 +129,7 @@ export function LoginPage() {
           />
         )}
 
-        {failure?.kind === 'rateLimited' && (
-          <p
-            role="alert"
-            data-testid="login-rate-limited-notice"
-            className={cn(NOTICE_TEXT, 'border-amber-300 bg-amber-50 text-amber-800')}
-          >
-            {LOGIN_RATE_LIMITED_MESSAGE}
-          </p>
-        )}
+        {failure?.kind === 'rateLimited' && <RateLimitedNotice testId="login-rate-limited-notice" />}
 
         <form
           onSubmit={handleSubmit}
@@ -211,7 +174,7 @@ export function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={pending}
             // 매장 개설 화면에서 왔으면 비밀번호 칸부터(화면설계 이미지와 같다)
-            autoFocus={Boolean(arrival?.loginId || arrival?.notice)}
+            autoFocus={Boolean(arrival?.loginId)}
             autoComplete="current-password"
             aria-invalid={fieldError ? true : undefined}
             aria-describedby={fieldError ? errorId : undefined}
@@ -236,7 +199,20 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-muted-foreground">계정 문의는 사장님에게 요청하세요</p>
+        {/* 화면설계 SCR-1: 가운데 정렬 회색 두 줄, [매장 개설]은 파란 링크색(주 버튼과 같은 primary 토큰)·밑줄 */}
+        <div className="mt-6 text-center text-muted-foreground">
+          <p>계정 문의는 사장님에게 요청하세요</p>
+          <p className="mt-1">
+            초대 코드가 있으면{' '}
+            <Link
+              to={SIGNUP_PATH}
+              data-testid="login-signup-link"
+              className="rounded font-bold text-primary underline underline-offset-2 outline-none focus-visible:ring-3 focus-visible:ring-primary/40"
+            >
+              매장 개설
+            </Link>
+          </p>
+        </div>
       </main>
     </div>
   )

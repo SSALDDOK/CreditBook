@@ -21,8 +21,8 @@ const EmployeesPage = lazy(() =>
 
 /**
  * 라우트 표 (react-router v7, declarative 모드)
- * - /login       SCR-1 로그인 (공개). 직원 계정이 하나도 없으면 /signup 으로 replace
- * - /signup      SCR-11 매장 개설·사장님 가입 (공개, 왼쪽 메뉴 없음). 계정이 있으면 /login 으로 replace
+ * - /login       SCR-1 로그인 (공개). 버튼 아래 [매장 개설] 링크로 /signup
+ * - /signup      SCR-11 매장 개설·사장님 가입 (공개, 왼쪽 메뉴 없음). 받은 초대 코드로 새 매장과 사장 계정을 만든다
  * - /customers   SCR-3 고객 목록 (로그인 필요)
  * - /customers/new   SCR-4 고객 등록 (로그인 필요 — 검색어는 주소가 아니라 화면 이동 상태로 받는다)
  * - /customers/:customerId   SCR-5 고객 상세 (로그인 필요)

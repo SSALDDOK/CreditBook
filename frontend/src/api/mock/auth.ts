@@ -14,6 +14,8 @@ import type { ChangePasswordRequest, LoginRequest, SessionResponse } from '../au
 
 const MOCK_DELAY_MS = 400
 const MOCK_SESSION_TTL_MS = 16 * 60 * 60 * 1000
+// 목 직원은 모두 같은 매장이다 — 사이드바 매장명 확인용(화면설계 SCR-12 이미지와 같은 이름)
+const MOCK_STORE_NAME = '반달네 커피'
 
 function mockSession(name = '김직원'): SessionResponse {
   return {
@@ -22,6 +24,7 @@ function mockSession(name = '김직원'): SessionResponse {
     role: 'STAFF',
     mustChangePassword: false,
     expiresAt: new Date(Date.now() + MOCK_SESSION_TTL_MS).toISOString(),
+    storeName: MOCK_STORE_NAME,
   }
 }
 
@@ -33,6 +36,7 @@ function mockAdminSession(): SessionResponse {
     role: 'ADMIN',
     mustChangePassword: false,
     expiresAt: new Date(Date.now() + MOCK_SESSION_TTL_MS).toISOString(),
+    storeName: MOCK_STORE_NAME,
   }
 }
 
@@ -44,6 +48,7 @@ function mockMustChangeSession(): SessionResponse {
     role: 'STAFF',
     mustChangePassword: true,
     expiresAt: new Date(Date.now() + MOCK_SESSION_TTL_MS).toISOString(),
+    storeName: MOCK_STORE_NAME,
   }
 }
 
