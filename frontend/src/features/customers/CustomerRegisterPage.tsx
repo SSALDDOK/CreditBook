@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ApiError, toUserMessage } from '@/api/client'
 import {
@@ -9,7 +9,6 @@ import {
   type DuplicatePhoneCustomer,
 } from '@/api/customers'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   customerListTarget,
   listReturnOf,
@@ -25,6 +24,7 @@ import {
   type RegisterField,
   type RegisterFieldErrors,
 } from './customerRegisterInput'
+import { CustomerTextField } from './CustomerTextField'
 import { DuplicatePhoneDialog } from './DuplicatePhoneDialog'
 
 /**
@@ -193,7 +193,7 @@ export function CustomerRegisterPage() {
         </h2>
 
         <form onSubmit={handleSubmit} noValidate aria-label="새 고객 등록" className="mt-5 flex flex-col gap-5">
-          <RegisterTextField
+          <CustomerTextField
             label="이름"
             required
             hint="1–20자, 공백만은 안 됩니다"
@@ -204,7 +204,7 @@ export function CustomerRegisterPage() {
             autoComplete="off"
             testId="customer-register-name"
           />
-          <RegisterTextField
+          <CustomerTextField
             label="연락처"
             required
             hint="숫자 9–11자리 · 하이픈은 있어도 되고 없어도 됩니다"
@@ -218,7 +218,7 @@ export function CustomerRegisterPage() {
             autoComplete="off"
             testId="customer-register-phone"
           />
-          <RegisterTextField
+          <CustomerTextField
             label="메모"
             hint="200자 이하"
             placeholder="예: 단골, 아메리카노 선호"
@@ -285,77 +285,6 @@ export function CustomerRegisterPage() {
         }}
         onGoToCustomer={(id) => goToCustomer(id, false)}
       />
-    </div>
-  )
-}
-
-function RegisterTextField({
-  label,
-  required = false,
-  hint,
-  value,
-  onChange,
-  error,
-  inputRef,
-  testId,
-  counter,
-  ...inputProps
-}: {
-  label: string
-  required?: boolean
-  hint: string
-  value: string
-  onChange: (value: string) => void
-  error?: string
-  inputRef: RefObject<HTMLInputElement | null>
-  testId: string
-  counter?: ReactNode
-  placeholder?: string
-  type?: 'text' | 'tel'
-  inputMode?: 'text' | 'tel'
-  maxLength?: number
-  autoComplete?: string
-}) {
-  const inputId = useId()
-  const hintId = useId()
-  const errorId = useId()
-  const describedBy = error ? `${hintId} ${errorId}` : hintId
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between">
-        <label htmlFor={inputId} className="text-base font-bold">
-          {label}
-          {required ? (
-            <span className="ml-1.5 text-sm font-semibold text-destructive">필수</span>
-          ) : (
-            <span className="ml-1.5 text-sm font-normal text-muted-foreground">선택</span>
-          )}
-        </label>
-        {counter}
-      </div>
-      <Input
-        ref={inputRef}
-        id={inputId}
-        type={inputProps.type ?? 'text'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        aria-required={required || undefined}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        data-testid={`${testId}-input`}
-        {...inputProps}
-        className="h-11 rounded-xl px-4 text-base md:text-base"
-      />
-      <p id={hintId} className="text-sm text-muted-foreground">
-        {hint}
-      </p>
-      {error && (
-        <p id={errorId} role="alert" className="text-sm font-semibold text-destructive" data-testid={`${testId}-error`}>
-          {error}
-        </p>
-      )}
     </div>
   )
 }

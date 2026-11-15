@@ -6,8 +6,13 @@ import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { PasswordPage } from '@/features/auth/PasswordPage'
 import { SignupPage } from '@/features/auth/SignupPage'
-import { CustomerDetailBreadcrumb, CustomerRegisterBreadcrumb } from '@/features/customers/CustomerDetailBreadcrumb'
+import {
+  CustomerDetailBreadcrumb,
+  CustomerEditBreadcrumb,
+  CustomerRegisterBreadcrumb,
+} from '@/features/customers/CustomerDetailBreadcrumb'
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage'
+import { CustomerEditPage } from '@/features/customers/CustomerEditPage'
 import { CustomerListPage } from '@/features/customers/CustomerListPage'
 import { CustomerRegisterPage } from '@/features/customers/CustomerRegisterPage'
 import { CustomerTransactionsScreen } from '@/features/transactions/CustomerTransactionsPage'
@@ -26,6 +31,7 @@ const EmployeesPage = lazy(() =>
  * - /customers   SCR-3 고객 목록 (로그인 필요)
  * - /customers/new   SCR-4 고객 등록 (로그인 필요 — 검색어는 주소가 아니라 화면 이동 상태로 받는다)
  * - /customers/:customerId   SCR-5 고객 상세 (로그인 필요)
+ * - /customers/:customerId/edit   SCR-9 고객 정보 수정 (로그인 필요 — STAFF·ADMIN 같은 폼, 비활성화 위험 구역은 ADMIN 만)
  * - /customers/:customerId/transactions   SCR-8 거래 이력 (로그인 필요 — 제목에 고객 이름이 들어가 레이아웃을 화면이 직접 그린다)
  * - /settings/employees   SCR-12 직원 계정 관리 (로그인 필요, 사장 전용 — 직원이면 화면 안 403 카드)
  * - /password    SCR-13 비밀번호 변경 (로그인 필요, 왼쪽 메뉴 없음). 비밀번호를 바꿔야 하는 세션은 다른 보호 화면 대신 여기로 온다
@@ -64,6 +70,14 @@ export default function App() {
                 element={
                   <AppLayout title={<CustomerDetailBreadcrumb />}>
                     <CustomerDetailPage />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/customers/:customerId/edit"
+                element={
+                  <AppLayout title={<CustomerEditBreadcrumb />}>
+                    <CustomerEditPage />
                   </AppLayout>
                 }
               />
