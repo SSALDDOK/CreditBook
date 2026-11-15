@@ -213,6 +213,7 @@ class ReconciliationApiIntegrationTest {
                 .andExpect(jsonPath("$.reason").value("충전 취소"));
 
         // then 1 — 이 시나리오가 의도대로 됐는지
+        assertThat(jdbcTemplate.queryForObject("SELECT count(DISTINCT store_id) FROM ledger_entries", Long.class)).isGreaterThanOrEqualTo(2); // 장부에 매장 2개 이상
         // 잔액 10,000원 (isEqualByComparingTo)
         assertThat(balanceOf(customer.accountId())).isEqualByComparingTo("10000");
         // 거래 5건 (CHARGE 2, USE 1, USE_CANCEL 1, CHARGE_CANCEL 1)
