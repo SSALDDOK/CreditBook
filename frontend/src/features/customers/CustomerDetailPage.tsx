@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { ApiError, CUSTOMER_NOT_FOUND_MESSAGE, toUserMessage } from '@/api/client'
+import { ApiError } from '@/api/client'
 import type { CustomerDetailResponse } from '@/api/customers'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -16,12 +16,14 @@ import { UseDialog } from '@/features/use/UseDialog'
 import { formatEntryTime, formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CustomerLocationState } from './customerListReturn'
+import { CustomerLoadError } from './CustomerLoadError'
 import { InactiveBadge } from './InactiveBadge'
 import { useCustomerDetail } from './useCustomerDetail'
 
 /**
  * SCR-5 고객 상세. 잔액·최근 거래는 서버 응답(GET /api/customers/{id}) 값을 그대로 표시한다.
- * 고객 정보 수정·비활성화 링크는 두지 않는다(ADMIN 도 같은 화면).
+ * 이름·연락처 줄 오른쪽 끝의 [정보 수정]은 고객 정보 수정(SCR-9)으로 간다 — STAFF·ADMIN, 활성·비활성 고객 모두.
+ * 비활성화는 SCR-9 안의 위험 구역(ADMIN 만)에서 한다.
  */
 export function CustomerDetailPage() {
   const { customerId = '' } = useParams()
@@ -43,23 +45,7 @@ export function CustomerDetailPage() {
       aria-busy={state.status === 'loading'}
     >
       {state.status === 'error' ? (
-        <div className="flex flex-col items-start gap-4 rounded-2xl border bg-background p-8">
-          <p role="alert" data-testid={notFound ? 'customer-not-found' : 'error-message'} className="text-destructive">
-            {notFound ? CUSTOMER_NOT_FOUND_MESSAGE : toUserMessage(state.error)}
-          </p>
-          <div className="flex gap-3">
-            {!notFound && (
-              <Button type="button" variant="outline" onClick={refetch} data-testid="customer-detail-retry">
-                다시 시도
-              </Button>
-            )}
-            <Button asChild variant="outline">
-              <Link to="/customers" data-testid="customer-detail-back">
-                고객 목록으로
-              </Link>
-            </Button>
-          </div>
-        </div>
+        <CustomerLoadError error={state.error} onRetry={refetch} testIdPrefix="customer-detail" />
       ) : state.data ? (
         <CustomerDetailView
           key={state.data.id}
@@ -163,6 +149,15 @@ function CustomerDetailView({
         <span className="text-lg text-muted-foreground tabular-nums" data-testid="customer-detail-phone">
           {customer.maskedPhone}
         </span>
+        {/* 고객 정보 수정(SCR-9). 목록에서 가져온 상태(listReturn)를 넘겨 그 화면의 브레드크럼 '고객'도 보던 목록으로 돌아가게 한다 */}
+        <Link
+          to={`/customers/${customer.id}/edit`}
+          state={location.state}
+          data-testid="customer-edit-link"
+          className="ml-auto rounded font-semibold text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          정보 수정
+        </Link>
       </div>
 
       <section

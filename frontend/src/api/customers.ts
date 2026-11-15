@@ -1,6 +1,12 @@
 import { apiRequest } from './client'
 import { USE_MOCK } from './config'
-import { getMockCustomer, registerMockCustomer, searchMockCustomers } from './mock/customers'
+import {
+  deactivateMockCustomer,
+  editMockCustomer,
+  getMockCustomer,
+  registerMockCustomer,
+  searchMockCustomers,
+} from './mock/customers'
 
 // 백엔드 CustomerListItemResponse·CustomerListResponse·CustomerDetailResponse 와 필드 이름을 맞춘다.
 
@@ -82,6 +88,10 @@ export type CustomerDetailResponse = {
   balance: number
   active: boolean
   createdAt: string
+  /** 고객 메모. 없으면 null */
+  memo: string | null
+  /** 고객 버전 — 정보 수정(PATCH) 요청의 version 으로 그대로 돌려보낸다 */
+  version: number
   /** 최근 거래 최대 5건, 최신순(seq 내림차순). 없으면 [] */
   recentEntries: RecentLedgerEntryResponse[]
 }
@@ -148,4 +158,56 @@ export function readDuplicatePhoneCustomers(details: unknown): DuplicatePhoneCus
       typeof (c as DuplicatePhoneCustomer).active === 'boolean',
   )
   return valid ? (list as DuplicatePhoneCustomer[]).map(({ id, name, active }) => ({ id, name, active })) : null
+}
+
+// 백엔드 CustomerEditRequest·ErrorResponse.CustomerBalanceNotZeroDetails 와 필드 이름을 맞춘다.
+
+/**
+ * 고객 정보 수정 요청 (REQ-3). 보낸 칸만 고친다 — 없는 칸은 그대로 둔다.
+ * 받지 않는 항목(balance·active 등)은 넣지 않는다(서버가 400 으로 거절한다).
+ */
+export type CustomerEditRequest = {
+  /** 상세 조회 응답의 version 그대로. 지금 버전과 다르면 409 CONCURRENT_MODIFICATION */
+  version: number
+  name?: string
+  /** 바꿀 때만 보낸다(숫자 9–11자리, 하이픈 허용). 연락처는 지울 수 없다 */
+  phone?: string
+  /** 빈 문자열이면 메모를 지운다 */
+  memo?: string
+  /** 같은 번호 고객이 있어도 연락처를 바꿀지. 확인 창의 [그래도 저장]에서만 true */
+  confirmDuplicatePhone?: boolean
+}
+
+/**
+ * PATCH /api/customers/{id} — 고객 정보 수정 (STAFF·ADMIN). 200 응답은 상세 조회와 같은 모양이다.
+ * 409 CONCURRENT_MODIFICATION(버전 다름)·409 DUPLICATE_PHONE(details.existingCustomers)·400 INVALID_INPUT(fieldErrors)·404 CUSTOMER_NOT_FOUND.
+ * 자동 재시도는 하지 않는다 — 다시 보내는 것은 직원이 버튼을 다시 누를 때뿐이다.
+ */
+export function editCustomer(customerId: string, request: CustomerEditRequest): Promise<CustomerDetailResponse> {
+  if (USE_MOCK) return editMockCustomer(customerId, request)
+  return apiRequest<CustomerDetailResponse>(`/api/customers/${encodeURIComponent(customerId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+}
+
+/**
+ * PATCH /api/customers/{id}/deactivate — 고객 비활성화 (ADMIN 전용, STAFF 는 403). 본문 없음, 204(이미 비활성이어도 204).
+ * 잔액이 남았으면 409 CUSTOMER_BALANCE_NOT_ZERO(details.balance). 판단은 서버가 한다.
+ */
+export function deactivateCustomer(customerId: string): Promise<void> {
+  if (USE_MOCK) return deactivateMockCustomer(customerId)
+  return apiRequest<void>(`/api/customers/${encodeURIComponent(customerId)}/deactivate`, { method: 'PATCH' })
+}
+
+/** 409 CUSTOMER_BALANCE_NOT_ZERO 의 details — 요청 시점의 현재 잔액(원). 표시만 한다 */
+export type CustomerBalanceNotZeroDetails = { balance: number }
+
+/** CUSTOMER_BALANCE_NOT_ZERO 오류의 details 를 꺼낸다. 모양이 다르면 null */
+export function readCustomerBalanceNotZeroDetails(details: unknown): CustomerBalanceNotZeroDetails | null {
+  if (typeof details !== 'object' || details === null) return null
+  const { balance } = details as Record<string, unknown>
+  if (typeof balance !== 'number' || !Number.isSafeInteger(balance)) return null
+  return { balance }
 }

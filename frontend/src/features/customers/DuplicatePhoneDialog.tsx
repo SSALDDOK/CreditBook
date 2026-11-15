@@ -14,9 +14,29 @@ import { InactiveBadge } from './InactiveBadge'
 //   여럿이면 [해당 고객으로 이동] 대신 각 행을 눌러 그 고객 상세로 간다([닫기] [새로 등록])
 // - 활성이 하나라도: "같은 번호의 고객이 있습니다" — [닫기] [새로 등록]
 // [새로 등록]은 같은 입력으로 confirmDuplicatePhone: true 를 다시 보낸다(보내는 일은 등록 화면이 한다).
+// 고객 정보 수정(SCR-9)도 이 창을 쓴다 — 확인 버튼 라벨([그래도 저장])·testid·모두 비활성일 때의 부제를 props 로 바꾼다.
+// 버튼 구성(활성이 섞이면 [닫기] [확인], 비활성 한 명이면 [해당 고객으로 이동]까지)은 두 화면이 같다.
 // shadcn/ui Dialog(Radix) — 포커스 가두기·Esc 닫기·닫을 때 포커스 복원은 Radix 가 맡는다(CancelDialog 와 같은 방식).
 
 const BUTTON_CLASS = 'h-12 min-w-28 rounded-xl px-6 text-lg font-bold'
+
+/** 화면마다 다른 문구·testid. 생략하면 고객 등록(SCR-4) 값 */
+export type DuplicatePhoneDialogText = {
+  /** 확인 버튼 라벨 — 등록 '새로 등록', 수정 '그래도 저장' */
+  confirmLabel: string
+  /** 확인 요청 중 버튼의 접근성 이름 */
+  confirmPendingLabel: string
+  /** 확인 버튼 data-testid */
+  confirmTestId: string
+  /** 모두 비활성일 때의 부제. 없으면 등록 화면 문구('다시 오신 손님이면 …') */
+  inactiveDescription?: string
+}
+
+const REGISTER_TEXT: DuplicatePhoneDialogText = {
+  confirmLabel: '새로 등록',
+  confirmPendingLabel: '새로 등록 처리 중',
+  confirmTestId: 'duplicate-phone-register-anyway',
+}
 
 export function DuplicatePhoneDialog({
   customers,
@@ -25,6 +45,7 @@ export function DuplicatePhoneDialog({
   onClose,
   onRegisterAnyway,
   onGoToCustomer,
+  text = REGISTER_TEXT,
 }: {
   /** 같은 번호 고객(서버 순서). null 이면 창이 닫혀 있다 */
   customers: DuplicatePhoneCustomer[] | null
@@ -36,6 +57,8 @@ export function DuplicatePhoneDialog({
   onClose: () => void
   onRegisterAnyway: () => void
   onGoToCustomer: (customerId: string) => void
+  /** 확인 버튼 라벨·testid·부제 (기본: 고객 등록) */
+  text?: DuplicatePhoneDialogText
 }) {
   const open = customers !== null && customers.length > 0
 
@@ -54,6 +77,7 @@ export function DuplicatePhoneDialog({
           onClose={onClose}
           onRegisterAnyway={onRegisterAnyway}
           onGoToCustomer={onGoToCustomer}
+          text={text}
         />
       )}
     </Dialog>
@@ -67,6 +91,7 @@ function DuplicatePhoneDialogBody({
   onClose,
   onRegisterAnyway,
   onGoToCustomer,
+  text,
 }: {
   customers: DuplicatePhoneCustomer[]
   phoneDisplay: string
@@ -74,6 +99,7 @@ function DuplicatePhoneDialogBody({
   onClose: () => void
   onRegisterAnyway: () => void
   onGoToCustomer: (customerId: string) => void
+  text: DuplicatePhoneDialogText
 }) {
   const allInactive = customers.every((c) => !c.active)
   // 비활성 고객이 여럿이면 어느 고객인지 직원이 고르게 한다 — 행 자체가 이동 버튼이 된다
@@ -87,12 +113,12 @@ function DuplicatePhoneDialogBody({
       variant={single ? 'outline' : 'default'}
       onClick={onRegisterAnyway}
       disabled={pending}
-      aria-label={pending ? '새로 등록 처리 중' : undefined}
+      aria-label={pending ? text.confirmPendingLabel : undefined}
       data-state={pending ? 'pending' : 'idle'}
       className={BUTTON_CLASS}
-      data-testid="duplicate-phone-register-anyway"
+      data-testid={text.confirmTestId}
     >
-      {pending ? <Loader2 aria-hidden="true" className="size-6 animate-spin" /> : '새로 등록'}
+      {pending ? <Loader2 aria-hidden="true" className="size-6 animate-spin" /> : text.confirmLabel}
     </Button>
   )
 
@@ -128,7 +154,9 @@ function DuplicatePhoneDialogBody({
           {allInactive ? '같은 번호의 비활성 고객이 있습니다' : '같은 번호의 고객이 있습니다'}
         </DialogTitle>
         <DialogDescription className="text-base text-muted-foreground" data-testid="duplicate-phone-description">
-          {allInactive ? '다시 오신 손님이면 해당 고객에게 충전하세요' : `${phoneDisplay} 번호로 이미 등록된 고객`}
+          {allInactive
+            ? (text.inactiveDescription ?? '다시 오신 손님이면 해당 고객에게 충전하세요')
+            : `${phoneDisplay} 번호로 이미 등록된 고객`}
         </DialogDescription>
       </div>
 

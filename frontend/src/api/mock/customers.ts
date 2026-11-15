@@ -1,6 +1,7 @@
-import { ApiError, type FieldError } from '../client'
+import { ApiError, notifyPasswordChangeRequired, notifyUnauthorized, type FieldError } from '../client'
 import type {
   CustomerDetailResponse,
+  CustomerEditRequest,
   CustomerListResponse,
   CustomerRegisterRequest,
   CustomerRegisterResponse,
@@ -9,6 +10,7 @@ import type {
   RecentLedgerEntryResponse,
 } from '../customers'
 import type { TransactionResponse } from '../transactions'
+import { mockCurrentSession, mockExpireSession } from './auth'
 
 // 화면 개발용 목 데이터. 이름은 가상이고, 연락처는 서버 응답과 같은 "이미 가린" 형태로만 둔다.
 // 잔액·변동 후 잔액(balanceAfter)·부호 붙은 금액(signedAmount)·취소 가능 여부(cancellable)는 서버가 준 값처럼
@@ -261,9 +263,13 @@ function findCustomer(customerId: string): MockCustomer {
 
 export function getMockCustomer(customerId: string, signal?: AbortSignal): Promise<CustomerDetailResponse> {
   return delayed(() => {
-    const { entries, ...customer } = findCustomer(customerId)
-    return { ...customer, recentEntries: entries.slice(0, RECENT_ENTRY_COUNT).map(toRecentEntry) }
+    return toDetail(findCustomer(customerId))
   }, signal)
+}
+
+function toDetail({ entries, ...customer }: MockCustomer): CustomerDetailResponse {
+  const { memo, version } = editStateOf(customer.id)
+  return { ...customer, memo, version, recentEntries: entries.slice(0, RECENT_ENTRY_COUNT).map(toRecentEntry) }
 }
 
 /** 거래 이력 목(mock/transactions.ts)용 — 고객의 장부 전체(최신순). 400·404 는 상세와 같다 */
@@ -496,6 +502,7 @@ export function registerMockCustomer({
       entries: [],
     }
     MOCK_PHONE_DIGITS.set(created.id, digits)
+    MOCK_EDIT_STATE.set(created.id, { memo: trimmedMemo, version: 0 })
     // 목록은 최근 등록순이라 맨 앞에 넣는다
     MOCK_CUSTOMERS.unshift(created)
     return {
@@ -506,5 +513,123 @@ export function registerMockCustomer({
       memo: trimmedMemo,
       createdAt: created.createdAt,
     }
+  })
+}
+
+// 고객 정보 수정(SCR-9) 목 — 메모·버전은 가짜 서버만 아는 값이라 고객 목록 항목과 따로 둔다(없으면 메모 없음·버전 0).
+// - 박서연 …001  메모 '단골, 아메리카노 선호'(SCR-9 이미지)
+// - 이름을 '버전충돌'로 바꿔 저장하면 다른 기기가 먼저 고친 것처럼 버전을 올린 뒤 409 CONCURRENT_MODIFICATION
+// 비활성화(ADMIN 전용 — 목 로그인 아이디 'owner'): 잔액이 남은 고객(박서연 등)은 409 CUSTOMER_BALANCE_NOT_ZERO,
+// 잔액 0원 고객(이준호 …002·한지민 …052)은 비활성화된다. 이미 비활성이면 그대로 204. 새로고침하면 처음 상태.
+const MOCK_EDIT_STATE = new Map<string, { memo: string | null; version: number }>([
+  [mockId(1), { memo: '단골, 아메리카노 선호', version: 3 }],
+])
+
+function editStateOf(customerId: string): { memo: string | null; version: number } {
+  let state = MOCK_EDIT_STATE.get(customerId)
+  if (!state) {
+    state = { memo: null, version: 0 }
+    MOCK_EDIT_STATE.set(customerId, state)
+  }
+  return state
+}
+
+const MOCK_CONFLICT_NAME = '버전충돌'
+
+/**
+ * 고객 정보 수정 목 — 서버(CustomerEditRequest·CustomerService)와 같은 순서로 판단한다:
+ * 형식 오류 400 INVALID_INPUT(fieldErrors) → 버전이 다르면 409 CONCURRENT_MODIFICATION → 바뀔 연락처의 다른 고객이 있고
+ * 확인 표시가 없으면 409 DUPLICATE_PHONE → 보낸 칸만 고치고(바뀐 것이 있으면 버전 + 1) 상세 모양으로 돌려준다.
+ */
+export function editMockCustomer(
+  customerId: string,
+  { version, name, phone, memo, confirmDuplicatePhone }: CustomerEditRequest,
+): Promise<CustomerDetailResponse> {
+  return delayed(() => {
+    const found = findCustomer(customerId)
+    const state = editStateOf(found.id)
+    const fieldErrors: FieldError[] = []
+    if (typeof version !== 'number') {
+      fieldErrors.push({ field: 'version', message: '버전 정보가 없습니다. 고객 정보를 다시 불러와 주세요.' })
+    }
+    const trimmedName = name?.trim()
+    if (name !== undefined && !trimmedName) fieldErrors.push({ field: 'name', message: '이름을 입력해 주세요.' })
+    else if (trimmedName && Array.from(trimmedName).length > NAME_MAX_LENGTH)
+      fieldErrors.push({ field: 'name', message: `이름은 ${NAME_MAX_LENGTH}자 이하여야 합니다.` })
+    if (phone !== undefined && !PHONE_INPUT_PATTERN.test(phone))
+      fieldErrors.push({
+        field: 'phone',
+        message: '연락처는 숫자 9–11자리여야 합니다. 하이픈(-)은 숫자 사이에만 쓸 수 있습니다.',
+      })
+    const trimmedMemo = memo === undefined ? undefined : memo.trim() ? memo.trim() : null
+    if (trimmedMemo && Array.from(trimmedMemo).length > MEMO_MAX_LENGTH)
+      fieldErrors.push({ field: 'memo', message: `메모는 ${MEMO_MAX_LENGTH}자 이하여야 합니다.` })
+    if (fieldErrors.length > 0) {
+      throw new ApiError(400, 'INVALID_INPUT', '입력값을 확인해 주세요.', fieldErrors)
+    }
+
+    if (trimmedName === MOCK_CONFLICT_NAME) state.version += 1 // 다른 기기가 먼저 고친 것처럼
+    if (version !== state.version) {
+      throw new ApiError(409, 'CONCURRENT_MODIFICATION', '다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요.')
+    }
+
+    const digits = phone?.replace(/-/g, '')
+    const phoneChanged = digits !== undefined && digits !== MOCK_PHONE_DIGITS.get(found.id)
+    if (phoneChanged) {
+      const samePhone = MOCK_CUSTOMERS.filter((c) => c.id !== found.id && MOCK_PHONE_DIGITS.get(c.id) === digits).sort(
+        (a, b) => Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt),
+      )
+      if (samePhone.length > 0 && confirmDuplicatePhone !== true) {
+        throw new ApiError(409, 'DUPLICATE_PHONE', '같은 번호의 고객이 있습니다.', [], {
+          existingCustomers: samePhone.map(({ id, name: n, active }) => ({ id, name: n, active })),
+        })
+      }
+    }
+
+    let changed = false
+    if (trimmedName !== undefined && trimmedName !== found.name) {
+      found.name = trimmedName
+      changed = true
+    }
+    if (phoneChanged && digits !== undefined) {
+      MOCK_PHONE_DIGITS.set(found.id, digits)
+      found.maskedPhone = maskMockPhone(digits)
+      changed = true
+    }
+    if (trimmedMemo !== undefined && trimmedMemo !== state.memo) {
+      state.memo = trimmedMemo
+      changed = true
+    }
+    if (changed) state.version += 1
+    return toDetail(found)
+  })
+}
+
+/**
+ * 고객 비활성화 목 — 사장만(로그인 안 됨 401, 비밀번호 변경 필요 403 PASSWORD_CHANGE_REQUIRED, 직원 403 FORBIDDEN).
+ * 이미 비활성이면 그대로(204), 잔액이 남았으면 409 CUSTOMER_BALANCE_NOT_ZERO(details.balance), 아니면 비활성으로 바꾼다.
+ */
+export function deactivateMockCustomer(customerId: string): Promise<void> {
+  return delayed(() => {
+    const session = mockCurrentSession()
+    if (!session) {
+      mockExpireSession()
+      notifyUnauthorized()
+      throw new ApiError(401, 'UNAUTHENTICATED', '로그인이 필요합니다.')
+    }
+    if (session.mustChangePassword) {
+      notifyPasswordChangeRequired()
+      throw new ApiError(403, 'PASSWORD_CHANGE_REQUIRED', '비밀번호를 변경한 뒤 이용해 주세요.')
+    }
+    if (session.role !== 'ADMIN') throw new ApiError(403, 'FORBIDDEN', '권한이 없습니다.')
+    const found = findCustomer(customerId)
+    if (!found.active) return
+    if (found.balance !== 0) {
+      throw new ApiError(409, 'CUSTOMER_BALANCE_NOT_ZERO', '잔액이 0원인 고객만 비활성화할 수 있습니다.', [], {
+        balance: found.balance,
+      })
+    }
+    found.active = false
+    editStateOf(found.id).version += 1
   })
 }

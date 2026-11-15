@@ -13,6 +13,7 @@ const LINK_CLASS =
  *
  * - 고객 등록(SCR-4):  고객 › 등록
  * - 고객 상세(SCR-5):  고객 › 상세
+ * - 고객 정보 수정(SCR-9):  고객 › 정보 수정
  * - 거래 이력(SCR-8):  고객 › (이름, 상세로 가는 링크) › 거래 이력
  */
 export function CustomerBreadcrumb({
@@ -58,4 +59,9 @@ export function CustomerDetailBreadcrumb() {
 /** 고객 등록의 제목 '고객 › 등록' */
 export function CustomerRegisterBreadcrumb() {
   return <CustomerBreadcrumb current="등록" />
+}
+
+/** 고객 정보 수정의 제목 '고객 › 정보 수정' */
+export function CustomerEditBreadcrumb() {
+  return <CustomerBreadcrumb current="정보 수정" />
 }

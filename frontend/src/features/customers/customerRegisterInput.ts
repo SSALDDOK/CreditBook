@@ -28,21 +28,64 @@ export function validateRegisterInput({
   memo: string
 }): RegisterFieldErrors {
   const errors: RegisterFieldErrors = {}
-  const trimmedName = name.trim()
-  if (!trimmedName) errors.name = '이름을 입력해 주세요.'
-  else if (countChars(trimmedName) > NAME_MAX_LENGTH) errors.name = `이름은 ${NAME_MAX_LENGTH}자 이하여야 합니다.`
+  const nameError = nameErrorOf(name)
+  if (nameError) errors.name = nameError
 
   const trimmedPhone = phone.trim()
   if (!trimmedPhone) errors.phone = '연락처를 입력해 주세요.'
   else {
-    const digits = phoneDigitsOf(trimmedPhone)
-    if (digits === null || digits.length < 9 || digits.length > 11) {
-      errors.phone = '연락처는 숫자 9–11자리여야 합니다.'
-    }
+    const phoneError = phoneFormatErrorOf(trimmedPhone)
+    if (phoneError) errors.phone = phoneError
   }
 
-  if (countChars(memo.trim()) > MEMO_MAX_LENGTH) errors.memo = `메모는 ${MEMO_MAX_LENGTH}자 이하여야 합니다.`
+  const memoError = memoErrorOf(memo)
+  if (memoError) errors.memo = memoError
   return errors
+}
+
+/**
+ * 고객 정보 수정(SCR-9) 형식 검사 — 등록과 같은 규칙이되, 연락처는 비워 두면 바꾸지 않는 것이라 입력했을 때만 검사한다.
+ * 통과하면 빈 객체
+ */
+export function validateEditInput({
+  name,
+  phone,
+  memo,
+}: {
+  name: string
+  phone: string
+  memo: string
+}): RegisterFieldErrors {
+  const errors: RegisterFieldErrors = {}
+  const nameError = nameErrorOf(name)
+  if (nameError) errors.name = nameError
+
+  const trimmedPhone = phone.trim()
+  if (trimmedPhone) {
+    const phoneError = phoneFormatErrorOf(trimmedPhone)
+    if (phoneError) errors.phone = phoneError
+  }
+
+  const memoError = memoErrorOf(memo)
+  if (memoError) errors.memo = memoError
+  return errors
+}
+
+function nameErrorOf(name: string): string | null {
+  const trimmedName = name.trim()
+  if (!trimmedName) return '이름을 입력해 주세요.'
+  if (countChars(trimmedName) > NAME_MAX_LENGTH) return `이름은 ${NAME_MAX_LENGTH}자 이하여야 합니다.`
+  return null
+}
+
+/** 비어 있지 않은 연락처의 형식 검사 */
+function phoneFormatErrorOf(trimmedPhone: string): string | null {
+  const digits = phoneDigitsOf(trimmedPhone)
+  return digits === null || digits.length < 9 || digits.length > 11 ? '연락처는 숫자 9–11자리여야 합니다.' : null
+}
+
+function memoErrorOf(memo: string): string | null {
+  return countChars(memo.trim()) > MEMO_MAX_LENGTH ? `메모는 ${MEMO_MAX_LENGTH}자 이하여야 합니다.` : null
 }
 
 export type RegisterPrefill = { name: string; phone: string }
