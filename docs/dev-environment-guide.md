@@ -1,6 +1,6 @@
 # 개발 환경 이해 — Docker · Flyway · Neon · 의존성 · 프론트 · 병합
 
-이 프로젝트의 도구들이 **무엇이고, 서로 어떻게 연결되고, 눈으로 어떻게 확인하는지**를 정리한 문서다. 규칙(무엇을 하면 안 되는지)은 [CLAUDE.md](../CLAUDE.md)가 기준이고, 이 문서는 그 규칙의 배경을 설명한다.
+이 프로젝트의 도구들이 **무엇이고, 서로 어떻게 연결되고, 눈으로 어떻게 확인하는지**를 정리한 문서다. 규칙(무엇을 하면 안 되는지)은 Notion 개발 컨벤션이 기준이고, 이 문서는 그 규칙의 배경을 설명한다.
 
 기준일: 2026-09-29 (V1 Neon 적용, 로컬 Docker 설치 완료 시점). 2026-10-07 로컬 Docker DB 프로필(`local-docker`) 추가. 2026-10-11 프론트(Node.js) 절 추가
 
@@ -236,7 +236,7 @@ npm run dev     # http://localhost:5173
 
 - GitHub에서 **Create a merge commit** → Confirm merge로 병합한다. 병합 방식은 merge commit만 쓴다 (squash·rebase 금지)
 - CI(`backend build & test`)가 통과하지 않으면 `main` 보호 규칙 때문에 병합 버튼이 막힌다
-- 쌓인 PR이 있으면 원격 브랜치를 지우기 전에 다음 PR의 base를 `main`으로 먼저 바꾼다 (CLAUDE.md 병합 절차)
+- 쌓인 PR이 있으면 원격 브랜치를 지우기 전에 다음 PR의 base를 `main`으로 먼저 바꾼다 (개발 컨벤션 §1.3)
 
 병합 후 로컬 정리:
 ```powershell

@@ -1,6 +1,6 @@
 # 운영 배포용 이미지 (Render). 빌드 맥락은 backend/ 폴더다.
 # 1단계에서 실행 가능한 jar 를 만들고, 2단계는 JRE 와 jar 만 담는다 — 소스·Gradle 캐시·비밀값은 최종 이미지에 들어가지 않는다.
-# 접속 정보·JWT 서명 키는 이미지에 넣지 않고 배포처 환경변수로만 받는다 (CLAUDE.md 절대 금지 #5)
+# 접속 정보·JWT 서명 키는 이미지에 넣지 않고 배포처 환경변수로만 받는다 (개발 컨벤션 §6 금지 사항 5번)
 
 FROM eclipse-temurin:17-jdk AS build
 WORKDIR /workspace
