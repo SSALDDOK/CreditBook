@@ -1,7 +1,7 @@
 spring:
   application:
     name: creditbook
-  # 접속 정보는 여기 두지 않는다 (CLAUDE.md 절대 금지 #5).
+  # 접속 정보는 여기 두지 않는다 (개발 컨벤션 §6 금지 사항 5번).
   # 로컬: backend/application-local.yml (gitignore) / 배포: SPRING_DATASOURCE_URL·USERNAME·PASSWORD 환경변수
   datasource:
     hikari:

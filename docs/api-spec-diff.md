@@ -81,4 +81,6 @@
 | 7 | 개발 컨벤션 §2 패키지 구조 | `customer`·`prepaid`·`auth`만 있다 | `store`(매장·초대 코드 가입) 패키지, `prepaid/controller`의 `CancelController`·`LedgerInputSettingsController`, `auth/domain`의 `EmployeeCredentialRules` | 구조도 갱신 |
 | 8 | 리포 작업 지침 파일(REQ-29 줄, 패키지 구조, `store_profile` 행) | `GET /api/setup/status`, 403 `SETUP_ALREADY_COMPLETED`, 단일 행 `store_profile` | 여러 매장 전환(V5)으로 셋 다 없어졌다 - 가입은 초대 코드, 표는 `stores` | 같은 스프린트 문서 정리에서 고침 |
 
-이전에 맞춘 것(참고): 고객 정보 수정 API의 확정 명세(경로·요청 항목·오류 표)는 Jira 설명·화면 목록 '연결 API'·REQ-3 본문에 옮기는 중이다. 가입 API의 옛 경로(`GET /api/setup/status`)는 요구사항·화면 문서에서 2026-11-13에 정리됐다.
+위 8건은 2026-11-15에 모두 반영했다(1~7은 Notion 문서, 8은 작업 지침 파일).
+
+이전에 맞춘 것(참고): 고객 정보 수정 API의 확정 명세(경로·요청 항목·오류 표)는 Jira 설명·화면 목록 '연결 API'·REQ-3 본문에 옮겼다(2026-11-15). 가입 API의 옛 경로(`GET /api/setup/status`)는 요구사항·화면 문서에서 2026-11-13에 정리됐다.

@@ -1,13 +1,13 @@
-# 시크릿 — 절대 커밋 금지 (CLAUDE.md 절대 금지 #5)
+# 시크릿 — 절대 커밋 금지 (개발 컨벤션 §6 금지 사항 5번)
 .env
 .env.*
 !.env.example
 application-local.yml
 application-local.yaml
 
-# Claude Code 개인 설정
-.claude/settings.local.json
-.claude/worktrees/
+# AI 코딩 도구 작업 설정 (로컬 전용 - README 'AI 도구를 쓴 방식' 참고)
+CLAUDE.md
+.claude/
 
 # Gradle / 빌드 산출물
 .gradle/

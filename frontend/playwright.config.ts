@@ -11,7 +11,7 @@ const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`
 
 export default defineConfig({
   testDir: './e2e',
-  // 테스트는 실행 순서에 의존하지 않는다(CLAUDE.md 테스트 규칙). CI 는 백엔드·DB 하나를 같이 쓰므로 워커 1개
+  // 테스트는 실행 순서에 의존하지 않는다(개발 컨벤션 §4.2). CI 는 백엔드·DB 하나를 같이 쓰므로 워커 1개
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // 재시도하지 않는다 — TC 판정은 한 번 실행 결과로 한다(재시도로 통과한 간헐 실패를 숨기지 않게)
