@@ -1,6 +1,5 @@
 package com.creditbook.prepaid.controller;
 
-import static org.hamcrest.Matchers.endsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -25,6 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -99,7 +99,7 @@ class UsageControllerTest {
 
 	@Test
 	@DisplayName("잔액 50,000원 고객이 4,500원을 사용하면 잔액이 45,500원이 되고 USE 유형 거래가 생성된다")
-	void use_returns_201_with_location_and_use_entry() throws Exception {
+	void use_returns_201_with_use_entry_and_no_location() throws Exception {
 		// given
 		given(usageService.use(STORE_ID, CUSTOMER_ID, new BigDecimal("4500"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(used(4_500, 45_500, "음료"));
@@ -111,7 +111,7 @@ class UsageControllerTest {
 						{"amount": 4500, "memo": "음료"}
 						"""))
 				.andExpect(status().isCreated())
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(jsonPath("$.id").value(ENTRY_ID.toString()))
 				.andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
 				.andExpect(jsonPath("$.type").value("USE"))
