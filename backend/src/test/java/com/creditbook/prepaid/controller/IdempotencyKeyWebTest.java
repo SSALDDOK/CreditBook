@@ -1,7 +1,6 @@
 package com.creditbook.prepaid.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.endsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -28,6 +27,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -130,7 +130,7 @@ class IdempotencyKeyWebTest {
 		// when / then
 		mockMvc.perform(request(path).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE))
 				.andExpect(status().isCreated())
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(header().doesNotExist(IdempotencyHeaders.IDEMPOTENT_REPLAYED))
 				.andExpect(jsonPath("$.id").value(ENTRY_ID.toString()))
 				.andExpect(jsonPath("$.balanceAfter").value(45500));
@@ -147,7 +147,7 @@ class IdempotencyKeyWebTest {
 		mockMvc.perform(request(path).header(IdempotencyHeaders.IDEMPOTENCY_KEY, KEY_VALUE))
 				.andExpect(status().isCreated())
 				.andExpect(header().string(IdempotencyHeaders.IDEMPOTENT_REPLAYED, "true"))
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(jsonPath("$.id").value(ENTRY_ID.toString()))
 				.andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
 				.andExpect(jsonPath("$.amount").value(4500))

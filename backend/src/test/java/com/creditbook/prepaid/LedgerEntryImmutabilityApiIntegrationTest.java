@@ -98,7 +98,7 @@ class LedgerEntryImmutabilityApiIntegrationTest {
 	@DisplayName("거래 수정·삭제 시도는 405 또는 404로 거부되고 거래 레코드는 그대로 남는다")
 	@Tag("TC-10")
 	void modifying_or_deleting_a_ledger_entry_is_rejected(String method, String path) throws Exception {
-		// given — 충전 거래 1건 (/api/ledger-entries/{id}는 충전 응답 Location 헤더가 가리키는 경로)
+		// given — 충전 거래 1건 (/api/ledger-entries/{id}는 실제 거래 id로 부르는 수정·삭제 시도 경로)
 		Employee employee = TestEmployees.readyStaff(storeId, "tc10-staff", passwordEncoder.encode("test1234!"), "테스트직원",
 				clock.instant());
 		employeeRepository.add(employee);

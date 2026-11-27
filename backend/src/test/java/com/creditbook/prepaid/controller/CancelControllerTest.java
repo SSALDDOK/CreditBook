@@ -1,6 +1,5 @@
 package com.creditbook.prepaid.controller;
 
-import static org.hamcrest.Matchers.endsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -25,6 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.test.context.support.WithAnonymousUser;
@@ -117,7 +117,7 @@ class CancelControllerTest {
 
 	@Test
 	@DisplayName("사용 건을 취소하면 201과 함께 USE_CANCEL 거래·복구된 잔액·사유·원 거래 ID 가 응답된다")
-	void cancel_use_returns_201_with_location_and_use_cancel_entry() throws Exception {
+	void cancel_use_returns_201_with_use_cancel_entry_and_no_location() throws Exception {
 		// given
 		given(cancelService.cancelUse(STORE_ID, CUSTOMER_ID, USE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, false));
@@ -125,7 +125,7 @@ class CancelControllerTest {
 		// when / then
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isCreated())
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + CANCEL_ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(header().doesNotExist(IdempotencyHeaders.IDEMPOTENT_REPLAYED))
 				.andExpect(jsonPath("$.id").value(CANCEL_ENTRY_ID.toString()))
 				.andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
@@ -169,7 +169,7 @@ class CancelControllerTest {
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isCreated())
 				.andExpect(header().string(IdempotencyHeaders.IDEMPOTENT_REPLAYED, "true"))
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + CANCEL_ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(jsonPath("$.id").value(CANCEL_ENTRY_ID.toString()));
 	}
 

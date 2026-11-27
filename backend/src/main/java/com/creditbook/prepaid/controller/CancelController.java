@@ -54,7 +54,7 @@ public class CancelController {
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
 		ChargeCancelResult result = cancelService.cancelCharge(storeId, customerId, chargeEntryId, request.reason(),
 				performedBy, key);
-		return IdempotencyHeaders.created(result.entryId(), result.replayed(), ChargeCancelResponse.from(result));
+		return IdempotencyHeaders.created(result.replayed(), ChargeCancelResponse.from(result));
 	}
 
 	/** 고객의 사용 건을 전액 취소한다. 만들어진 USE_CANCEL 거래를 201 로 돌려준다. */
@@ -68,7 +68,7 @@ public class CancelController {
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
 		UseCancelResult result = cancelService.cancelUse(storeId, customerId, useEntryId, request.reason(), performedBy,
 				key);
-		return IdempotencyHeaders.created(result.entryId(), result.replayed(), UseCancelResponse.from(result));
+		return IdempotencyHeaders.created(result.replayed(), UseCancelResponse.from(result));
 	}
 
 	private UUID requireCurrentEmployeeId() {

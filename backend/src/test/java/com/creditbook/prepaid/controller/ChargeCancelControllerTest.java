@@ -1,6 +1,5 @@
 package com.creditbook.prepaid.controller;
 
-import static org.hamcrest.Matchers.endsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -26,6 +25,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -119,7 +119,7 @@ class ChargeCancelControllerTest {
 
 	@Test
 	@DisplayName("충전 건을 취소하면 201과 함께 CHARGE_CANCEL 거래·줄어든 잔액·사유·원 거래 ID 가 응답된다")
-	void cancel_charge_returns_201_with_location_and_charge_cancel_entry() throws Exception {
+	void cancel_charge_returns_201_with_charge_cancel_entry_and_no_location() throws Exception {
 		// given
 		given(cancelService.cancelCharge(STORE_ID, CUSTOMER_ID, CHARGE_ENTRY_ID, REASON, EMPLOYEE_ID, KEY))
 				.willReturn(cancelled(REASON, false));
@@ -127,7 +127,7 @@ class ChargeCancelControllerTest {
 		// when / then
 		mockMvc.perform(cancelRequest(BODY))
 				.andExpect(status().isCreated())
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + CANCEL_ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(header().doesNotExist(IdempotencyHeaders.IDEMPOTENT_REPLAYED))
 				.andExpect(content().json("""
 						{

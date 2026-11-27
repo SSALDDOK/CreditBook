@@ -1,6 +1,5 @@
 package com.creditbook.prepaid.controller;
 
-import static org.hamcrest.Matchers.endsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -25,6 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -83,7 +83,7 @@ class ChargeControllerTest {
 
 	@Test
 	@DisplayName("잔액 0원 고객에게 50,000원 충전을 등록하면 잔액이 50,000원이 되고 CHARGE 유형 거래가 1건 생성된다")
-	void charge_returns_201_with_location_and_charge_entry() throws Exception {
+	void charge_returns_201_with_charge_entry_and_no_location() throws Exception {
 		// given
 		given(chargeService.charge(STORE_ID, CUSTOMER_ID, new BigDecimal("50000"), "음료", EMPLOYEE_ID, KEY))
 				.willReturn(charged(50_000, 50_000, "음료"));
@@ -95,7 +95,7 @@ class ChargeControllerTest {
 						{"amount": 50000, "memo": "음료"}
 						"""))
 				.andExpect(status().isCreated())
-				.andExpect(header().string("Location", endsWith("/api/ledger-entries/" + ENTRY_ID)))
+				.andExpect(header().doesNotExist(HttpHeaders.LOCATION)) // 조회할 단건 주소가 없어 Location 없음 (BUG-12)
 				.andExpect(jsonPath("$.id").value(ENTRY_ID.toString()))
 				.andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
 				.andExpect(jsonPath("$.type").value("CHARGE"))
