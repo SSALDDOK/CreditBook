@@ -49,7 +49,7 @@ public class ChargeController {
 		UUID storeId = requireCurrentStoreId();
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
 		ChargeResult result = chargeService.charge(storeId, customerId, request.amount(), request.memo(), performedBy, key);
-		return IdempotencyHeaders.created(result.entryId(), result.replayed(), ChargeResponse.from(result));
+		return IdempotencyHeaders.created(result.replayed(), ChargeResponse.from(result));
 	}
 
 	private UUID requireCurrentEmployeeId() {

@@ -1,13 +1,10 @@
 package com.creditbook.prepaid.controller;
 
-import java.net.URI;
-import java.util.UUID;
-
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
- * 요청 키(REQ-10) 헤더 이름과 거래 생성 응답(201)을 만드는 공용 처리. 충전·사용(이후 사용 취소) 컨트롤러가 같이 쓴다.
+ * 요청 키(REQ-10) 헤더 이름과 거래 생성 응답(201)을 만드는 공용 처리. 충전·사용·충전 취소·사용 취소 컨트롤러가 같이 쓴다.
  */
 public final class IdempotencyHeaders {
 
@@ -20,13 +17,12 @@ public final class IdempotencyHeaders {
 	private IdempotencyHeaders() {
 	}
 
-	/** 201 + Location(/api/ledger-entries/{id}). 재응답이면 Idempotent-Replayed: true 를 더한다. */
-	static <T> ResponseEntity<T> created(UUID entryId, boolean replayed, T body) {
-		URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
-				.path("/api/ledger-entries/{id}")
-				.buildAndExpand(entryId)
-				.toUri();
-		ResponseEntity.BodyBuilder builder = ResponseEntity.created(location);
+	/**
+	 * 201. 조회할 단건 경로가 없어 Location 헤더는 두지 않는다(매장 개설·직원 추가와 같은 규칙).
+	 * 재응답이면 Idempotent-Replayed: true 를 더한다.
+	 */
+	static <T> ResponseEntity<T> created(boolean replayed, T body) {
+		ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.CREATED);
 		if (replayed) {
 			builder.header(IDEMPOTENT_REPLAYED, "true");
 		}

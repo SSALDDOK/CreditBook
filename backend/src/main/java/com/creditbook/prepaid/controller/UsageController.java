@@ -49,7 +49,7 @@ public class UsageController {
 		UUID storeId = requireCurrentStoreId();
 		IdempotencyKey key = IdempotencyKey.of(idempotencyKey);
 		UsageResult result = usageService.use(storeId, customerId, request.amount(), request.memo(), performedBy, key);
-		return IdempotencyHeaders.created(result.entryId(), result.replayed(), UsageResponse.from(result));
+		return IdempotencyHeaders.created(result.replayed(), UsageResponse.from(result));
 	}
 
 	private UUID requireCurrentEmployeeId() {
